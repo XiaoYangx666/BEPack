@@ -19,6 +19,9 @@ export type PackageManager = "auto" | "npm" | "pnpm" | "yarn" | "bun";
 /** Copy behavior used by build/dev. `true` means copy.defaultTarget. */
 export type CopySetting = false | true | string;
 
+/** Rolldown external dependency matcher. */
+export type BuildExternal = string | RegExp;
+
 export type ConfigContext = {
     command: CommandName;
     cwd: string;
@@ -36,6 +39,21 @@ export type LoggerLike = {
     install?(message: string): void;
 };
 
+export type DependencyKind = "manifest" | "package";
+
+export type NpmPackageMetadata = {
+    "dist-tags"?: Record<string, string>;
+    versions?: Record<string, unknown>;
+};
+
+export type DependencyCatalogEntry = {
+    /** Where this managed dependency is written. */
+    kind: DependencyKind;
+
+    /** Resolver group used by default, such as `minecraft`. */
+    resolver?: string;
+};
+
 export type DependencyResolverResult = {
     /** Concrete npm version written to package.json. */
     packageVersion: string;
@@ -47,10 +65,17 @@ export type DependencyResolverResult = {
 export type DependencyResolverContext = {
     packageName: string;
     specifier: string;
-    kind: "manifest" | "package";
+    kind: DependencyKind;
+    package: DependencyCatalogEntry;
     target: string;
     registry: string;
     config: ResolvedConfig;
+    npm: {
+        metadata(packageName: string): Promise<NpmPackageMetadata>;
+        versions(metadata: NpmPackageMetadata): string[];
+        versionsOf(packageName: string): Promise<string[]>;
+        distTag(metadata: NpmPackageMetadata, tag: string): string | undefined;
+    };
     logger?: LoggerLike;
 };
 
@@ -58,11 +83,16 @@ export type DependencyResolverRule = {
     /** Human-readable resolver name used for logs/debugging. */
     name: string;
 
+    /** Optional resolver group. Package catalog entries can select this by name. */
+    resolver?: string;
+
     /** Whether this rule can resolve the dependency. */
     match(ctx: DependencyResolverContext): boolean;
 
     /** Resolve package.json and optional manifest versions. */
-    resolve(ctx: DependencyResolverContext): DependencyResolverResult | Promise<DependencyResolverResult>;
+    resolve(
+        ctx: DependencyResolverContext
+    ): DependencyResolverResult | Promise<DependencyResolverResult>;
 };
 
 export type HookContext = {
@@ -76,19 +106,21 @@ export type HookContext = {
 
 export type HookResult = string | number | boolean | null | undefined | Record<string, unknown>;
 
-export type Hooks = Partial<Record<
-    | "beforeInstall"
-    | "afterInstall"
-    | "beforeManifest"
-    | "afterManifest"
-    | "beforeBuild"
-    | "afterBuild"
-    | "beforeCopy"
-    | "afterCopy"
-    | "beforePack"
-    | "afterPack",
-    (ctx: HookContext) => HookResult | Promise<HookResult>
->>;
+export type Hooks = Partial<
+    Record<
+        | "beforeInstall"
+        | "afterInstall"
+        | "beforeManifest"
+        | "afterManifest"
+        | "beforeBuild"
+        | "afterBuild"
+        | "beforeCopy"
+        | "afterCopy"
+        | "beforePack"
+        | "afterPack",
+        (ctx: HookContext) => HookResult | Promise<HookResult>
+    >
+>;
 
 export type PackConfig = {
     /** Pack root directory, relative to `root` unless absolute. Example: `bp` or `packs/bp`. */
@@ -168,6 +200,9 @@ export type UserConfig = {
         /** package.json-only dependencies managed by BePack. */
         dependencies?: Record<string, DependencySpecifier>;
 
+        /** Additional managed dependency package definitions. */
+        dependencyCatalog?: Record<string, DependencyCatalogEntry>;
+
         /**
          * Custom dependency resolvers.
          *
@@ -192,6 +227,12 @@ export type UserConfig = {
 
         /** Whether rolldown should preserve module files. Defaults to true. */
         preserveModules?: boolean;
+
+        /** Additional packages/modules that Rolldown should not bundle. */
+        external?: BuildExternal[];
+
+        /** Whether managed dependency catalog packages are externalized automatically. */
+        externalDependencies?: boolean;
 
         /** Use `npx tsc --noEmit` instead of system `tsc --noEmit`. */
         useNpx?: boolean;
@@ -240,8 +281,17 @@ export type ResolvedConfig = {
     target: string;
     hooks: Hooks;
     packs: {
-        bp: Required<Omit<PackConfig, "name" | "description">> & { name: string; description?: string; dependencies: Record<string, DependencySpecifier>; achievement: boolean };
-        rp?: Required<Omit<PackConfig, "name" | "description">> & { name: string; description?: string; pbr: boolean };
+        bp: Required<Omit<PackConfig, "name" | "description">> & {
+            name: string;
+            description?: string;
+            dependencies: Record<string, DependencySpecifier>;
+            achievement: boolean;
+        };
+        rp?: Required<Omit<PackConfig, "name" | "description">> & {
+            name: string;
+            description?: string;
+            pbr: boolean;
+        };
     };
     install: {
         registry: string;
@@ -251,6 +301,7 @@ export type ResolvedConfig = {
         updatePackageJson: boolean;
         updateManifest: boolean;
         dependencies: Record<string, DependencySpecifier>;
+        dependencyCatalog: Record<string, DependencyCatalogEntry>;
         dependencyResolvers: DependencyResolverRule[];
     };
     build: {
@@ -258,6 +309,8 @@ export type ResolvedConfig = {
         typecheck: boolean;
         copy: CopySetting;
         preserveModules: boolean;
+        external: BuildExternal[];
+        externalDependencies: boolean;
         useNpx: boolean;
     };
     dev: {

@@ -17,7 +17,11 @@ async function validatePackInputs(cwd: string, config: LoadedConfig): Promise<vo
     if (config.packs.rp && !config.configured.rpRoot) missing.push("packs.rp.root");
     if (!config.configured.packOutDir) missing.push("pack.outDir");
     if (missing.length > 0) {
-        throw new BePackError("PACK_FAILED", `pack requires explicit config: ${missing.join(", ")}.`, { details: { missing } });
+        throw new BePackError(
+            "PACK_FAILED",
+            `pack requires explicit config: ${missing.join(", ")}.`,
+            { details: { missing } }
+        );
     }
 
     const missingPaths: string[] = [];
@@ -32,7 +36,9 @@ async function validatePackInputs(cwd: string, config: LoadedConfig): Promise<vo
         if (!(await pathExists(rpPath))) missingPaths.push(`packs.rp.root: ${rpPath}`);
     }
     if (missingPaths.length > 0) {
-        throw new BePackError("PACK_FAILED", "pack input paths do not exist.", { details: { missingPaths } });
+        throw new BePackError("PACK_FAILED", "pack input paths do not exist.", {
+            details: { missingPaths },
+        });
     }
 }
 
@@ -42,14 +48,24 @@ function assertOutputOutsidePackRoots(output: string, roots: string[]): void {
         const resolvedRoot = path.resolve(root);
         const relative = path.relative(resolvedRoot, resolvedOutput);
         if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
-            throw new BePackError("PACK_FAILED", "pack output must not be inside a packed BP/RP directory.", { details: { output: resolvedOutput, root: resolvedRoot } });
+            throw new BePackError(
+                "PACK_FAILED",
+                "pack output must not be inside a packed BP/RP directory.",
+                { details: { output: resolvedOutput, root: resolvedRoot } }
+            );
         }
     }
 }
 
-export async function packProject(cwd: string, config: LoadedConfig, options: { name?: string; dryRun?: boolean } = {}) {
+export async function packProject(
+    cwd: string,
+    config: LoadedConfig,
+    options: { name?: string; dryRun?: boolean } = {}
+) {
     await validatePackInputs(cwd, config);
-    const fileName = (options.name ?? config.pack.name).replaceAll("{name}", config.name).replaceAll("{version}", config.version);
+    const fileName = (options.name ?? config.pack.name)
+        .replaceAll("{name}", config.name)
+        .replaceAll("{version}", config.version);
     const dist = distRoot(cwd, config);
     const bp = bpRoot(cwd, config);
     const rp = config.packs.rp ? rpRoot(cwd, config) : undefined;
@@ -61,7 +77,12 @@ export async function packProject(cwd: string, config: LoadedConfig, options: { 
     return await packMcpack(bp, dist, fileName, options.dryRun);
 }
 
-export async function runPack(cwd: string, config: LoadedConfig, logger: Logger, options: { name?: string; dryRun?: boolean } = {}) {
+export async function runPack(
+    cwd: string,
+    config: LoadedConfig,
+    logger: Logger,
+    options: { name?: string; dryRun?: boolean } = {}
+) {
     const start = Date.now();
     await runHook("beforePack", "pack", cwd, config, logger);
     const output = await packProject(cwd, config, options);
@@ -73,8 +94,15 @@ export async function runPack(cwd: string, config: LoadedConfig, logger: Logger,
 
 export async function commandPack(options: any) {
     const logger = new Logger({ ...options, silent: options.silent || options.json });
-    const loaded = await loadConfig({ command: "pack", cwd: options.cwd ?? process.cwd(), configPath: options.config });
+    const loaded = await loadConfig({
+        command: "pack",
+        cwd: options.cwd ?? process.cwd(),
+        configPath: options.config,
+    });
     const { cwd, config } = loaded;
-    const { output, durationMs } = await runPack(cwd, config, logger, { name: options.name, dryRun: options.dryRun });
+    const { output, durationMs } = await runPack(cwd, config, logger, {
+        name: options.name,
+        dryRun: options.dryRun,
+    });
     return { ok: true, command: "pack", durationMs, output };
 }

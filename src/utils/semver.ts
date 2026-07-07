@@ -3,7 +3,9 @@ import { BePackError } from "../errors/BePackError.js";
 export function parseVersionTuple(version: string): [number, number, number] {
     const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
     if (!match) {
-        throw new BePackError("VERSION_INVALID", "Manifest version requires x.y.z.", { details: { version } });
+        throw new BePackError("VERSION_INVALID", "Manifest version requires x.y.z.", {
+            details: { version },
+        });
     }
     return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
@@ -33,5 +35,8 @@ export function targetSupportsChannelDependency(target: string): boolean {
 }
 
 export function isStableApiSpecifier(value: string): boolean {
-    return value === "stable" || (isSpecificVersion(value) && !/(?:^|[-.])(beta|alpha|preview|rc)(?:[-.]|$)/i.test(value));
+    return (
+        value === "stable" ||
+        (isSpecificVersion(value) && !/(?:^|[-.])(beta|alpha|preview|rc)(?:[-.]|$)/i.test(value))
+    );
 }

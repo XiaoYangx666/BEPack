@@ -2,7 +2,9 @@
 
 export type LoggerOptions = { silent?: boolean; verbose?: boolean };
 
-const colors = pc.createColors(process.env.NO_COLOR === undefined && process.env.FORCE_COLOR !== "0");
+const colors = pc.createColors(
+    process.env.NO_COLOR === undefined && process.env.FORCE_COLOR !== "0"
+);
 
 export class Logger {
     constructor(private readonly options: LoggerOptions = {}) {}
@@ -24,7 +26,14 @@ export class Logger {
     clear(): void {
         if (!this.options.silent) console.clear();
     }
-    step(label: string, message: string, color: keyof Pick<typeof colors, "blue" | "cyan" | "green" | "magenta" | "yellow" | "red" | "gray"> = "cyan"): void {
+    step(
+        label: string,
+        message: string,
+        color: keyof Pick<
+            typeof colors,
+            "blue" | "cyan" | "green" | "magenta" | "yellow" | "red" | "gray"
+        > = "cyan"
+    ): void {
         this.info(`${colors[color](label.padEnd(10))} ${message}`);
     }
     progress(label: string, message: string): void {

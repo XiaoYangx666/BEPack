@@ -11,7 +11,9 @@ async function findConfig(cwd: string, configPath?: string): Promise<string> {
     if (configPath) {
         const resolved = resolveFrom(cwd, configPath);
         await fs.access(resolved).catch(() => {
-            throw new BePackError("CONFIG_NOT_FOUND", `Config not found: ${configPath}`, { details: { configPath } });
+            throw new BePackError("CONFIG_NOT_FOUND", `Config not found: ${configPath}`, {
+                details: { configPath },
+            });
         });
         return resolved;
     }
@@ -24,7 +26,11 @@ async function findConfig(cwd: string, configPath?: string): Promise<string> {
             // continue
         }
     }
-    throw new BePackError("CONFIG_NOT_FOUND", "No bepack.config.ts, bepack.config.mjs, or bepack.config.js found.", { details: { cwd } });
+    throw new BePackError(
+        "CONFIG_NOT_FOUND",
+        "No bepack.config.ts, bepack.config.mjs, or bepack.config.js found.",
+        { details: { cwd } }
+    );
 }
 
 async function importConfig(file: string): Promise<unknown> {
@@ -41,10 +47,17 @@ async function importConfig(file: string): Promise<unknown> {
         }
         return await import(`${pathToFileURL(file).href}?t=${Date.now()}`);
     } catch (cause) {
-        throw new BePackError("CONFIG_INVALID", `Failed to load config: ${cause instanceof Error ? cause.message : String(cause)}`, {
-            details: { file },
-            suggestions: ["Use bepack.config.mjs/js for complex config logic.", "Keep bepack.config.ts free of TypeScript-only runtime syntax."],
-        });
+        throw new BePackError(
+            "CONFIG_INVALID",
+            `Failed to load config: ${cause instanceof Error ? cause.message : String(cause)}`,
+            {
+                details: { file },
+                suggestions: [
+                    "Use bepack.config.mjs/js for complex config logic.",
+                    "Keep bepack.config.ts free of TypeScript-only runtime syntax.",
+                ],
+            }
+        );
     }
 }
 
@@ -58,11 +71,21 @@ function stripConfigTypeSyntax(source: string): string {
 export async function loadConfig(options: LoadConfigOptions) {
     const cwd = path.resolve(options.cwd);
     const file = await findConfig(cwd, options.configPath);
-    const mod = (await importConfig(file)) as { default?: UserConfig | ((ctx: ConfigContext) => UserConfig | Promise<UserConfig>) };
+    const mod = (await importConfig(file)) as {
+        default?: UserConfig | ((ctx: ConfigContext) => UserConfig | Promise<UserConfig>);
+    };
     if (mod.default === undefined) {
-        throw new BePackError("CONFIG_INVALID", "Config must use default export.", { details: { file } });
+        throw new BePackError("CONFIG_INVALID", "Config must use default export.", {
+            details: { file },
+        });
     }
-    const ctx: ConfigContext = { command: options.command, cwd, platform: process.platform, env: process.env, ...(options.mode === undefined ? {} : { mode: options.mode }) };
+    const ctx: ConfigContext = {
+        command: options.command,
+        cwd,
+        platform: process.platform,
+        env: process.env,
+        ...(options.mode === undefined ? {} : { mode: options.mode }),
+    };
     const raw = typeof mod.default === "function" ? await mod.default(ctx) : mod.default;
     return { config: normalizeConfig(raw, options.overrides), path: file, cwd };
 }

@@ -1,18 +1,19 @@
-export const MANIFEST_DEPENDENCIES = [
-    "@minecraft/server",
-    "@minecraft/server-ui",
-    "@minecraft/server-net",
-    "@minecraft/server-admin",
-] as const;
+﻿import { BUILTIN_DEPENDENCY_CATALOG } from "../install/dependencyCatalog.js";
 
-export const PACKAGE_ONLY_DEPENDENCIES = ["@minecraft/vanilla-data"] as const;
+export const MANIFEST_DEPENDENCIES = Object.entries(BUILTIN_DEPENDENCY_CATALOG)
+    .filter(([, entry]) => entry.kind === "manifest")
+    .map(([name]) => name);
 
-export const MANAGED_PACKAGES = [...MANIFEST_DEPENDENCIES, ...PACKAGE_ONLY_DEPENDENCIES] as const;
+export const PACKAGE_ONLY_DEPENDENCIES = Object.entries(BUILTIN_DEPENDENCY_CATALOG)
+    .filter(([, entry]) => entry.kind === "package")
+    .map(([name]) => name);
+
+export const MANAGED_PACKAGES = [...MANIFEST_DEPENDENCIES, ...PACKAGE_ONLY_DEPENDENCIES];
 
 export function isManifestDependency(name: string): boolean {
-    return (MANIFEST_DEPENDENCIES as readonly string[]).includes(name);
+    return MANIFEST_DEPENDENCIES.includes(name);
 }
 
 export function isPackageOnlyDependency(name: string): boolean {
-    return (PACKAGE_ONLY_DEPENDENCIES as readonly string[]).includes(name);
+    return PACKAGE_ONLY_DEPENDENCIES.includes(name);
 }

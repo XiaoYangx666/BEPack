@@ -14,7 +14,8 @@ async function writeIfAllowed(file: string, content: string, force: boolean): Pr
 export async function commandInit(options: any) {
     const cwd = path.resolve(options.cwd ?? process.cwd());
     const format = options.format ?? "ts";
-    if (!["ts", "js", "mjs"].includes(format)) throw new BePackError("CONFIG_INVALID", "init --format must be ts, js, or mjs.");
+    if (!["ts", "js", "mjs"].includes(format))
+        throw new BePackError("CONFIG_INVALID", "init --format must be ts, js, or mjs.");
     const configFile = path.join(cwd, `bepack.config.${format}`);
     const config = `export default {
     root: ".",

@@ -21,6 +21,7 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
         updatePackageJson: true,
         updateManifest: true,
         dependencies: {},
+        dependencyCatalog: {},
         dependencyResolvers: [],
     },
     build: {
@@ -28,6 +29,13 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
         typecheck: true,
         copy: false,
         preserveModules: true,
+        external: [
+            /^@minecraft\/server.*/,
+            "@minecraft/common",
+            "@minecraft/debug-utilities",
+            "@minecraft/diagnostics",
+        ],
+        externalDependencies: true,
         useNpx: false,
     },
     dev: {
@@ -45,7 +53,11 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
 };
 
 export function defineConfig(config: UserConfig): UserConfig;
-export function defineConfig<T extends (ctx: ConfigContext) => UserConfig | Promise<UserConfig>>(config: T): T;
-export function defineConfig(config: UserConfig | ((ctx: ConfigContext) => UserConfig | Promise<UserConfig>)): UserConfig | ((ctx: ConfigContext) => UserConfig | Promise<UserConfig>) {
+export function defineConfig<T extends (ctx: ConfigContext) => UserConfig | Promise<UserConfig>>(
+    config: T
+): T;
+export function defineConfig(
+    config: UserConfig | ((ctx: ConfigContext) => UserConfig | Promise<UserConfig>)
+): UserConfig | ((ctx: ConfigContext) => UserConfig | Promise<UserConfig>) {
     return config;
 }

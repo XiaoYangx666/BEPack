@@ -5,7 +5,11 @@ export class BePackError extends Error {
     readonly details: unknown | undefined;
     readonly suggestions: string[] | undefined;
 
-    constructor(code: ErrorCode, message: string, options: { details?: unknown; suggestions?: string[] } = {}) {
+    constructor(
+        code: ErrorCode,
+        message: string,
+        options: { details?: unknown; suggestions?: string[] } = {}
+    ) {
         super(message);
         this.name = "BePackError";
         this.code = code;

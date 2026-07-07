@@ -4,7 +4,9 @@ import { BePackError } from "../errors/BePackError.js";
 
 function stripUndefined<T extends Record<string, unknown>>(value: T | undefined): Partial<T> {
     if (!value) return {};
-    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Partial<T>;
+    return Object.fromEntries(
+        Object.entries(value).filter(([, item]) => item !== undefined)
+    ) as Partial<T>;
 }
 
 function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): UserConfig {
@@ -17,7 +19,9 @@ function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): Us
     }
     const copyTargets: NonNullable<NonNullable<UserConfig["copy"]>["targets"]> = {
         ...(config.copy?.targets ?? {}),
-        ...(stripUndefined(overrides.copy?.targets) as NonNullable<NonNullable<UserConfig["copy"]>["targets"]>),
+        ...(stripUndefined(overrides.copy?.targets) as NonNullable<
+            NonNullable<UserConfig["copy"]>["targets"]
+        >),
     };
     const cleanOverrides = stripUndefined(overrides);
     return {
@@ -37,11 +41,18 @@ function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): Us
     };
 }
 
-export function normalizeConfig(config: UserConfig, overrides: Partial<UserConfig> = {}): ResolvedConfig {
+export function normalizeConfig(
+    config: UserConfig,
+    overrides: Partial<UserConfig> = {}
+): ResolvedConfig {
     const raw = mergeUserConfig(config, overrides);
     const target = raw.target ?? DEFAULT_CONFIG.target;
     if (target === "stable" || target === "beta") {
-        throw new BePackError("TARGET_INVALID", "target must be a Minecraft game version or latest, not a Script API channel.", { details: { target } });
+        throw new BePackError(
+            "TARGET_INVALID",
+            "target must be a Minecraft game version or latest, not a Script API channel.",
+            { details: { target } }
+        );
     }
     if (!raw.packs?.bp) {
         throw new BePackError("CONFIG_INVALID", "packs.bp is required.");
@@ -54,7 +65,10 @@ export function normalizeConfig(config: UserConfig, overrides: Partial<UserConfi
     const description = raw.description;
     const bp = raw.packs.bp;
     if (!bp.uuid || !bp.moduleUuid) {
-        throw new BePackError("CONFIG_INVALID", "packs.bp.uuid and packs.bp.moduleUuid are required.");
+        throw new BePackError(
+            "CONFIG_INVALID",
+            "packs.bp.uuid and packs.bp.moduleUuid are required."
+        );
     }
     const rp = raw.packs.rp;
     const bpDescription = bp.description ?? description;
@@ -99,17 +113,26 @@ export function normalizeConfig(config: UserConfig, overrides: Partial<UserConfi
             registry: raw.install?.registry ?? DEFAULT_CONFIG.install.registry,
             saveTo: raw.install?.saveTo ?? DEFAULT_CONFIG.install.saveTo,
             packageManager: raw.install?.packageManager ?? DEFAULT_CONFIG.install.packageManager,
-            runPackageManager: raw.install?.runPackageManager ?? DEFAULT_CONFIG.install.runPackageManager,
-            updatePackageJson: raw.install?.updatePackageJson ?? DEFAULT_CONFIG.install.updatePackageJson,
+            runPackageManager:
+                raw.install?.runPackageManager ?? DEFAULT_CONFIG.install.runPackageManager,
+            updatePackageJson:
+                raw.install?.updatePackageJson ?? DEFAULT_CONFIG.install.updatePackageJson,
             updateManifest: raw.install?.updateManifest ?? DEFAULT_CONFIG.install.updateManifest,
             dependencies: raw.install?.dependencies ?? {},
+            dependencyCatalog: raw.install?.dependencyCatalog ?? {},
             dependencyResolvers: raw.install?.dependencyResolvers ?? [],
         },
         build: {
             entry: raw.build?.entry ?? DEFAULT_CONFIG.build.entry,
             typecheck: raw.build?.typecheck ?? DEFAULT_CONFIG.build.typecheck,
             copy: raw.build?.copy ?? DEFAULT_CONFIG.build.copy,
-            preserveModules: raw.build?.preserveModules ?? raw.build?.preserveModule ?? DEFAULT_CONFIG.build.preserveModules,
+            preserveModules:
+                raw.build?.preserveModules ??
+                raw.build?.preserveModule ??
+                DEFAULT_CONFIG.build.preserveModules,
+            external: raw.build?.external ?? DEFAULT_CONFIG.build.external,
+            externalDependencies:
+                raw.build?.externalDependencies ?? DEFAULT_CONFIG.build.externalDependencies,
             useNpx: raw.build?.useNpx ?? DEFAULT_CONFIG.build.useNpx,
         },
         dev: {

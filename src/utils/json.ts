@@ -2,7 +2,9 @@ export function parseJson<T>(text: string, file: string): T {
     try {
         return JSON.parse(text) as T;
     } catch (cause) {
-        throw new Error(`Invalid JSON in ${file}: ${cause instanceof Error ? cause.message : String(cause)}`);
+        throw new Error(
+            `Invalid JSON in ${file}: ${cause instanceof Error ? cause.message : String(cause)}`
+        );
     }
 }
 

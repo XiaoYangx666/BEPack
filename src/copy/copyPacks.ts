@@ -6,9 +6,17 @@ import { resolveCopyTarget } from "./resolveCopyTarget.js";
 import type { Logger } from "../logger/logger.js";
 import pc from "picocolors";
 
-const colors = pc.createColors(process.env.NO_COLOR === undefined && process.env.FORCE_COLOR !== "0");
+const colors = pc.createColors(
+    process.env.NO_COLOR === undefined && process.env.FORCE_COLOR !== "0"
+);
 
-export async function copyPacks(cwd: string, config: ResolvedConfig, targetName?: string, dryRun = false, logger?: Logger) {
+export async function copyPacks(
+    cwd: string,
+    config: ResolvedConfig,
+    targetName?: string,
+    dryRun = false,
+    logger?: Logger
+) {
     const { name, target } = resolveCopyTarget(config, targetName);
     const copied: string[] = [];
     if (target.bp) {

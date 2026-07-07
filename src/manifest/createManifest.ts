@@ -1,4 +1,9 @@
-import { MANIFEST_FORMAT_VERSION, MIN_ENGINE_VERSION, MODULE_VERSION, SCRIPT_ENTRY } from "../constants/manifest.js";
+import {
+    MANIFEST_FORMAT_VERSION,
+    MIN_ENGINE_VERSION,
+    MODULE_VERSION,
+    SCRIPT_ENTRY,
+} from "../constants/manifest.js";
 import type { ResolvedConfig } from "../config/configTypes.js";
 import { parseVersionTuple } from "./version.js";
 
@@ -9,7 +14,9 @@ export function createBpManifest(config: ResolvedConfig): Manifest {
         format_version: MANIFEST_FORMAT_VERSION,
         header: {
             name: config.packs.bp.name,
-            ...(config.packs.bp.description !== undefined ? { description: config.packs.bp.description } : {}),
+            ...(config.packs.bp.description !== undefined
+                ? { description: config.packs.bp.description }
+                : {}),
             uuid: config.packs.bp.uuid,
             version: parseVersionTuple(config.version),
             min_engine_version: MIN_ENGINE_VERSION,

@@ -112,6 +112,8 @@ type UserConfig = {
         typecheck?: boolean;
         useNpx?: boolean;
         preserveModules?: boolean;
+        external?: (string | RegExp)[];
+        externalDependencies?: boolean;
         copy?: false | true | string;
     };
 
@@ -140,6 +142,7 @@ type UserConfig = {
         updatePackageJson?: boolean;
         updateManifest?: boolean;
         dependencies?: Record<string, "stable" | "beta" | string>;
+        dependencyCatalog?: Record<string, { kind: "manifest" | "package"; resolver?: string }>;
         dependencyResolvers?: DependencyResolverRule[];
     };
 
@@ -215,18 +218,18 @@ Package.json never receives `stable`, `beta`, or `latest` for managed Minecraft 
 Rules:
 
 - `target: "latest"` + `stable`
-  - package.json: latest concrete stable version from registry
-  - manifest.json: same concrete stable version
+    - package.json: latest concrete stable version from registry
+    - manifest.json: same concrete stable version
 - `target: "latest"` + `beta`
-  - package.json: latest concrete beta version from registry
-  - manifest.json: `beta`
+    - package.json: latest concrete beta version from registry
+    - manifest.json: `beta`
 - concrete target + `beta`
-  - package.json: matching `*-beta.*<target>-stable` or `*-beta-*<target>-stable`
-  - manifest.json: `beta` when the target supports channel dependencies; otherwise concrete beta version
+    - package.json: matching `*-beta.*<target>-stable` or `*-beta-*<target>-stable`
+    - manifest.json: `beta` when the target supports channel dependencies; otherwise concrete beta version
 - concrete target + `stable`
-  - first finds the matching beta version for the target
-  - infers stable as `betaMajor.(betaMinor - 1).betaPatch`
-  - verifies the inferred stable version exists in npm versions
+    - first finds the matching beta version for the target
+    - infers stable as `betaMajor.(betaMinor - 1).betaPatch`
+    - verifies the inferred stable version exists in npm versions
 
 Example:
 
@@ -252,25 +255,38 @@ Normal install logs show concise progress:
 
 Use `--verbose` for lower-level details such as cache hits, version counts, and inference traces.
 
-### Resolver Extension Point
+### Dependency Catalog And Resolver Extension Point
 
-The install resolver is rule-based and has an extension point for future plugin support.
+Install resolution is split into a dependency catalog and resolver registry.
 
-Custom resolvers can be provided in config:
+- The catalog says where a package is written: `manifest` means package.json + manifest.json, `package` means package.json only.
+- The resolver turns `stable`, `beta`, or exact versions into concrete package and manifest versions.
+- Resolver contexts include `ctx.npm`, a reusable npm registry client that automatically uses `install.registry` and caches metadata.
+
+Custom packages and resolvers can be provided in config:
 
 ```ts
 export default defineConfig({
     install: {
+        dependencyCatalog: {
+            "my-package": {
+                kind: "manifest",
+                resolver: "custom-package",
+            },
+        },
         dependencyResolvers: [
             {
                 name: "custom-package-resolver",
+                resolver: "custom-package",
                 match(ctx) {
                     return ctx.packageName === "my-package";
                 },
                 async resolve(ctx) {
+                    const metadata = await ctx.npm.metadata(ctx.packageName);
+                    const latest = ctx.npm.distTag(metadata, "latest") ?? "1.0.0";
                     return {
-                        packageVersion: "1.0.0",
-                        manifestVersion: ctx.kind === "manifest" ? "1.0.0" : null,
+                        packageVersion: latest,
+                        manifestVersion: ctx.kind === "manifest" ? latest : null,
                     };
                 },
             },
@@ -282,9 +298,9 @@ export default defineConfig({
 Resolver order:
 
 1. Custom `install.dependencyResolvers`
-2. Built-in stable resolver
-3. Built-in beta resolver
-4. Exact version resolver
+2. Built-in Minecraft stable resolver
+3. Built-in Minecraft beta resolver
+4. Built-in exact version resolver
 
 ## Manifest Management
 
@@ -351,16 +367,9 @@ Rolldown behavior:
 - Output goes to `<packs.bp.root>/scripts`.
 - `<packs.bp.root>/scripts` is cleared before each build.
 - `build.entry` controls input.
-- External packages follow the current Script API external list:
+- External packages come from `build.external` and, by default, from the managed dependency catalog.
 
-```txt
-/^@minecraft\/server.*/
-@minecraft/common
-@minecraft/debug-utilities
-@minecraft/diagnostics
-```
-
-Not all `@minecraft/*` packages are excluded. For example, `@minecraft/vanilla-data` is allowed to be bundled.
+`build.externalDependencies` defaults to `true`, so built-in managed packages such as `@minecraft/server`, `@minecraft/server-ui`, and configured `install.dependencyCatalog` packages are not bundled. Set it to `false` when a package should be bundled manually, or add extra entries with `build.external`.
 
 ## Dev
 
@@ -368,17 +377,17 @@ Not all `@minecraft/*` packages are excluded. For example, `@minecraft/vanilla-d
 
 - Runs an initial build before watching.
 - Watches configured paths:
-  - `build.entry` directory
-  - `packs.bp.root`
-  - `packs.rp.root`, when RP is configured
+    - `build.entry` directory
+    - `packs.bp.root`
+    - `packs.rp.root`, when RP is configured
 - Clears terminal output on each change.
 - Shows per-update duration.
 - Ignores:
-  - `node_modules`
-  - `.git`
-  - `pack.outDir`
-  - `<packs.bp.root>/scripts`
-  - generated BP/RP `manifest.json`
+    - `node_modules`
+    - `.git`
+    - `pack.outDir`
+    - `<packs.bp.root>/scripts`
+    - generated BP/RP `manifest.json`
 
 This avoids loops caused by BePack patching manifests or writing build output.
 
@@ -389,10 +398,10 @@ This avoids loops caused by BePack patching manifests or writing build output.
 Built-in targets:
 
 - `win`
-  - new Windows Minecraft Bedrock path:
-  - `%USERPROFILE%\AppData\Roaming\Minecraft Bedrock\Users\Shared\games\com.mojang`
+    - new Windows Minecraft Bedrock path:
+    - `%USERPROFILE%\AppData\Roaming\Minecraft Bedrock\Users\Shared\games\com.mojang`
 - `winold`
-  - old UWP Minecraft path under `%LOCALAPPDATA%\Packages\Microsoft.MinecraftUWP_8wekyb3d8bbwe`
+    - old UWP Minecraft path under `%LOCALAPPDATA%\Packages\Microsoft.MinecraftUWP_8wekyb3d8bbwe`
 
 Custom targets:
 

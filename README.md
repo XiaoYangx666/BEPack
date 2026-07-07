@@ -9,6 +9,7 @@ It helps Bedrock addon projects keep the boring parts tidy: config loading, mani
 - Build TypeScript Script API entry files into `bp/scripts`.
 - Patch behavior/resource pack manifests without discarding user-owned fields.
 - Resolve managed `@minecraft/*` dependencies from npm.
+- Extend dependency resolution with a configurable package catalog and custom resolvers.
 - Copy packs to Minecraft Bedrock folders or custom targets.
 - Package BP-only projects as `.mcpack`.
 - Package BP + RP projects as one `.mcaddon`.
@@ -91,6 +92,7 @@ bepack pack --name release
 - `packs.bp` is required.
 - `packs.rp` is optional. When present, `bepack pack` creates a `.mcaddon`.
 - `build` clears `<packs.bp.root>/scripts` before writing new output.
+- Managed dependency catalog packages are externalized during build by default. Use `build.external` and `build.externalDependencies` to customize bundling.
 - Use `bepack install` or `bepack build --install` when manifest dependencies use `stable` or target-specific `beta`.
 
 For the full configuration reference and implementation notes, see [README.reference.md](./README.reference.md).

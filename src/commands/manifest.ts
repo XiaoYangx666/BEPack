@@ -5,7 +5,12 @@ import { Logger } from "../logger/logger.js";
 
 export async function commandManifest(options: any) {
     const logger = new Logger({ ...options, silent: options.silent || options.json });
-    const { cwd, config } = await loadConfig({ command: "manifest", cwd: options.cwd ?? process.cwd(), configPath: options.config, overrides: { target: options.target } });
+    const { cwd, config } = await loadConfig({
+        command: "manifest",
+        cwd: options.cwd ?? process.cwd(),
+        configPath: options.config,
+        overrides: { target: options.target },
+    });
     await runHook("beforeManifest", "manifest", cwd, config, logger);
     const files = await patchManifest({ cwd, config, dryRun: options.dryRun });
     await runHook("afterManifest", "manifest", cwd, config, logger);

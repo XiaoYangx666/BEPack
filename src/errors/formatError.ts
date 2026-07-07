@@ -1,6 +1,11 @@
 import { BePackError } from "./BePackError.js";
 
-export function formatError(error: unknown): { code: string; message: string; details?: unknown; suggestions?: string[] } {
+export function formatError(error: unknown): {
+    code: string;
+    message: string;
+    details?: unknown;
+    suggestions?: string[];
+} {
     if (error instanceof BePackError) {
         return {
             code: error.code,

@@ -1,4 +1,8 @@
-import { MANIFEST_FORMAT_VERSION, MIN_ENGINE_VERSION, MODULE_VERSION } from "../constants/manifest.js";
+import {
+    MANIFEST_FORMAT_VERSION,
+    MIN_ENGINE_VERSION,
+    MODULE_VERSION,
+} from "../constants/manifest.js";
 import type { ResolvedConfig } from "../config/configTypes.js";
 import { parseVersionTuple } from "./version.js";
 import { upsertUuidDependency } from "./patchDependencies.js";
@@ -17,13 +21,21 @@ export function patchRpManifest(manifest: Manifest, config: ResolvedConfig): Man
         version,
         min_engine_version: MIN_ENGINE_VERSION,
     };
-    const modules = Array.isArray(manifest.modules) ? manifest.modules.filter((item: any) => item.type !== "resources") : [];
+    const modules = Array.isArray(manifest.modules)
+        ? manifest.modules.filter((item: any) => item.type !== "resources")
+        : [];
     modules.push({ type: "resources", uuid: rp.moduleUuid, version: MODULE_VERSION });
     manifest.modules = modules;
-    manifest.dependencies = upsertUuidDependency(Array.isArray(manifest.dependencies) ? manifest.dependencies : [], config.packs.bp.uuid, version);
+    manifest.dependencies = upsertUuidDependency(
+        Array.isArray(manifest.dependencies) ? manifest.dependencies : [],
+        config.packs.bp.uuid,
+        version
+    );
     if (rp.pbr) {
         const capabilities = Array.isArray(manifest.capabilities) ? manifest.capabilities : [];
-        manifest.capabilities = capabilities.includes("pbr") ? capabilities : [...capabilities, "pbr"];
+        manifest.capabilities = capabilities.includes("pbr")
+            ? capabilities
+            : [...capabilities, "pbr"];
     }
     return manifest;
 }
