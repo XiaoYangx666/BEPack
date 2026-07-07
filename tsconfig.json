@@ -1,0 +1,29 @@
+{
+    "compilerOptions": {
+        // File Layout
+        "rootDir": "./src",
+        "outDir": "./dist",
+        "declaration": true,
+        "declarationMap": true,
+
+        // Environment Settings
+        "module": "nodenext",
+        "target": "esnext",
+        "lib": ["esnext"],
+        "types": ["node"],
+
+        // Stricter Typechecking Options
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+
+        // Style Options
+        // Recommended Options
+        "strict": true,
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
+        "noUncheckedSideEffectImports": true,
+        "moduleDetection": "force",
+        "skipLibCheck": true
+    },
+    "include": ["src"]
+}

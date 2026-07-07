@@ -1,0 +1,58 @@
+{
+    "name": "bepack",
+    "version": "0.0.1",
+    "description": "A modern pack builder for Minecraft Bedrock Edition.",
+    "keywords": [
+        "minecraft",
+        "bedrock",
+        "addon",
+        "script-api",
+        "mcpack",
+        "mcaddon",
+        "build-tool"
+    ],
+    "license": "MIT",
+    "author": "XiaoYangx666",
+    "type": "module",
+    "packageManager": "npm@11.18.0",
+    "sideEffects": false,
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist",
+        "README.md",
+        "README.zh-CN.md",
+        "README.reference.md",
+        "LICENSE"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "bin": {
+        "bepack": "dist/cli.js"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "scripts": {
+        "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
+        "build:js": "rolldown -c",
+        "build:types": "dts-bundle-generator -o dist/index.d.ts src/index.ts",
+        "build": "npm run clean && npm run build:js && npm run build:types",
+        "check": "tsc --noEmit"
+    },
+    "dependencies": {
+        "cac": "^7.0.0",
+        "chokidar": "^5.0.0",
+        "fflate": "^0.8.3",
+        "picocolors": "^1.1.1",
+        "rolldown": "^1.1.4"
+    },
+    "devDependencies": {
+        "@types/node": "^26.1.0",
+        "dts-bundle-generator": "^9.5.1"
+    }
+}
