@@ -1,4 +1,4 @@
-import type { DependencySpecifier, LoggerLike, ResolvedConfig } from "../config/configTypes.js";
+import type { DependencyCatalogEntry, DependencySpecifier, LoggerLike, ResolvedConfig } from "../config/configTypes.js";
 import { createDependencyCatalog, getDependencyCatalogEntry } from "./dependencyCatalog.js";
 import { NpmRegistryClient } from "../utils/npmRegistry.js";
 import { DependencyResolverRegistry } from "./resolvers/registry.js";
@@ -59,7 +59,10 @@ export class DependencyService {
                     : null,
                 manifest,
                 external: manifest,
-                resolver: entry.resolver,
+                resolver:
+                    typeof entry.resolver === "string"
+                        ? entry.resolver
+                        : entry.resolver.name,
             };
             this.log(
                 `${name}: ${specifier} -> package ${result[name].packageVersion}, manifest ${result[name].manifestVersion}`
@@ -76,7 +79,7 @@ export class DependencyService {
     async resolveOne(
         packageName: string,
         specifier: DependencySpecifier,
-        entry: { resolver: string; packageJson?: boolean; manifest?: boolean }
+        entry: DependencyCatalogEntry
     ): Promise<{ packageVersion: string; manifestVersion?: string | null }> {
         const registry = DependencyResolverRegistry.fromConfig(
             this.config.install.dependencyResolvers

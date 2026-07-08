@@ -138,7 +138,7 @@ describe("dependencyCatalog", () => {
         const catalog = createDependencyCatalog({
             install: { dependencyCatalog: custom },
         } as unknown as ResolvedConfig);
-        expect(catalog["@minecraft/server"]).toMatchObject({ resolver: "minecraft-script-api" });
+        expect(catalog["@minecraft/server"]).toMatchObject({ resolver: minecraftScriptApiResolver, manifest: true });
         expect(catalog["my-lib"]).toEqual({ resolver: "custom" });
     });
 
@@ -156,7 +156,7 @@ describe("dependencyCatalog", () => {
     it("getDependencyCatalogEntry returns matching entry", () => {
         const entry = getDependencyCatalogEntry(BUILTIN_DEPENDENCY_CATALOG, "@minecraft/server");
         expect(entry).toBeDefined();
-        expect(entry.resolver).toBe("minecraft-script-api");
+        expect(entry.resolver).toBe(minecraftScriptApiResolver);
         expect(entry.manifest).toBe(true);
     });
 
@@ -172,7 +172,7 @@ describe("dependencyCatalog", () => {
             "@minecraft/vanilla-data"
         );
         expect(entry.manifest).toBe(false);
-        expect(entry.resolver).toBe("minecraft-vanilla-data");
+        expect(entry.resolver).toBe(minecraftVanillaDataResolver);
     });
 });
 

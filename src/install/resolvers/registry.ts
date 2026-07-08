@@ -32,7 +32,11 @@ export class DependencyResolverRegistry {
     ): boolean {
         const selected = ctx.entry.resolver;
         if (!selected) return true;
-        return rule.resolver === undefined || rule.resolver === selected;
+
+        // Normalize: direct object reference → use its .name as the group key
+        const selectedName = typeof selected === "string" ? selected : selected.name;
+
+        return rule.resolver === undefined || rule.resolver === selectedName;
     }
 
     find(ctx: DependencyResolverContext): DependencyResolverRule {

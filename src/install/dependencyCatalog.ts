@@ -1,34 +1,37 @@
 import type { DependencyCatalogEntry, ResolvedConfig } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
+import { minecraftScriptApiResolver } from "./resolvers/minecraftScriptApi.js";
+import { minecraftScriptApiBpResolver } from "./resolvers/minecraftScriptApiBp.js";
+import { minecraftVanillaDataResolver } from "./resolvers/minecraftVanillaData.js";
 
 export const BUILTIN_DEPENDENCY_CATALOG: Record<string, DependencyCatalogEntry> = {
     "@minecraft/server": {
-        resolver: "minecraft-script-api",
+        resolver: minecraftScriptApiResolver,
         manifest: true,
     },
     "@minecraft/server-ui": {
-        resolver: "minecraft-script-api",
+        resolver: minecraftScriptApiResolver,
         manifest: true,
     },
     "@minecraft/server-net": {
-        resolver: "minecraft-script-api-bp",
+        resolver: minecraftScriptApiBpResolver,
         manifest: true,
     },
     "@minecraft/server-admin": {
-        resolver: "minecraft-script-api-bp",
+        resolver: minecraftScriptApiBpResolver,
         manifest: true,
     },
     "@minecraft/server-gametest": {
-        resolver: "minecraft-script-api-bp",
+        resolver: minecraftScriptApiBpResolver,
+        manifest: true,
+    },
+    "@minecraft/debug-utilities": {
+        resolver: minecraftScriptApiBpResolver,
         manifest: true,
     },
     "@minecraft/vanilla-data": {
-        resolver: "minecraft-vanilla-data",
+        resolver: minecraftVanillaDataResolver,
         manifest: false,
-    },
-    "@minecraft/debug-utilities": {
-        resolver: "minecraft-vanilla-data",
-        manifest: true,
     },
 };
 

@@ -46,8 +46,8 @@ export type NpmPackageMetadata = {
 };
 
 export type DependencyCatalogEntry = {
-    /** Resolver used for this dependency, e.g. "minecraft-script-api" or "minecraft-vanilla-data". */
-    resolver: string;
+    /** Resolver used for this dependency. Can be a resolver name string or a direct DependencyResolverRule reference. */
+    resolver: string | DependencyResolverRule;
     /** Whether to write to bp manifest.json dependencies. When true, the dependency is also externalized during build. Defaults to false. */
     manifest?: boolean;
 };
