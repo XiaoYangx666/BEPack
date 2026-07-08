@@ -44,7 +44,8 @@
         "build": "npm run clean && npm run build:js && npm run build:types",
         "check": "tsc --noEmit",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "format": "npx prettier ./src --write"
     },
     "dependencies": {
         "cac": "^7.0.0",

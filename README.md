@@ -92,8 +92,9 @@ bepack pack --name release
 - `packs.bp` is required.
 - `packs.rp` is optional. When present, `bepack pack` creates a `.mcaddon`.
 - `build` clears `<packs.bp.root>/scripts` before writing new output.
-- Managed dependency catalog packages are externalized during build by default. Use `build.external` and `build.externalDependencies` to customize bundling.
-- Use `bepack install` or `bepack build --install` when manifest dependencies use `stable` or target-specific `beta`.
+- **All BP dependencies go in `packs.bp.dependencies`**, including both manifest dependencies (e.g. `@minecraft/server`) and code-only dependencies (e.g. `@minecraft/vanilla-data`). The catalog controls whether each package is written to manifest and/or package.json.
+- Managed dependency catalog packages with `manifest: true` are externalized during build by default. Packages with `manifest: false` (e.g. `@minecraft/vanilla-data`) can be bundled. Use `build.external` and `build.externalDependencies` to customize bundling.
+- Use `bepack install` or `bepack build --install` to resolve `stable`, `beta`, or `preview` specifiers to concrete npm versions.
 
 For the full configuration reference and implementation notes, see [README.reference.md](./README.reference.md).
 

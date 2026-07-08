@@ -11,6 +11,7 @@ export default defineConfig([
             file: "dist/index.js",
             format: "esm",
             codeSplitting: false,
+            minify: true,
         },
     },
     {
@@ -21,6 +22,7 @@ export default defineConfig([
             file: "dist/cli.js",
             format: "esm",
             codeSplitting: false,
+            minify: true,
         },
     },
 ]);

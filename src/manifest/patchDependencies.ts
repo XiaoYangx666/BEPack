@@ -13,16 +13,14 @@ export type ManifestDependency = {
     version: string | [number, number, number];
 };
 
-function isManifestDependency(config: ResolvedConfig, name: string): boolean {
-    return createDependencyCatalog(config)[name]?.kind === "manifest";
-}
-
 export function validateManifestDependencies(config: ResolvedConfig): void {
+    const catalog = createDependencyCatalog(config);
     for (const [name, specifier] of Object.entries(config.packs.bp.dependencies)) {
-        if (!isManifestDependency(config, name)) {
+        const entry = catalog[name];
+        if (!entry) {
             throw new BePackError(
-                "UNSUPPORTED_MANIFEST_DEPENDENCY",
-                `${name} is not a manifest dependency managed by BePack. Use install.dependencies or package.json instead.`,
+                "UNSUPPORTED_DEPENDENCY",
+                `${name} is not a managed dependency. Add it to install.dependencyCatalog or remove it from packs.bp.dependencies.`,
                 { details: { package: name } }
             );
         }
@@ -49,6 +47,7 @@ export function isAllowedDependencySpecifier(value: string): boolean {
     return (
         value === "stable" ||
         value === "beta" ||
+        value === "preview" ||
         /^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?$/.test(value)
     );
 }
@@ -79,6 +78,14 @@ export function manifestVersionFor(
         }
         return "beta";
     }
+    if (specifier === "preview") {
+        if (resolvedPackageVersion) return resolvedPackageVersion;
+        throw new BePackError(
+            "DEPENDENCY_REQUIRES_INSTALL",
+            `Run \`bepack install\` to resolve preview manifest dependencies for target ${target}.`,
+            { details: { specifier, target } }
+        );
+    }
     return specifier;
 }
 
@@ -88,18 +95,21 @@ export function upsertModuleDependencies(
     config: ResolvedConfig,
     resolved: Record<string, string> = {}
 ): ManifestDependency[] {
+    const catalog = createDependencyCatalog(config);
     const next = [...existing];
     for (const [name, specifier] of Object.entries(deps)) {
-        const index = next.findIndex(
-            (item) => item.module_name === name && isManifestDependency(config, name)
-        );
+        const entry = catalog[name];
+        // Only include dependencies marked for manifest
+        if (!entry?.manifest) continue;
+
+        const index = next.findIndex((item) => item.module_name === name);
         const existingVersion =
             index >= 0 &&
             typeof next[index]?.version === "string" &&
             isSpecificVersion(next[index].version)
                 ? next[index].version
                 : undefined;
-        const entry = {
+        const dep = {
             module_name: name,
             version: manifestVersionFor(
                 specifier,
@@ -107,8 +117,8 @@ export function upsertModuleDependencies(
                 resolved[name] ?? existingVersion
             ),
         };
-        if (index >= 0) next[index] = entry;
-        else next.push(entry);
+        if (index >= 0) next[index] = dep;
+        else next.push(dep);
     }
     return next;
 }

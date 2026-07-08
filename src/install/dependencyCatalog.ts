@@ -1,16 +1,35 @@
-import type {
-    DependencyCatalogEntry,
-    DependencyKind,
-    ResolvedConfig,
-} from "../config/configTypes.js";
+import type { DependencyCatalogEntry, ResolvedConfig } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 
 export const BUILTIN_DEPENDENCY_CATALOG: Record<string, DependencyCatalogEntry> = {
-    "@minecraft/server": { kind: "manifest", resolver: "minecraft" },
-    "@minecraft/server-ui": { kind: "manifest", resolver: "minecraft" },
-    "@minecraft/server-net": { kind: "manifest", resolver: "minecraft" },
-    "@minecraft/server-admin": { kind: "manifest", resolver: "minecraft" },
-    "@minecraft/vanilla-data": { kind: "package", resolver: "minecraft" },
+    "@minecraft/server": {
+        resolver: "minecraft-script-api",
+        manifest: true,
+    },
+    "@minecraft/server-ui": {
+        resolver: "minecraft-script-api",
+        manifest: true,
+    },
+    "@minecraft/server-net": {
+        resolver: "minecraft-script-api-bp",
+        manifest: true,
+    },
+    "@minecraft/server-admin": {
+        resolver: "minecraft-script-api-bp",
+        manifest: true,
+    },
+    "@minecraft/server-gametest": {
+        resolver: "minecraft-script-api-bp",
+        manifest: true,
+    },
+    "@minecraft/vanilla-data": {
+        resolver: "minecraft-vanilla-data",
+        manifest: false,
+    },
+    "@minecraft/debug-utilities": {
+        resolver: "minecraft-vanilla-data",
+        manifest: true,
+    },
 };
 
 export function createDependencyCatalog(
@@ -24,21 +43,13 @@ export function createDependencyCatalog(
 
 export function getDependencyCatalogEntry(
     catalog: Record<string, DependencyCatalogEntry>,
-    packageName: string,
-    expectedKind: DependencyKind
+    packageName: string
 ): DependencyCatalogEntry {
     const entry = catalog[packageName];
-    if (!entry || entry.kind !== expectedKind) {
-        if (expectedKind === "manifest") {
-            throw new BePackError(
-                "UNSUPPORTED_MANIFEST_DEPENDENCY",
-                `${packageName} is not a manifest dependency managed by BePack. Use install.dependencies or package.json instead.`,
-                { details: { package: packageName } }
-            );
-        }
+    if (!entry) {
         throw new BePackError(
-            "UNSUPPORTED_PACKAGE_DEPENDENCY",
-            `${packageName} is not a package-only dependency managed by BePack. Maintain it in package.json instead.`,
+            "UNSUPPORTED_DEPENDENCY",
+            `${packageName} is not a managed dependency. Add it to install.dependencyCatalog or remove it from packs.bp.dependencies.`,
             { details: { package: packageName } }
         );
     }

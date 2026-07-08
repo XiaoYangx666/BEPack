@@ -1,21 +1,14 @@
 import { compareLooseSemver, isSpecificVersion } from "../utils/semver.js";
 import { BePackError } from "../errors/BePackError.js";
 import type { LoggerLike, NpmPackageMetadata } from "../config/configTypes.js";
-
-/** Minimal npm client shape that MinecraftPackageResolver depends on. */
-export interface NpmClient {
-    metadata(packageName: string): Promise<NpmPackageMetadata>;
-    versions(metadata: NpmPackageMetadata): string[];
-    versionsOf(packageName: string): Promise<string[]>;
-    distTag(metadata: NpmPackageMetadata, tag: string): string | undefined;
-}
+import type { NpmRegistryClient } from "../utils/npmRegistry.js";
 
 // ---------------------------------------------------------------------------
 // Static / pure utilities
 // ---------------------------------------------------------------------------
 
 export function packageVersionForSpecifier(specifier: string): string {
-    if (specifier === "stable" || specifier === "beta") {
+    if (specifier === "stable" || specifier === "beta" || specifier === "preview") {
         throw new BePackError(
             "DEPENDENCY_VERSION_INVALID",
             `${specifier} must be resolved from npm registry before writing package.json.`,
@@ -46,7 +39,7 @@ export function betaVersions(versions: string[]): string[] {
 
 export class MinecraftPackageResolver {
     constructor(
-        private readonly npm: NpmClient,
+        private readonly npm: NpmRegistryClient,
         private readonly logger?: LoggerLike
     ) {}
 

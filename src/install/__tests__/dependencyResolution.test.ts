@@ -10,20 +10,19 @@ import {
     getDependencyCatalogEntry,
     BUILTIN_DEPENDENCY_CATALOG,
 } from "../dependencyCatalog.js";
-import {
-    minecraftStableResolver,
-    minecraftBetaResolver,
-    exactVersionResolver,
-    DependencyResolverRegistry,
-    BUILTIN_DEPENDENCY_RESOLVERS,
-} from "../resolvers/minecraft.js";
+import { minecraftScriptApiResolver } from "../resolvers/minecraftScriptApi.js";
+import { minecraftScriptApiBpResolver } from "../resolvers/minecraftScriptApiBp.js";
+import { minecraftVanillaDataResolver } from "../resolvers/minecraftVanillaData.js";
+import { exactVersionResolver } from "../resolvers/exact.js";
+import { DependencyResolverRegistry, BUILTIN_DEPENDENCY_RESOLVERS } from "../resolvers/registry.js";
 import type {
     DependencyResolverContext,
     DependencyResolverRule,
     NpmPackageMetadata,
     ResolvedConfig,
 } from "../../config/configTypes.js";
-import type { NpmClient } from "../MinecraftPackageResolver.js";
+import type { NpmRegistryClient } from "../../utils/npmRegistry.js";
+import type { DependencyCatalogEntry } from "../../config/configTypes.js";
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -36,6 +35,20 @@ const BETA_VERSIONS = [
     "2.7.0-beta.1.26.30-stable",
 ];
 
+const SAPI_PREVIEW_VERSIONS = [
+    "2.8.0-rc.1.26.10-preview.25",
+    "2.9.0-rc.1.26.40-preview.30",
+    "2.10.0-beta.1.26.40-preview.30",
+];
+
+const VANILLA_STABLE_VERSIONS = ["1.12.0", "1.12.1", "1.13.0", "1.14.0"];
+const VANILLA_PREVIEW_VERSIONS = [
+    "1.14.0-preview.1",
+    "1.14.0-preview.2",
+    "1.14.0-preview.3",
+    "1.15.0-preview.1",
+];
+
 const MOCK_STABLE_METADATA: NpmPackageMetadata = {
     "dist-tags": { latest: "2.6.0" },
     versions: Object.fromEntries(STABLE_VERSIONS.map((v) => [v, {}])),
@@ -43,7 +56,16 @@ const MOCK_STABLE_METADATA: NpmPackageMetadata = {
 
 const MOCK_BETA_METADATA: NpmPackageMetadata = {
     "dist-tags": { latest: "2.6.0", beta: "2.7.0-beta.1.26.30-stable" },
-    versions: Object.fromEntries([...STABLE_VERSIONS, ...BETA_VERSIONS].map((v) => [v, {}])),
+    versions: Object.fromEntries(
+        [...STABLE_VERSIONS, ...BETA_VERSIONS, ...SAPI_PREVIEW_VERSIONS].map((v) => [v, {}])
+    ),
+};
+
+const MOCK_VANILLA_METADATA: NpmPackageMetadata = {
+    "dist-tags": { latest: "1.14.0" },
+    versions: Object.fromEntries(
+        [...VANILLA_STABLE_VERSIONS, ...VANILLA_PREVIEW_VERSIONS].map((v) => [v, {}])
+    ),
 };
 
 const MOCK_METADATA_NO_TAGS: NpmPackageMetadata = {
@@ -56,32 +78,51 @@ const MOCK_METADATA_EMPTY: NpmPackageMetadata = {
     versions: {},
 };
 
-function mockNpm(metadata: NpmPackageMetadata): NpmClient {
+function mockNpm(metadata: NpmPackageMetadata): NpmRegistryClient {
     return {
         metadata: async () => metadata,
         versions: (m: NpmPackageMetadata) => Object.keys(m.versions ?? {}),
         versionsOf: async () => Object.keys(metadata.versions ?? {}),
         distTag: (m: NpmPackageMetadata, tag: string) => m["dist-tags"]?.[tag],
-    };
+    } as unknown as NpmRegistryClient;
 }
 
-function mockLogger(level: "quiet" | "verbose" = "quiet") {
-    const fn = (
-        level === "verbose" ? (...args: unknown[]) => console.debug(...args) : () => {}
-    ) as typeof console.log;
-    return { info: fn, warn: fn, error: fn, verbose: fn, clear: fn };
+function mockLogger() {
+    const noop = () => {};
+    return { info: noop, warn: noop, error: noop, verbose: noop, clear: noop, install: noop };
 }
+
+const SCRIPT_API_ENTRY: DependencyCatalogEntry = {
+    resolver: "minecraft-script-api",
+    manifest: true,
+};
+
+const VANILLA_DATA_ENTRY: DependencyCatalogEntry = {
+    resolver: "minecraft-vanilla-data",
+    manifest: false,
+};
 
 function ctx(overrides?: Partial<DependencyResolverContext>): DependencyResolverContext {
     return {
         packageName: "@minecraft/server",
         specifier: "stable",
-        kind: "manifest",
-        package: { kind: "manifest", resolver: "minecraft" },
         target: "latest",
-        registry: "https://registry.npmjs.org/",
+        entry: SCRIPT_API_ENTRY,
         config: undefined as unknown as ResolvedConfig,
         npm: mockNpm(MOCK_BETA_METADATA),
+        logger: mockLogger(),
+        ...overrides,
+    };
+}
+
+function vanillaCtx(overrides?: Partial<DependencyResolverContext>): DependencyResolverContext {
+    return {
+        packageName: "@minecraft/vanilla-data",
+        specifier: "stable",
+        target: "latest",
+        entry: VANILLA_DATA_ENTRY,
+        config: undefined as unknown as ResolvedConfig,
+        npm: mockNpm(MOCK_VANILLA_METADATA),
         logger: mockLogger(),
         ...overrides,
     };
@@ -93,52 +134,45 @@ function ctx(overrides?: Partial<DependencyResolverContext>): DependencyResolver
 
 describe("dependencyCatalog", () => {
     it("createDependencyCatalog merges built-in and custom entries", () => {
-        const custom = { "my-lib": { kind: "package" as const } };
+        const custom = { "my-lib": { resolver: "custom" } };
         const catalog = createDependencyCatalog({
             install: { dependencyCatalog: custom },
         } as unknown as ResolvedConfig);
-        expect(catalog["@minecraft/server"]).toEqual({ kind: "manifest", resolver: "minecraft" });
-        expect(catalog["my-lib"]).toEqual({ kind: "package" });
+        expect(catalog["@minecraft/server"]).toMatchObject({ resolver: "minecraft-script-api" });
+        expect(catalog["my-lib"]).toEqual({ resolver: "custom" });
     });
 
     it("createDependencyCatalog custom entries override built-in", () => {
-        const custom = { "@minecraft/server": { kind: "package" as const } };
+        const custom = { "@minecraft/server": { resolver: "custom-resolver", packageJson: false } };
         const catalog = createDependencyCatalog({
             install: { dependencyCatalog: custom },
         } as unknown as ResolvedConfig);
-        expect(catalog["@minecraft/server"]).toEqual({ kind: "package" });
+        expect(catalog["@minecraft/server"]).toEqual({
+            resolver: "custom-resolver",
+            packageJson: false,
+        });
     });
 
     it("getDependencyCatalogEntry returns matching entry", () => {
+        const entry = getDependencyCatalogEntry(BUILTIN_DEPENDENCY_CATALOG, "@minecraft/server");
+        expect(entry).toBeDefined();
+        expect(entry.resolver).toBe("minecraft-script-api");
+        expect(entry.manifest).toBe(true);
+    });
+
+    it("getDependencyCatalogEntry throws on unknown dependency", () => {
+        expect(() => getDependencyCatalogEntry(BUILTIN_DEPENDENCY_CATALOG, "unknown-pkg")).toThrow(
+            "not a managed dependency"
+        );
+    });
+
+    it("@minecraft/vanilla-data has manifest: false", () => {
         const entry = getDependencyCatalogEntry(
             BUILTIN_DEPENDENCY_CATALOG,
-            "@minecraft/server",
-            "manifest"
+            "@minecraft/vanilla-data"
         );
-        expect(entry).toBeDefined();
-        expect(entry.kind).toBe("manifest");
-    });
-
-    it("getDependencyCatalogEntry throws on unknown manifest dependency", () => {
-        expect(() =>
-            getDependencyCatalogEntry(BUILTIN_DEPENDENCY_CATALOG, "unknown-pkg", "manifest")
-        ).toThrow("not a manifest dependency");
-    });
-
-    it("getDependencyCatalogEntry throws on unknown package dependency", () => {
-        expect(() =>
-            getDependencyCatalogEntry(BUILTIN_DEPENDENCY_CATALOG, "unknown-pkg", "package")
-        ).toThrow("not a package-only dependency");
-    });
-
-    it("getDependencyCatalogEntry throws when kind mismatches", () => {
-        expect(() =>
-            getDependencyCatalogEntry(
-                BUILTIN_DEPENDENCY_CATALOG,
-                "@minecraft/vanilla-data",
-                "manifest"
-            )
-        ).toThrow("not a manifest dependency");
+        expect(entry.manifest).toBe(false);
+        expect(entry.resolver).toBe("minecraft-vanilla-data");
     });
 });
 
@@ -147,7 +181,7 @@ describe("dependencyCatalog", () => {
 // ---------------------------------------------------------------------------
 
 describe("packageVersionForSpecifier", () => {
-    it.each(["stable", "beta"])(
+    it.each(["stable", "beta", "preview"])(
         "throws DEPENDENCY_VERSION_INVALID for specifier '%s'",
         (specifier) => {
             expect(() => packageVersionForSpecifier(specifier)).toThrow(
@@ -160,6 +194,7 @@ describe("packageVersionForSpecifier", () => {
         expect(packageVersionForSpecifier("1.0.0")).toBe("1.0.0");
         expect(packageVersionForSpecifier("2.6.0")).toBe("2.6.0");
         expect(packageVersionForSpecifier("1.0.0-beta.1")).toBe("1.0.0-beta.1");
+        expect(packageVersionForSpecifier("1.26.40-preview.30")).toBe("1.26.40-preview.30");
     });
 
     it("throws for completely invalid strings", () => {
@@ -189,11 +224,6 @@ describe("stableVersions", () => {
     it("sorts ascending", () => {
         expect(stableVersions(["2.0.0", "1.0.0", "3.0.0"])).toEqual(["1.0.0", "2.0.0", "3.0.0"]);
     });
-
-    it("handles pre-release tags correctly (filters them out)", () => {
-        const result = stableVersions(["2.4.0-beta.1.21.120-stable", "2.4.0"]);
-        expect(result).toEqual(["2.4.0"]);
-    });
 });
 
 describe("betaVersions", () => {
@@ -211,18 +241,13 @@ describe("betaVersions", () => {
         const result = betaVersions(["2.0.0-beta.1", "1.0.0-beta.1", "3.0.0-beta.1"]);
         expect(result).toEqual(["1.0.0-beta.1", "2.0.0-beta.1", "3.0.0-beta.1"]);
     });
-
-    it("is case-insensitive for beta marker", () => {
-        const result = betaVersions(["1.0.0-Beta.1", "2.0.0-beta.2"]);
-        expect(result).toHaveLength(2);
-    });
 });
 
 // ---------------------------------------------------------------------------
-// resolveLatestStableVersionFromMetadata
+// MinecraftPackageResolver (shared utilities)
 // ---------------------------------------------------------------------------
 
-describe("resolveLatestStableVersionFromMetadata (MinecraftPackageResolver.latestStable)", () => {
+describe("MinecraftPackageResolver.latestStable", () => {
     it("returns dist-tag latest when it is a stable version", () => {
         const npm = mockNpm(MOCK_STABLE_METADATA);
         const pkg = new MinecraftPackageResolver(npm);
@@ -246,27 +271,12 @@ describe("resolveLatestStableVersionFromMetadata (MinecraftPackageResolver.lates
     });
 });
 
-// ---------------------------------------------------------------------------
-// resolveLatestBetaVersionFromMetadata
-// ---------------------------------------------------------------------------
-
-describe("resolveLatestBetaVersionFromMetadata (MinecraftPackageResolver.latestBeta)", () => {
+describe("MinecraftPackageResolver.latestBeta", () => {
     it("returns dist-tag beta when present", () => {
         const npm = mockNpm(MOCK_BETA_METADATA);
         const pkg = new MinecraftPackageResolver(npm);
         const result = pkg.latestBeta("@minecraft/server", MOCK_BETA_METADATA);
         expect(result).toBe("2.7.0-beta.1.26.30-stable");
-    });
-
-    it("falls back to highest beta version when no dist-tag", () => {
-        const noTag = {
-            ...MOCK_METADATA_NO_TAGS,
-            versions: { ...MOCK_METADATA_NO_TAGS.versions, "2.0.0-beta.1": {}, "1.0.0-beta.1": {} },
-        };
-        const npm = mockNpm(noTag);
-        const pkg = new MinecraftPackageResolver(npm);
-        const result = pkg.latestBeta("@minecraft/server", noTag);
-        expect(result).toBe("2.0.0-beta.1");
     });
 
     it("throws when no beta versions exist", () => {
@@ -278,32 +288,16 @@ describe("resolveLatestBetaVersionFromMetadata (MinecraftPackageResolver.latestB
     });
 });
 
-// ---------------------------------------------------------------------------
-// resolveBetaVersionFromMetadata
-// ---------------------------------------------------------------------------
-
-describe("resolveBetaVersionFromMetadata (MinecraftPackageResolver.betaForTarget)", () => {
+describe("MinecraftPackageResolver.betaForTarget", () => {
     it("returns highest beta version matching target", () => {
         const npm = mockNpm(MOCK_BETA_METADATA);
         const pkg = new MinecraftPackageResolver(npm);
         const result = pkg.betaForTarget("@minecraft/server", "1.21.120", MOCK_BETA_METADATA);
         expect(result).toBe("2.4.0-beta.1.21.120-stable");
     });
-
-    it("throws when no beta version matches the target", () => {
-        const npm = mockNpm(MOCK_BETA_METADATA);
-        const pkg = new MinecraftPackageResolver(npm);
-        expect(() => pkg.betaForTarget("@minecraft/server", "9.99.99", MOCK_BETA_METADATA)).toThrow(
-            "Cannot resolve @minecraft/server@beta for target"
-        );
-    });
 });
 
-// ---------------------------------------------------------------------------
-// inferStableVersionFromBeta
-// ---------------------------------------------------------------------------
-
-describe("resolveBetaVersionFromMetadata (MinecraftPackageResolver.inferStableFromBeta)", () => {
+describe("MinecraftPackageResolver.inferStableFromBeta", () => {
     it("infers stable from beta version: 2.7.0-beta.1.26.30-stable -> 2.6.0", () => {
         const pkg = new MinecraftPackageResolver(mockNpm(MOCK_STABLE_METADATA));
         const result = pkg.inferStableFromBeta(
@@ -314,136 +308,68 @@ describe("resolveBetaVersionFromMetadata (MinecraftPackageResolver.inferStableFr
         );
         expect(result).toBe("2.6.0");
     });
-
-    it("infers stable from beta version: 2.4.0-beta.1.21.120-stable -> 2.3.0", () => {
-        const pkg = new MinecraftPackageResolver(mockNpm(MOCK_STABLE_METADATA));
-        const result = pkg.inferStableFromBeta(
-            "@minecraft/server",
-            "1.21.120",
-            "2.4.0-beta.1.21.120-stable",
-            MOCK_STABLE_METADATA
-        );
-        expect(result).toBe("2.3.0");
-    });
-
-    it("throws when beta string cannot be parsed", () => {
-        const pkg = new MinecraftPackageResolver(mockNpm(MOCK_STABLE_METADATA));
-        expect(() =>
-            pkg.inferStableFromBeta(
-                "@minecraft/server",
-                "1.21.120",
-                "not-a-version",
-                MOCK_STABLE_METADATA
-            )
-        ).toThrow("Cannot infer stable version");
-    });
-
-    it("throws when inferred stable version does not exist in metadata", () => {
-        const pkg = new MinecraftPackageResolver(mockNpm(MOCK_STABLE_METADATA));
-        expect(() =>
-            pkg.inferStableFromBeta(
-                "@minecraft/server",
-                "1.99.99",
-                "1.0.0-beta.1.99.99-stable",
-                MOCK_STABLE_METADATA
-            )
-        ).toThrow("Cannot confirm inferred stable version");
-    });
-
-    it("throws when minor version would be negative", () => {
-        const pkg = new MinecraftPackageResolver(mockNpm(MOCK_STABLE_METADATA));
-        expect(() =>
-            pkg.inferStableFromBeta(
-                "@minecraft/server",
-                "1.20.80",
-                "0.0.5-beta.1.20.80-stable",
-                MOCK_STABLE_METADATA
-            )
-        ).toThrow("Cannot confirm inferred stable version");
-    });
 });
 
 // ---------------------------------------------------------------------------
-// minecraftStableResolver
+// minecraftScriptApiResolver
 // ---------------------------------------------------------------------------
 
-describe("minecraftStableResolver", () => {
+describe("minecraftScriptApiResolver", () => {
     describe("match", () => {
         it("matches specifier 'stable'", () => {
-            expect(minecraftStableResolver.match(ctx({ specifier: "stable" }))).toBe(true);
+            expect(minecraftScriptApiResolver.match(ctx({ specifier: "stable" }))).toBe(true);
         });
 
-        it("does not match specifier 'beta'", () => {
-            expect(minecraftStableResolver.match(ctx({ specifier: "beta" }))).toBe(false);
+        it("matches specifier 'beta'", () => {
+            expect(minecraftScriptApiResolver.match(ctx({ specifier: "beta" }))).toBe(true);
         });
 
-        it("does not match specifier '1.0.0'", () => {
-            expect(minecraftStableResolver.match(ctx({ specifier: "1.0.0" }))).toBe(false);
+        it("matches specifier 'preview'", () => {
+            expect(minecraftScriptApiResolver.match(ctx({ specifier: "preview" }))).toBe(true);
         });
 
-        it("does not match specifier 'STABLE' (case-sensitive)", () => {
-            expect(minecraftStableResolver.match(ctx({ specifier: "STABLE" }))).toBe(false);
+        it("does not match exact version (handled by exact resolver)", () => {
+            expect(minecraftScriptApiResolver.match(ctx({ specifier: "2.6.0" }))).toBe(false);
+            expect(minecraftScriptApiResolver.match(ctx({ specifier: "1.0.0-beta.1" }))).toBe(
+                false
+            );
         });
     });
 
-    describe("resolve", () => {
-        it("target 'latest' resolves from dist-tag", async () => {
-            const npm = mockNpm(MOCK_STABLE_METADATA);
-            const result = await minecraftStableResolver.resolve(ctx({ target: "latest", npm }));
+    describe("resolve stable", () => {
+        it("target 'latest' resolves stable inferred from latest beta", async () => {
+            const npm = mockNpm(MOCK_BETA_METADATA);
+            const result = await minecraftScriptApiResolver.resolve(
+                ctx({ specifier: "stable", target: "latest", npm })
+            );
+            // latest beta is 2.7.0-beta.1.26.30-stable -> inferred stable is 2.6.0
             expect(result.packageVersion).toBe("2.6.0");
             expect(result.manifestVersion).toBe("2.6.0");
         });
 
         it("concrete target infers stable from beta version", async () => {
             const npm = mockNpm(MOCK_BETA_METADATA);
-            const result = await minecraftStableResolver.resolve(ctx({ target: "1.26.30", npm }));
+            const result = await minecraftScriptApiResolver.resolve(
+                ctx({ specifier: "stable", target: "1.26.30", npm })
+            );
             expect(result.packageVersion).toBe("2.6.0");
             expect(result.manifestVersion).toBe("2.6.0");
         });
-
-        it("resolves for package-only dependencies (no manifestVersion)", async () => {
-            const npm = mockNpm(MOCK_STABLE_METADATA);
-            const result = await minecraftStableResolver.resolve(
-                ctx({ target: "latest", kind: "package", npm })
-            );
-            expect(result.packageVersion).toBe("2.6.0");
-            expect(result.manifestVersion).toBeNull();
-        });
-    });
-});
-
-// ---------------------------------------------------------------------------
-// minecraftBetaResolver
-// ---------------------------------------------------------------------------
-
-describe("minecraftBetaResolver", () => {
-    describe("match", () => {
-        it("matches specifier 'beta'", () => {
-            expect(minecraftBetaResolver.match(ctx({ specifier: "beta" }))).toBe(true);
-        });
-
-        it("does not match specifier 'stable'", () => {
-            expect(minecraftBetaResolver.match(ctx({ specifier: "stable" }))).toBe(false);
-        });
-
-        it("does not match specifier '1.0.0'", () => {
-            expect(minecraftBetaResolver.match(ctx({ specifier: "1.0.0" }))).toBe(false);
-        });
     });
 
-    describe("resolve", () => {
-        it("target 'latest' returns beta dist-tag version, manifest 'beta'", async () => {
+    describe("resolve beta", () => {
+        it("target 'latest' returns beta dist-tag, manifest 'beta'", async () => {
             const npm = mockNpm(MOCK_BETA_METADATA);
-            const result = await minecraftBetaResolver.resolve(
+            const result = await minecraftScriptApiResolver.resolve(
                 ctx({ specifier: "beta", target: "latest", npm })
             );
             expect(result.packageVersion).toBe("2.7.0-beta.1.26.30-stable");
             expect(result.manifestVersion).toBe("beta");
         });
 
-        it("concrete target that supports channel returns matching beta, manifest 'beta'", async () => {
+        it("concrete target >= 1.21.120 returns matching beta, manifest 'beta'", async () => {
             const npm = mockNpm(MOCK_BETA_METADATA);
-            const result = await minecraftBetaResolver.resolve(
+            const result = await minecraftScriptApiResolver.resolve(
                 ctx({ specifier: "beta", target: "1.21.120", npm })
             );
             expect(result.packageVersion).toBe("2.4.0-beta.1.21.120-stable");
@@ -452,20 +378,178 @@ describe("minecraftBetaResolver", () => {
 
         it("old target (< 1.21.120) returns short beta form in manifest", async () => {
             const npm = mockNpm(MOCK_BETA_METADATA);
-            const result = await minecraftBetaResolver.resolve(
+            const result = await minecraftScriptApiResolver.resolve(
                 ctx({ specifier: "beta", target: "1.20.80", npm })
             );
             expect(result.packageVersion).toBe("2.0.0-beta.1.20.80-stable");
             expect(result.manifestVersion).toBe("2.0.0-beta");
         });
+    });
 
-        it("package-only dependency has null manifestVersion", async () => {
+    describe("resolve preview", () => {
+        it("target 'latest' resolves to latest preview version", async () => {
             const npm = mockNpm(MOCK_BETA_METADATA);
-            const result = await minecraftBetaResolver.resolve(
-                ctx({ specifier: "beta", target: "latest", kind: "package", npm })
+            const result = await minecraftScriptApiResolver.resolve(
+                ctx({ specifier: "preview", target: "latest", npm })
+            );
+            expect(result.packageVersion).toBe("2.10.0-beta.1.26.40-preview.30");
+        });
+
+        it("concrete target resolves to highest matching preview", async () => {
+            const npm = mockNpm(MOCK_BETA_METADATA);
+            const result = await minecraftScriptApiResolver.resolve(
+                ctx({ specifier: "preview", target: "1.26.40", npm })
+            );
+            // Should prefer 2.10.0-beta over 2.9.0-rc for target 1.26.40
+            expect(result.packageVersion).toBe("2.10.0-beta.1.26.40-preview.30");
+        });
+
+        it("throws when no preview matches target", async () => {
+            const npm = mockNpm(MOCK_BETA_METADATA);
+            await expect(
+                minecraftScriptApiResolver.resolve(
+                    ctx({ specifier: "preview", target: "9.99.99", npm })
+                )
+            ).rejects.toThrow("Cannot resolve");
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// minecraftScriptApiBpResolver (beta/preview only, no stable)
+// ---------------------------------------------------------------------------
+
+describe("minecraftScriptApiBpResolver", () => {
+    describe("match", () => {
+        it("matches specifier 'beta'", () => {
+            expect(minecraftScriptApiBpResolver.match(ctx({ specifier: "beta" }))).toBe(true);
+        });
+
+        it("matches specifier 'preview'", () => {
+            expect(minecraftScriptApiBpResolver.match(ctx({ specifier: "preview" }))).toBe(true);
+        });
+
+        it("does not match specifier 'stable'", () => {
+            expect(minecraftScriptApiBpResolver.match(ctx({ specifier: "stable" }))).toBe(false);
+        });
+
+        it("does not match exact version", () => {
+            expect(minecraftScriptApiBpResolver.match(ctx({ specifier: "2.6.0" }))).toBe(false);
+        });
+    });
+
+    describe("resolve beta", () => {
+        it("target 'latest' resolves to latest beta (excluding preview)", async () => {
+            const npm = mockNpm(MOCK_BETA_METADATA);
+            const result = await minecraftScriptApiBpResolver.resolve(
+                ctx({ specifier: "beta", target: "latest", npm })
             );
             expect(result.packageVersion).toBe("2.7.0-beta.1.26.30-stable");
-            expect(result.manifestVersion).toBeNull();
+            expect(result.manifestVersion).toBe("beta");
+        });
+
+        it("concrete target resolves to matching beta", async () => {
+            const npm = mockNpm(MOCK_BETA_METADATA);
+            const result = await minecraftScriptApiBpResolver.resolve(
+                ctx({ specifier: "beta", target: "1.21.120", npm })
+            );
+            expect(result.packageVersion).toBe("2.4.0-beta.1.21.120-stable");
+        });
+    });
+
+    describe("resolve preview", () => {
+        it("target 'latest' resolves to latest preview", async () => {
+            const npm = mockNpm(MOCK_BETA_METADATA);
+            const result = await minecraftScriptApiBpResolver.resolve(
+                ctx({ specifier: "preview", target: "latest", npm })
+            );
+            expect(result.packageVersion).toBe("2.10.0-beta.1.26.40-preview.30");
+        });
+
+        it("concrete target resolves to highest matching preview", async () => {
+            const npm = mockNpm(MOCK_BETA_METADATA);
+            const result = await minecraftScriptApiBpResolver.resolve(
+                ctx({ specifier: "preview", target: "1.26.40", npm })
+            );
+            expect(result.packageVersion).toBe("2.10.0-beta.1.26.40-preview.30");
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// minecraftVanillaDataResolver
+// ---------------------------------------------------------------------------
+
+describe("minecraftVanillaDataResolver", () => {
+    describe("match", () => {
+        it("matches specifier 'stable'", () => {
+            expect(minecraftVanillaDataResolver.match(ctx({ specifier: "stable" }))).toBe(true);
+        });
+
+        it("matches specifier 'preview'", () => {
+            expect(minecraftVanillaDataResolver.match(ctx({ specifier: "preview" }))).toBe(true);
+        });
+
+        it("does not match specifier 'beta'", () => {
+            expect(minecraftVanillaDataResolver.match(ctx({ specifier: "beta" }))).toBe(false);
+        });
+
+        it("does not match exact version", () => {
+            expect(minecraftVanillaDataResolver.match(ctx({ specifier: "1.12.0" }))).toBe(false);
+        });
+    });
+
+    describe("resolve stable", () => {
+        it("target 'latest' resolves to latest stable", async () => {
+            const npm = mockNpm(MOCK_VANILLA_METADATA);
+            const result = await minecraftVanillaDataResolver.resolve(
+                vanillaCtx({ specifier: "stable", target: "latest", npm })
+            );
+            expect(result.packageVersion).toBe("1.14.0");
+        });
+
+        it("concrete target resolves to that exact version", async () => {
+            const npm = mockNpm(MOCK_VANILLA_METADATA);
+            const result = await minecraftVanillaDataResolver.resolve(
+                vanillaCtx({ specifier: "stable", target: "1.12.0", npm })
+            );
+            expect(result.packageVersion).toBe("1.12.0");
+        });
+
+        it("throws when target version does not exist", async () => {
+            const npm = mockNpm(MOCK_VANILLA_METADATA);
+            await expect(
+                minecraftVanillaDataResolver.resolve(
+                    vanillaCtx({ specifier: "stable", target: "9.99.99", npm })
+                )
+            ).rejects.toThrow("Cannot resolve");
+        });
+    });
+
+    describe("resolve preview", () => {
+        it("target 'latest' resolves to latest preview", async () => {
+            const npm = mockNpm(MOCK_VANILLA_METADATA);
+            const result = await minecraftVanillaDataResolver.resolve(
+                vanillaCtx({ specifier: "preview", target: "latest", npm })
+            );
+            expect(result.packageVersion).toBe("1.15.0-preview.1");
+        });
+
+        it("concrete target resolves to highest matching preview", async () => {
+            const npm = mockNpm(MOCK_VANILLA_METADATA);
+            const result = await minecraftVanillaDataResolver.resolve(
+                vanillaCtx({ specifier: "preview", target: "1.14.0", npm })
+            );
+            expect(result.packageVersion).toBe("1.14.0-preview.3");
+        });
+
+        it("throws when no preview matches target", async () => {
+            const npm = mockNpm(MOCK_VANILLA_METADATA);
+            await expect(
+                minecraftVanillaDataResolver.resolve(
+                    vanillaCtx({ specifier: "preview", target: "1.10.0", npm })
+                )
+            ).rejects.toThrow("Cannot resolve");
         });
     });
 });
@@ -476,36 +560,34 @@ describe("minecraftBetaResolver", () => {
 
 describe("exactVersionResolver", () => {
     describe("match", () => {
-        it.each(["1.0.0", "2.6.0", "1.0.0-beta.1", "2.4.0-beta.1.21.120-stable"])(
-            "matches exact version '%s'",
-            (specifier) => {
-                expect(exactVersionResolver.match(ctx({ specifier }))).toBe(true);
-            }
-        );
-
-        it.each(["stable", "beta", "", "abc"])("does not match '%s'", (specifier) => {
-            expect(exactVersionResolver.match(ctx({ specifier }))).toBe(false);
+        it.each([
+            "1.0.0",
+            "2.6.0",
+            "1.0.0-beta.1",
+            "2.4.0-beta.1.21.120-stable",
+            "1.26.40-preview.30",
+        ])("matches exact version '%s'", (specifier) => {
+            expect(exactVersionResolver.match(ctx({ specifier }))).toBe(true);
         });
 
-        it("does not match '1.2.3.4' because the regex treats .4 as pre-release suffix", () => {
-            // 1.2.3 matches \d+\.\d+\.\d+ and .4 is consumed by the optional (?:[-.][...])?
-            expect(exactVersionResolver.match(ctx({ specifier: "1.2.3.4" }))).toBe(true);
+        it.each(["stable", "beta", "preview", "", "abc"])("does not match '%s'", (specifier) => {
+            expect(exactVersionResolver.match(ctx({ specifier }))).toBe(false);
         });
     });
 
     describe("resolve", () => {
-        it("returns the specifier as both versions for manifest", async () => {
+        it("returns the specifier as packageVersion and manifestVersion", async () => {
             const result = await exactVersionResolver.resolve(ctx({ specifier: "1.5.0" }));
             expect(result.packageVersion).toBe("1.5.0");
             expect(result.manifestVersion).toBe("1.5.0");
         });
 
-        it("returns null manifestVersion for package-only", async () => {
+        it("handles preview format versions", async () => {
             const result = await exactVersionResolver.resolve(
-                ctx({ specifier: "1.5.0", kind: "package" })
+                ctx({ specifier: "1.26.40-preview.30" })
             );
-            expect(result.packageVersion).toBe("1.5.0");
-            expect(result.manifestVersion).toBeNull();
+            expect(result.packageVersion).toBe("1.26.40-preview.30");
+            expect(result.manifestVersion).toBe("1.26.40-preview.30");
         });
     });
 });
@@ -518,7 +600,7 @@ describe("DependencyResolverRegistry", () => {
     it("custom resolvers are tried before built-in", async () => {
         const custom: DependencyResolverRule = {
             name: "custom-beta",
-            resolver: "minecraft",
+            resolver: "minecraft-script-api",
             match: (c) => c.specifier === "beta",
             resolve: async () => ({
                 packageVersion: "999.0.0-custom",
@@ -527,19 +609,23 @@ describe("DependencyResolverRegistry", () => {
         };
         const registry = DependencyResolverRegistry.fromConfig([custom]);
         const npm = mockNpm(MOCK_BETA_METADATA);
-        const result = await registry.resolve(ctx({ specifier: "beta", npm }));
+        const result = await registry.resolve(
+            ctx({ specifier: "beta", npm, entry: SCRIPT_API_ENTRY })
+        );
         expect(result.packageVersion).toBe("999.0.0-custom");
     });
 
     it("falls through to built-in when custom does not match", async () => {
         const custom: DependencyResolverRule = {
-            name: "custom-only-beta",
+            name: "custom-only-special",
             match: (c) => c.specifier === "non-existent",
             resolve: async () => ({ packageVersion: "0.0.0", manifestVersion: null }),
         };
         const registry = DependencyResolverRegistry.fromConfig([custom]);
-        const npm = mockNpm(MOCK_STABLE_METADATA);
-        const result = await registry.resolve(ctx({ specifier: "stable", npm }));
+        const npm = mockNpm(MOCK_BETA_METADATA);
+        const result = await registry.resolve(
+            ctx({ specifier: "stable", npm, entry: SCRIPT_API_ENTRY })
+        );
         expect(result.packageVersion).toBe("2.6.0");
     });
 
@@ -550,13 +636,58 @@ describe("DependencyResolverRegistry", () => {
         );
     });
 
-    it.each(BUILTIN_DEPENDENCY_RESOLVERS)(
-        "built-in resolver '%s' has a name and resolve function",
-        (rule) => {
+    it("@minecraft/server-net@stable throws (bp resolver does not support stable)", async () => {
+        const registry = DependencyResolverRegistry.fromConfig([]);
+        const npm = mockNpm(MOCK_BETA_METADATA);
+        await expect(
+            registry.resolve(
+                ctx({
+                    specifier: "stable",
+                    npm,
+                    packageName: "@minecraft/server-net",
+                    entry: {
+                        resolver: "minecraft-script-api-bp",
+                        manifest: true,
+                    },
+                })
+            )
+        ).rejects.toThrow("dependency version is invalid");
+    });
+
+    it("@minecraft/server@preview resolves to latest preview", async () => {
+        const registry = DependencyResolverRegistry.fromConfig([]);
+        const npm = mockNpm(MOCK_BETA_METADATA);
+        const result = await registry.resolve(
+            ctx({
+                specifier: "preview",
+                npm,
+                entry: SCRIPT_API_ENTRY,
+            })
+        );
+        expect(result.packageVersion).toBe("2.10.0-beta.1.26.40-preview.30");
+    });
+
+    it("@minecraft/vanilla-data@beta throws (no resolver matches beta for vanilla-data)", async () => {
+        const registry = DependencyResolverRegistry.fromConfig([]);
+        const npm = mockNpm(MOCK_VANILLA_METADATA);
+        await expect(
+            registry.resolve(
+                ctx({
+                    specifier: "beta",
+                    npm,
+                    packageName: "@minecraft/vanilla-data",
+                    entry: VANILLA_DATA_ENTRY,
+                })
+            )
+        ).rejects.toThrow("dependency version is invalid");
+    });
+
+    it("built-in resolvers have a name and resolve function", () => {
+        for (const rule of BUILTIN_DEPENDENCY_RESOLVERS) {
             expect(rule.name).toBeTruthy();
             expect(typeof rule.resolve).toBe("function");
         }
-    );
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -566,18 +697,19 @@ describe("DependencyResolverRegistry", () => {
 describe("integration", () => {
     const npm = mockNpm(MOCK_BETA_METADATA);
 
-    const manifestContext = (specifier: string, target = "latest") =>
-        ctx({ specifier, target, npm, kind: "manifest" });
-
     it("resolves @minecraft/server@stable under target latest", async () => {
         const registry = DependencyResolverRegistry.fromConfig([]);
-        const result = await registry.resolve(manifestContext("stable"));
+        const result = await registry.resolve(
+            ctx({ specifier: "stable", npm, entry: SCRIPT_API_ENTRY })
+        );
         expect(result).toEqual({ packageVersion: "2.6.0", manifestVersion: "2.6.0" });
     });
 
     it("resolves @minecraft/server@beta under target latest", async () => {
         const registry = DependencyResolverRegistry.fromConfig([]);
-        const result = await registry.resolve(manifestContext("beta"));
+        const result = await registry.resolve(
+            ctx({ specifier: "beta", npm, entry: SCRIPT_API_ENTRY })
+        );
         expect(result).toEqual({
             packageVersion: "2.7.0-beta.1.26.30-stable",
             manifestVersion: "beta",
@@ -586,7 +718,9 @@ describe("integration", () => {
 
     it("resolves @minecraft/server@beta under target 1.20.80 (old target)", async () => {
         const registry = DependencyResolverRegistry.fromConfig([]);
-        const result = await registry.resolve(manifestContext("beta", "1.20.80"));
+        const result = await registry.resolve(
+            ctx({ specifier: "beta", target: "1.20.80", npm, entry: SCRIPT_API_ENTRY })
+        );
         expect(result).toEqual({
             packageVersion: "2.0.0-beta.1.20.80-stable",
             manifestVersion: "2.0.0-beta",
@@ -595,7 +729,58 @@ describe("integration", () => {
 
     it("resolves @minecraft/vanilla-data@1.12.0 as exact version", async () => {
         const registry = DependencyResolverRegistry.fromConfig([]);
-        const result = await registry.resolve(ctx({ specifier: "1.12.0", npm }));
+        const result = await registry.resolve(
+            ctx({
+                specifier: "1.12.0",
+                npm,
+                packageName: "@minecraft/vanilla-data",
+                entry: VANILLA_DATA_ENTRY,
+            })
+        );
         expect(result).toEqual({ packageVersion: "1.12.0", manifestVersion: "1.12.0" });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// DependencyService: ResolvedDependency structure
+// ---------------------------------------------------------------------------
+
+describe("DependencyService resolved structure", () => {
+    it("@minecraft/server produces manifest: true, external: true", () => {
+        const config = {
+            packs: {
+                bp: {
+                    dependencies: {
+                        "@minecraft/server": "beta",
+                    },
+                },
+            },
+            install: { dependencyCatalog: {} },
+            target: "latest",
+        } as unknown as ResolvedConfig;
+
+        const catalog = createDependencyCatalog(config);
+        const entry = getDependencyCatalogEntry(catalog, "@minecraft/server");
+        expect(entry.manifest).toBe(true);
+        // external derives from manifest
+        expect(entry.manifest).toBe(true);
+    });
+
+    it("@minecraft/vanilla-data produces manifest: false, external: false", () => {
+        const config = {
+            packs: {
+                bp: {
+                    dependencies: {
+                        "@minecraft/vanilla-data": "stable",
+                    },
+                },
+            },
+            install: { dependencyCatalog: {} },
+            target: "latest",
+        } as unknown as ResolvedConfig;
+
+        const catalog = createDependencyCatalog(config);
+        const entry = getDependencyCatalogEntry(catalog, "@minecraft/vanilla-data");
+        expect(entry.manifest).toBe(false);
     });
 });

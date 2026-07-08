@@ -92,8 +92,9 @@ bepack pack --name release
 - `packs.bp` 必填。
 - `packs.rp` 可选；配置后 `bepack pack` 会输出 `.mcaddon`。
 - `build` 每次写入前会清空 `<packs.bp.root>/scripts`。
-- 依赖 catalog 中的托管包默认会在构建时 external，不会被打进 bundle。可通过 `build.external` 和 `build.externalDependencies` 调整。
-- manifest 依赖使用 `stable` 或目标版本相关 `beta` 时，请先运行 `bepack install` 或使用 `bepack build --install`。
+- **所有 BP 依赖统一声明在 `packs.bp.dependencies`**，包括写入 manifest 的（如 `@minecraft/server`）和仅代码使用的（如 `@minecraft/vanilla-data`）。catalog 控制每个包是否写入 manifest 和/或 package.json。
+- 托管包中 `manifest: true` 的默认会在构建时 external，`manifest: false`（如 `@minecraft/vanilla-data`）可以被打进 bundle。可通过 `build.external` 和 `build.externalDependencies` 调整。
+- 使用 `stable`、`beta` 或 `preview` 作为 specifier 时，请先运行 `bepack install` 或使用 `bepack build --install` 解析为具体 npm 版本。
 
 完整配置参考和实现说明见 [README.reference.md](./README.reference.md)。
 
