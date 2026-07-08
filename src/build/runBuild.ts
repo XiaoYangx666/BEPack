@@ -32,13 +32,15 @@ export async function runBuild(options: RunBuildOptions) {
     const start = Date.now();
     const timing = options.config.build.timing;
     const root = projectRoot(options.cwd, options.config);
-    await timed("manifest", () =>
-        patchManifest({
-            cwd: options.cwd,
-            config: options.config,
-            dryRun: Boolean(options.dryRun),
-            ...(options.resolvedDeps ? { resolvedDeps: options.resolvedDeps } : {}),
-        }),
+    await timed(
+        "manifest",
+        () =>
+            patchManifest({
+                cwd: options.cwd,
+                config: options.config,
+                dryRun: Boolean(options.dryRun),
+                ...(options.resolvedDeps ? { resolvedDeps: options.resolvedDeps } : {}),
+            }),
         options.logger,
         timing
     );
@@ -47,7 +49,11 @@ export async function runBuild(options: RunBuildOptions) {
     if (!options.dryRun && options.typecheck !== false)
         await timed(
             "typecheck",
-            () => runTypecheck(root, { quiet: Boolean(options.quiet), useNpx: options.config.build.useNpx }),
+            () =>
+                runTypecheck(root, {
+                    quiet: Boolean(options.quiet),
+                    useNpx: options.config.build.useNpx,
+                }),
             options.logger,
             timing
         );

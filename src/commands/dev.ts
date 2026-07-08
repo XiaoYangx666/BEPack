@@ -12,9 +12,7 @@ export async function commandDev(options: any) {
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
         overrides: {
-            ...(options.timing !== undefined
-                ? { build: { timing: options.timing } }
-                : {}),
+            ...(options.timing !== undefined ? { build: { timing: options.timing } } : {}),
         },
     });
     logger.clear();
