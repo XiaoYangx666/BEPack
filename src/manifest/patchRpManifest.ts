@@ -31,11 +31,16 @@ export function patchRpManifest(manifest: Manifest, config: ResolvedConfig): Man
         config.packs.bp.uuid,
         version
     );
-    if (rp.pbr) {
+    if (rp.pbr === true) {
         const capabilities = Array.isArray(manifest.capabilities) ? manifest.capabilities : [];
         manifest.capabilities = capabilities.includes("pbr")
             ? capabilities
             : [...capabilities, "pbr"];
+    } else if (rp.pbr === false) {
+        if (Array.isArray(manifest.capabilities)) {
+            manifest.capabilities = manifest.capabilities.filter((c: string) => c !== "pbr");
+            if (manifest.capabilities.length === 0) delete manifest.capabilities;
+        }
     }
     return manifest;
 }

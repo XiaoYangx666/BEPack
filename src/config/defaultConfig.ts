@@ -20,7 +20,6 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
         runPackageManager: true,
         updatePackageJson: true,
         updateManifest: true,
-        dependencies: {},
         dependencyCatalog: {},
         dependencyResolvers: [],
     },
@@ -37,6 +36,8 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
         ],
         externalDependencies: true,
         useNpx: false,
+        minify: false,
+        timing: false,
     },
     dev: {
         copy: false,

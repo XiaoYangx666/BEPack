@@ -51,8 +51,13 @@ export function patchBpManifest(
     if (config.packs.rp)
         dependencies = upsertUuidDependency(dependencies, config.packs.rp.uuid, version);
     manifest.dependencies = dependencies;
-    if (config.packs.bp.achievement) {
+    if (config.packs.bp.achievement === true) {
         manifest.metadata = { ...(manifest.metadata ?? {}), product_type: "addon" };
+    } else if (config.packs.bp.achievement === false) {
+        if (manifest.metadata) {
+            delete manifest.metadata.product_type;
+            if (Object.keys(manifest.metadata).length === 0) delete manifest.metadata;
+        }
     }
     return manifest;
 }

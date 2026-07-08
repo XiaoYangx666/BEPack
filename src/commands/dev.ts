@@ -11,6 +11,11 @@ export async function commandDev(options: any) {
         command: "dev",
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
+        overrides: {
+            ...(options.timing !== undefined
+                ? { build: { timing: options.timing } }
+                : {}),
+        },
     });
     logger.clear();
     logger.bepack("dev", `target ${config.target}`);

@@ -66,6 +66,9 @@ export class Logger {
     hook(name: string, message: string): void {
         this.step("hook", `${name}: ${message}`, "gray");
     }
+    timing(label: string, durationMs: number): void {
+        this.step("timing", `${label.padEnd(14)} ${durationMs} ms`, "gray");
+    }
     done(label: string, message: string): void {
         this.info(`${colors.green("\u221a")} ${colors.green(label)} ${message}`);
     }

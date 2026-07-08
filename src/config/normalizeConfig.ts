@@ -94,7 +94,7 @@ export function normalizeConfig(
                 name: bp.name ?? name,
                 ...(bpDescription !== undefined ? { description: bpDescription } : {}),
                 dependencies: bp.dependencies ?? {},
-                achievement: bp.achievement ?? false,
+                ...(bp.achievement !== undefined ? { achievement: bp.achievement } : {}),
             },
             ...(rp
                 ? {
@@ -104,7 +104,7 @@ export function normalizeConfig(
                           moduleUuid: rp.moduleUuid,
                           name: rp.name ?? name,
                           ...(rpDescription !== undefined ? { description: rpDescription } : {}),
-                          pbr: rp.pbr ?? false,
+                          ...(rp.pbr !== undefined ? { pbr: rp.pbr } : {}),
                       },
                   }
                 : {}),
@@ -118,7 +118,6 @@ export function normalizeConfig(
             updatePackageJson:
                 raw.install?.updatePackageJson ?? DEFAULT_CONFIG.install.updatePackageJson,
             updateManifest: raw.install?.updateManifest ?? DEFAULT_CONFIG.install.updateManifest,
-            dependencies: raw.install?.dependencies ?? {},
             dependencyCatalog: raw.install?.dependencyCatalog ?? {},
             dependencyResolvers: raw.install?.dependencyResolvers ?? [],
         },
@@ -134,6 +133,8 @@ export function normalizeConfig(
             externalDependencies:
                 raw.build?.externalDependencies ?? DEFAULT_CONFIG.build.externalDependencies,
             useNpx: raw.build?.useNpx ?? DEFAULT_CONFIG.build.useNpx,
+            minify: raw.build?.minify ?? DEFAULT_CONFIG.build.minify,
+            timing: raw.build?.timing ?? DEFAULT_CONFIG.build.timing,
         },
         dev: {
             copy: raw.dev?.copy ?? DEFAULT_CONFIG.dev.copy,

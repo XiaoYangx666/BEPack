@@ -16,24 +16,49 @@ export type RunBuildOptions = {
     resolvedDeps?: Record<string, string>;
 };
 
+async function timed<T>(
+    label: string,
+    fn: () => Promise<T>,
+    logger: Logger,
+    timing: boolean
+): Promise<T> {
+    const start = timing ? Date.now() : 0;
+    const result = await fn();
+    if (timing) logger.timing(label, Date.now() - start);
+    return result;
+}
+
 export async function runBuild(options: RunBuildOptions) {
     const start = Date.now();
+    const timing = options.config.build.timing;
     const root = projectRoot(options.cwd, options.config);
-    await patchManifest({
-        cwd: options.cwd,
-        config: options.config,
-        dryRun: Boolean(options.dryRun),
-        ...(options.resolvedDeps ? { resolvedDeps: options.resolvedDeps } : {}),
-    });
-    await runHook("beforeBuild", "build", options.cwd, options.config, options.logger);
+    await timed("manifest", () =>
+        patchManifest({
+            cwd: options.cwd,
+            config: options.config,
+            dryRun: Boolean(options.dryRun),
+            ...(options.resolvedDeps ? { resolvedDeps: options.resolvedDeps } : {}),
+        }),
+        options.logger,
+        timing
+    );
     options.logger.manifest("manifest.json updated");
+    await runHook("beforeBuild", "build", options.cwd, options.config, options.logger);
     if (!options.dryRun && options.typecheck !== false)
-        await runTypecheck(root, {
-            quiet: Boolean(options.quiet),
-            useNpx: options.config.build.useNpx,
-        });
+        await timed(
+            "typecheck",
+            () => runTypecheck(root, { quiet: Boolean(options.quiet), useNpx: options.config.build.useNpx }),
+            options.logger,
+            timing
+        );
     if (options.typecheck !== false) options.logger.typescript("typecheck complete");
-    if (!options.dryRun) await runRolldown(options.cwd, options.config);
+    if (!options.dryRun)
+        await timed(
+            "rolldown",
+            () => runRolldown(options.cwd, options.config, options.logger),
+            options.logger,
+            timing
+        );
     options.logger.rolldown(
         options.config.build.preserveModules ? "preserve modules build complete" : "bundle complete"
     );

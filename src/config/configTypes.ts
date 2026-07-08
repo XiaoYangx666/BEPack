@@ -1,3 +1,4 @@
+import type { NpmRegistryClient } from "../utils/npmRegistry.js";
 import type { FIXED_PATHS } from "../constants/paths.js";
 
 export type CommandName = "init" | "install" | "manifest" | "build" | "dev" | "copy" | "pack";
@@ -39,19 +40,16 @@ export type LoggerLike = {
     install?(message: string): void;
 };
 
-export type DependencyKind = "manifest" | "package";
-
 export type NpmPackageMetadata = {
     "dist-tags"?: Record<string, string>;
     versions?: Record<string, unknown>;
 };
 
 export type DependencyCatalogEntry = {
-    /** Where this managed dependency is written. */
-    kind: DependencyKind;
-
-    /** Resolver group used by default, such as `minecraft`. */
-    resolver?: string;
+    /** Resolver used for this dependency, e.g. "minecraft-script-api" or "minecraft-vanilla-data". */
+    resolver: string;
+    /** Whether to write to bp manifest.json dependencies. When true, the dependency is also externalized during build. Defaults to false. */
+    manifest?: boolean;
 };
 
 export type DependencyResolverResult = {
@@ -65,17 +63,10 @@ export type DependencyResolverResult = {
 export type DependencyResolverContext = {
     packageName: string;
     specifier: string;
-    kind: DependencyKind;
-    package: DependencyCatalogEntry;
     target: string;
-    registry: string;
+    entry: DependencyCatalogEntry;
     config: ResolvedConfig;
-    npm: {
-        metadata(packageName: string): Promise<NpmPackageMetadata>;
-        versions(metadata: NpmPackageMetadata): string[];
-        versionsOf(packageName: string): Promise<string[]>;
-        distTag(metadata: NpmPackageMetadata, tag: string): string | undefined;
-    };
+    npm: NpmRegistryClient;
     logger?: LoggerLike;
 };
 
@@ -197,9 +188,6 @@ export type UserConfig = {
         /** Whether `bepack install` patches manifest.json. */
         updateManifest?: boolean;
 
-        /** package.json-only dependencies managed by BePack. */
-        dependencies?: Record<string, DependencySpecifier>;
-
         /** Additional managed dependency package definitions. */
         dependencyCatalog?: Record<string, DependencyCatalogEntry>;
 
@@ -236,6 +224,12 @@ export type UserConfig = {
 
         /** Use `npx tsc --noEmit` instead of system `tsc --noEmit`. */
         useNpx?: boolean;
+
+        /** Minify output. Passed through to rolldown. Defaults to false. */
+        minify?: boolean;
+
+        /** Show per-step timing in build/dev output. Defaults to false. */
+        timing?: boolean;
     };
 
     /** Dev watcher behavior. */
@@ -285,12 +279,12 @@ export type ResolvedConfig = {
             name: string;
             description?: string;
             dependencies: Record<string, DependencySpecifier>;
-            achievement: boolean;
+            achievement?: boolean;
         };
         rp?: Required<Omit<PackConfig, "name" | "description">> & {
             name: string;
             description?: string;
-            pbr: boolean;
+            pbr?: boolean;
         };
     };
     install: {
@@ -300,7 +294,6 @@ export type ResolvedConfig = {
         runPackageManager: boolean;
         updatePackageJson: boolean;
         updateManifest: boolean;
-        dependencies: Record<string, DependencySpecifier>;
         dependencyCatalog: Record<string, DependencyCatalogEntry>;
         dependencyResolvers: DependencyResolverRule[];
     };
@@ -312,6 +305,8 @@ export type ResolvedConfig = {
         external: BuildExternal[];
         externalDependencies: boolean;
         useNpx: boolean;
+        minify: boolean;
+        timing: boolean;
     };
     dev: {
         copy: CopySetting;

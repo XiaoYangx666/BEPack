@@ -32,13 +32,15 @@ export async function commandBuild(options: any) {
         configPath: options.config,
         overrides: {
             target: options.target,
-            ...(options.preserveModule || options.preserveModules || options.useNpx
+            ...(options.preserveModule || options.preserveModules || options.useNpx || options.minify || options.timing !== undefined
                 ? {
                       build: {
                           ...(options.preserveModule || options.preserveModules
                               ? { preserveModules: true }
                               : {}),
                           ...(options.useNpx ? { useNpx: true } : {}),
+                          ...(options.minify ? { minify: true } : {}),
+                          ...(options.timing !== undefined ? { timing: options.timing } : {}),
                       },
                   }
                 : {}),

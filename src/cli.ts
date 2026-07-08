@@ -71,6 +71,8 @@ common(cli.command("build", "Build project"))
     .option("--preserve-module", "Preserve module output")
     .option("--preserve-modules", "Preserve module output")
     .option("--use-npx", "Use npx tsc for typecheck")
+    .option("--minify", "Minify output")
+    .option("--timing", "Show per-step timing")
     .action((options: any) => run("build", commandBuild, options));
 common(cli.command("copy", "Copy packs"))
     .option("--target <target>", "Copy target")
@@ -83,6 +85,7 @@ common(cli.command("dev", "Watch project"))
     .option("--copy", "Copy on change")
     .option("--copy-target <target>", "Copy target")
     .option("--skip-copy", "Skip copy")
+    .option("--timing", "Show per-step timing")
     .action((options: any) => run("dev", commandDev, options));
 
 cli.help();
