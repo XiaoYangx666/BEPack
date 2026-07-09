@@ -150,7 +150,7 @@ type UserConfig = {
 
     copy?: {
         defaultTarget?: string;
-        targets?: Record<string, { type: "custom"; bp?: string; rp?: string }>;
+        targets?: Record<string, { type: "custom"; bp?: string; rp?: string } | { type: "gameRoot"; path: string }>;
     };
 
     pack?: {
@@ -435,7 +435,9 @@ timing    rolldown        45 ms
 
 `bepack copy` 将 BP/RP 复制到配置的目标路径。
 
-内置目标：
+**如果没有配置任何复制目标，`bepack copy` 会报错。** 复制前会验证目标目录是否存在，不存在则报错。
+
+### 内置目标
 
 - `win`
     - 新的 Windows Minecraft 基岩版路径：
@@ -443,20 +445,65 @@ timing    rolldown        45 ms
 - `winold`
     - `%LOCALAPPDATA%\Packages\Microsoft.MinecraftUWP_8wekyb3d8bbwe` 下的旧 UWP Minecraft 路径
 
-自定义目标：
+内置目标本质上是预设路径的 `gameRoot` 类型，会自动追加 `development_behavior_packs` / `development_resource_packs` 子目录。
+
+### 目标类型
+
+#### `custom` — 手动指定完整路径
 
 ```ts
 copy: {
-    defaultTarget: "win",
+    defaultTarget: "server",
     targets: {
         server: {
             type: "custom",
-            bp: "/server/world/behavior_packs",
-            rp: "/server/world/resource_packs",
+            bp: "/server/world/development_behavior_packs",
+            rp: "/server/world/development_resource_packs",
         },
     },
 }
 ```
+
+#### `gameRoot` — 指定游戏根目录，自动派生子目录
+
+```ts
+copy: {
+    defaultTarget: "myServer",
+    targets: {
+        myServer: {
+            type: "gameRoot",
+            path: "/server/server1",
+        },
+    },
+}
+```
+
+对于 `gameRoot` 类型，BePack 会自动拼接路径：
+
+- BP → `<path>/development_behavior_packs`
+- RP → `<path>/development_resource_packs`（仅当项目配置了 `packs.rp` 时）
+
+### 路径验证
+
+所有复制目标在复制前都会验证目录是否存在。如果目标目录不存在，命令会失败并返回 `COPY_FAILED`。这适用于所有目标类型（内置 `win`/`winold`、`custom`、`gameRoot`）。
+
+### 复制与构建/开发联动
+
+```ts
+build: {
+    copy: true,          // 构建后复制到 copy.defaultTarget
+    // 或
+    copy: "myTarget",    // 构建后复制到指定目标
+}
+
+dev: {
+    copy: true,          // 文件变更后复制到 copy.defaultTarget
+    // 或
+    copy: "myTarget",    // 文件变更后复制到指定目标
+}
+```
+
+`build.copy` 和 `dev.copy` 默认为 `false`（不复制）。`true` 表示使用 `copy.defaultTarget`，字符串表示使用指定目标。
 
 ## 打包
 
@@ -531,6 +578,7 @@ ACHIEVEMENT_REQUIRES_STABLE_API
 TYPECHECK_FAILED
 BUILD_FAILED
 COPY_TARGET_NOT_FOUND
+COPY_FAILED
 PACK_FAILED
 HOOK_FAILED
 CLI_ARGUMENT_CONFLICT

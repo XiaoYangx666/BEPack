@@ -43,7 +43,7 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
         copy: false,
     },
     copy: {
-        defaultTarget: "win",
+        defaultTarget: "",
         targets: {},
     },
     pack: {

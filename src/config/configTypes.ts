@@ -143,6 +143,16 @@ export type RpConfig = PackConfig & {
     pbr?: boolean;
 };
 
+/** Copy target with explicit bp/rp paths. */
+export type CopyTargetCustom = { type: "custom"; bp?: string; rp?: string };
+
+/** Copy target derived from a Minecraft game root directory.
+ *  BP is copied to `<path>/development_behavior_packs`,
+ *  RP is copied to `<path>/development_resource_packs`. */
+export type CopyTargetGameRoot = { type: "gameRoot"; path: string };
+
+export type CopyTarget = CopyTargetCustom | CopyTargetGameRoot;
+
 export type UserConfig = {
     /** Project root directory. Other relative paths are resolved from here. */
     root?: string;
@@ -244,7 +254,7 @@ export type UserConfig = {
         defaultTarget?: string;
 
         /** Custom copy targets. */
-        targets?: Record<string, { type: "custom"; bp?: string; rp?: string }>;
+        targets?: Record<string, CopyTarget>;
     };
 
     /** Pack output configuration. */
@@ -313,7 +323,7 @@ export type ResolvedConfig = {
     };
     copy: {
         defaultTarget: string;
-        targets: Record<string, { type: "custom"; bp?: string; rp?: string }>;
+        targets: Record<string, CopyTarget>;
     };
     pack: {
         name: string;
