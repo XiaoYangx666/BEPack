@@ -262,6 +262,12 @@ export type UserConfig = {
         /** Global folder name overrides for all targets. Per-target `name` takes precedence. */
         name?: string | CopyTargetNames;
 
+        /** Additional files/folders to include when copying, on top of built-in defaults. */
+        include?: {
+            bp?: string[];
+            rp?: string[];
+        };
+
         /** Custom copy targets. */
         targets?: Record<string, CopyTarget & { name?: string | CopyTargetNames }>;
     };
@@ -334,6 +340,11 @@ export type ResolvedConfig = {
         defaultTarget: string;
         /** Global folder name overrides for all targets. Per-target `name` takes precedence. */
         name?: string | CopyTargetNames;
+        /** Additional files/folders to include when copying, on top of built-in defaults. */
+        include?: {
+            bp?: string[];
+            rp?: string[];
+        };
         targets: Record<string, CopyTarget & { name?: string | CopyTargetNames }>;
     };
     pack: {

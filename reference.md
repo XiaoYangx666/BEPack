@@ -524,6 +524,33 @@ copy: {
 
 各部分独立覆盖。例如只设置 `copy.name.bp`，则 RP 名称仍使用 `packs.rp.name` 的默认值。
 
+### 选择性复制
+
+复制 BP 时，默认只复制以下文件/文件夹：
+
+```
+scripts  manifest.json  animation_controllers  animations  biomes
+blocks  entities  functions  items  loot_tables  pack_icon.png
+recipes  spawn_rules  structures  texts  trading
+feature_rules  features  worldgen
+```
+
+RP 默认复制整个目录。可以通过 `copy.include` 添加额外的文件/文件夹（不会替换默认列表）：
+
+```ts
+copy: {
+    defaultTarget: "server",
+    include: {
+        bp: ["my_custom_data", "config.json"],   // 额外复制到 BP
+        rp: ["textures", "sounds", "models"],     // 启用 RP 选择性复制
+    },
+}
+```
+
+BP 的默认列表是固定的，`include.bp` 仅追加额外项。RP 的默认列表为空（复制全部），一旦设置了 `include.rp`，则变为选择性复制模式，只复制指定的文件/文件夹。
+
+复制项不存在时会被静默跳过，不会报错。
+
 ### 复制与构建/开发联动
 
 ```ts
