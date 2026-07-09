@@ -10,7 +10,7 @@ import {
     getDependencyCatalogEntry,
     BUILTIN_DEPENDENCY_CATALOG,
 } from "../dependencyCatalog.js";
-import { minecraftScriptApiResolver } from "../resolvers/minecraftScriptApi.js";
+import { minecraftScriptApiResolver, latestBetaFromAllVersions } from "../resolvers/minecraftScriptApi.js";
 import { minecraftScriptApiBpResolver } from "../resolvers/minecraftScriptApiBp.js";
 import { minecraftVanillaDataResolver } from "../resolvers/minecraftVanillaData.js";
 import { exactVersionResolver } from "../resolvers/exact.js";
@@ -41,6 +41,24 @@ const SAPI_PREVIEW_VERSIONS = [
     "2.10.0-beta.1.26.40-preview.30",
 ];
 
+// Simulates @minecraft/server-net / @minecraft/server-admin layout:
+// same format (1.0.0-beta.<target>-stable) plus malformed versions
+const BP_BETA_VERSIONS = [
+    "1.0.0-beta.1.12.111-stable",
+    "1.0.0-beta.1.20.60-stable",
+    "1.0.0-beta.1.21.70-stable",
+    "1.0.0-beta.1.26.32-stable",
+    "1.0.0-beta.1.26.40-preview.30",
+    "1.0.0-beta.1.26.40-preview.26",
+    // Malformed versions — MUST be excluded from resolution:
+    "1.0.0-beta.release.1.19.40",
+    "1.0.0-beta.release.1.19.50",
+    "1.0.0-beta.preview.1.19.60.22",
+    "1.0.0-beta.preview.1.19.60.20",
+    "1.0.0-beta.00001b50",
+    "1.0.0-beta.11940b23",
+];
+
 const VANILLA_STABLE_VERSIONS = ["1.12.0", "1.12.1", "1.13.0", "1.14.0"];
 const VANILLA_PREVIEW_VERSIONS = [
     "1.14.0-preview.1",
@@ -59,6 +77,13 @@ const MOCK_BETA_METADATA: NpmPackageMetadata = {
     versions: Object.fromEntries(
         [...STABLE_VERSIONS, ...BETA_VERSIONS, ...SAPI_PREVIEW_VERSIONS].map((v) => [v, {}])
     ),
+};
+
+// Metadata simulating @minecraft/server-net / @minecraft/server-admin,
+// including .release. versions that must be excluded from resolution.
+const MOCK_BP_BETA_METADATA: NpmPackageMetadata = {
+    "dist-tags": {},
+    versions: Object.fromEntries(BP_BETA_VERSIONS.map((v) => [v, {}])),
 };
 
 const MOCK_VANILLA_METADATA: NpmPackageMetadata = {
@@ -240,6 +265,64 @@ describe("betaVersions", () => {
     it("sorts ascending", () => {
         const result = betaVersions(["2.0.0-beta.1", "1.0.0-beta.1", "3.0.0-beta.1"]);
         expect(result).toEqual(["1.0.0-beta.1", "2.0.0-beta.1", "3.0.0-beta.1"]);
+    });
+});
+
+describe("latestBetaFromAllVersions", () => {
+    it("filters out .release. versions that would sort after proper beta versions", () => {
+        // This simulates @minecraft/server-net's version list:
+        // proper 1.0.0-beta.<target>-stable and old 1.0.0-beta.release.<target>
+        const versions = [
+            "1.0.0-beta.1.12.111-stable",
+            "1.0.0-beta.1.20.60-stable",
+            "1.0.0-beta.1.21.70-stable",
+            "1.0.0-beta.1.26.32-stable",
+            // These .release. versions must NOT be picked:
+            "1.0.0-beta.release.1.19.40",
+            "1.0.0-beta.release.1.19.50",
+        ];
+        const result = latestBetaFromAllVersions("@minecraft/server-net", versions);
+        expect(result).toBe("1.0.0-beta.1.26.32-stable");
+    });
+
+    it("works without .release. versions (unchanged behavior)", () => {
+        const versions = [
+            "1.0.0-beta.1.19.80-stable",
+            "1.0.0-beta.1.20.60-stable",
+            "1.0.0-beta.1.21.70-stable",
+        ];
+        const result = latestBetaFromAllVersions("@minecraft/server", versions);
+        expect(result).toBe("1.0.0-beta.1.21.70-stable");
+    });
+
+    it("throws when only .release. versions exist (no valid beta)", () => {
+        const versions = [
+            "1.0.0-beta.release.1.19.40",
+            "1.0.0-beta.release.1.19.50",
+        ];
+        expect(() =>
+            latestBetaFromAllVersions("@minecraft/server-net", versions)
+        ).toThrow("Cannot resolve latest beta version");
+    });
+
+    it("filters out .preview. versions (wrong position of preview)", () => {
+        const versions = [
+            "1.0.0-beta.preview.1.19.60.22",
+            "1.0.0-beta.preview.1.19.60.20",
+            "1.0.0-beta.1.21.70-stable",
+        ];
+        const result = latestBetaFromAllVersions("@minecraft/server-net", versions);
+        expect(result).toBe("1.0.0-beta.1.21.70-stable");
+    });
+
+    it("filters out hash-style versions (00001bXX, 11940bXX)", () => {
+        const versions = [
+            "1.0.0-beta.00001b50",
+            "1.0.0-beta.11940b23",
+            "1.0.0-beta.1.21.70-stable",
+        ];
+        const result = latestBetaFromAllVersions("@minecraft/server-net", versions);
+        expect(result).toBe("1.0.0-beta.1.21.70-stable");
     });
 });
 
@@ -454,6 +537,32 @@ describe("minecraftScriptApiBpResolver", () => {
                 ctx({ specifier: "beta", target: "1.21.120", npm })
             );
             expect(result.packageVersion).toBe("2.4.0-beta.1.21.120-stable");
+        });
+
+        it("excludes .release. versions (like @minecraft/server-net) when resolving latest", async () => {
+            const npm = mockNpm(MOCK_BP_BETA_METADATA);
+            const result = await minecraftScriptApiBpResolver.resolve(
+                ctx({
+                    specifier: "beta",
+                    target: "latest",
+                    npm,
+                    packageName: "@minecraft/server-net",
+                })
+            );
+            expect(result.packageVersion).toBe("1.0.0-beta.1.26.32-stable");
+        });
+
+        it("excludes .release. versions when resolving for concrete target", async () => {
+            const npm = mockNpm(MOCK_BP_BETA_METADATA);
+            const result = await minecraftScriptApiBpResolver.resolve(
+                ctx({
+                    specifier: "beta",
+                    target: "1.21.70",
+                    npm,
+                    packageName: "@minecraft/server-net",
+                })
+            );
+            expect(result.packageVersion).toBe("1.0.0-beta.1.21.70-stable");
         });
     });
 

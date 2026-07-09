@@ -19,9 +19,14 @@ export function latestBetaFromAllVersions(
     versions: string[],
     logger?: { verbose: (msg: string) => void }
 ): string {
-    const all = betaVersions(versions).filter(
-        (v) => !/(?:rc|beta)\.\d+\.\d+\.\d+-preview\.\d+$/i.test(v)
-    );
+    // Whitelist: only accept versions matching <pkg>-beta.<target>(-stable) where target is X.Y.Z
+    // This excludes malformed versions like:
+    //   1.0.0-beta.release.1.19.50   (release instead of target)
+    //   1.0.0-beta.preview.1.19.60.22 (preview instead of target)
+    //   1.0.0-beta.00001b50          (random hash)
+    const all = betaVersions(versions)
+        .filter((v) => /^\d+\.\d+\.\d+-beta\.\d+\.\d+\.\d+/.test(v))
+        .filter((v) => !/(?:rc|beta)\.\d+\.\d+\.\d+-preview\.\d+$/i.test(v));
     const found = all.at(-1);
     if (!found) {
         throw new BePackError(
