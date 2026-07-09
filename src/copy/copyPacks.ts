@@ -30,7 +30,7 @@ export async function copyPacks(
     dryRun = false,
     logger?: Logger
 ) {
-    const { name, target } = resolveCopyTarget(config, targetName);
+    const { name: targetNameResolved, target, names } = resolveCopyTarget(config, targetName);
     const copied: string[] = [];
 
     // Validate target directories exist before copying
@@ -42,16 +42,18 @@ export async function copyPacks(
     }
 
     if (target.bp) {
-        const to = path.join(target.bp, config.packs.bp.name);
+        const folderName = names.bp ?? config.packs.bp.name;
+        const to = path.join(target.bp, folderName);
         if (!dryRun) await copyDir(bpRoot(cwd, config), to);
         logger?.copy(`${dryRun ? "would copy" : "copied"} bp -> ${colors.gray(to)}`);
         copied.push(to);
     }
     if (config.packs.rp && target.rp) {
-        const to = path.join(target.rp, config.packs.rp.name);
+        const folderName = names.rp ?? config.packs.rp.name;
+        const to = path.join(target.rp, folderName);
         if (!dryRun) await copyDir(rpRoot(cwd, config), to);
         logger?.copy(`${dryRun ? "would copy" : "copied"} rp -> ${colors.gray(to)}`);
         copied.push(to);
     }
-    return { target: name, copied };
+    return { target: targetNameResolved, copied };
 }

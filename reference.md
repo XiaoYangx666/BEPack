@@ -487,6 +487,43 @@ copy: {
 
 所有复制目标在复制前都会验证目录是否存在。如果目标目录不存在，命令会失败并返回 `COPY_FAILED`。这适用于所有目标类型（内置 `win`/`winold`、`custom`、`gameRoot`）。
 
+### 自定义复制文件夹名称
+
+复制到目标目录时，BP/RP 的文件夹名称默认为 `packs.bp.name` / `packs.rp.name`，即项目配置中的包名称。可以通过 `copy.name` 或目标级 `name` 覆盖：
+
+`name` 可以是对象（分别指定 bp/rp），也可以是字符串（bp 和 rp 使用相同名称）：
+
+```ts
+copy: {
+    defaultTarget: "server",
+
+    // 全局名称覆盖（字符串：bp 和 rp 同名）
+    name: "MyPack",
+
+    targets: {
+        server: {
+            type: "gameRoot",
+            path: "/server/server1",
+            // 目标级名称覆盖（对象：分别指定 bp/rp）
+            name: {
+                bp: "behavior_packs_custom",
+                // rp 未设置，则回退到全局 copy.name 或 packs.rp.name
+            },
+        },
+
+        staging: {
+            type: "custom",
+            bp: "/staging/behavior_packs",
+            name: "StagingPack", // 字符串，bp 和 rp 都叫 StagingPack
+        },
+    },
+}
+```
+
+优先级：**目标级 `name` > 全局 `copy.name` > 包配置 `packs.bp.name` / `packs.rp.name`**。
+
+各部分独立覆盖。例如只设置 `copy.name.bp`，则 RP 名称仍使用 `packs.rp.name` 的默认值。
+
 ### 复制与构建/开发联动
 
 ```ts

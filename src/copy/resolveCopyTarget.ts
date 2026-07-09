@@ -1,6 +1,6 @@
 import path from "node:path";
 import os from "node:os";
-import type { CopyTarget, CopyTargetCustom, CopyTargetGameRoot, ResolvedConfig } from "../config/configTypes.js";
+import type { CopyTarget, CopyTargetCustom, CopyTargetGameRoot, CopyTargetNames, ResolvedConfig } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 
 /**
@@ -56,7 +56,7 @@ function resolveGameRoot(
 export function resolveCopyTarget(
     config: ResolvedConfig,
     name?: string
-): { name: string; target: CopyTargetCustom } {
+): { name: string; target: CopyTargetCustom; names: CopyTargetNames } {
     const targetName = name ?? config.copy.defaultTarget;
 
     if (!targetName) {
@@ -83,10 +83,30 @@ export function resolveCopyTarget(
         });
     }
 
+    // Resolve folder names: per-target > global copy > fallback (handled in copyPacks)
+    const userEntry = config.copy.targets[targetName] as
+        | (CopyTarget & { name?: string | CopyTargetNames })
+        | undefined;
+    const perTargetName = userEntry?.name;
+    const globalName = config.copy.name;
+
+    // Helper: normalize string → { bp, rp }
+    const resolveName = (v: string | CopyTargetNames | undefined): CopyTargetNames =>
+        typeof v === "string" ? { bp: v, rp: v } : v ?? {};
+
+    const perTarget = resolveName(perTargetName);
+    const global = resolveName(globalName);
+
+    const names: CopyTargetNames = {};
+    const bpName = perTarget.bp ?? global.bp;
+    const rpName = perTarget.rp ?? global.rp;
+    if (bpName) names.bp = bpName;
+    if (rpName) names.rp = rpName;
+
     // Resolve gameRoot targets (both built-in and user-defined) to concrete paths
     if (raw.type === "gameRoot") {
-        return { name: targetName, target: resolveGameRoot(config, raw) };
+        return { name: targetName, target: resolveGameRoot(config, raw), names };
     }
 
-    return { name: targetName, target: raw };
+    return { name: targetName, target: raw, names };
 }

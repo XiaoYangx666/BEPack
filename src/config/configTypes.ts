@@ -153,6 +153,12 @@ export type CopyTargetGameRoot = { type: "gameRoot"; path: string };
 
 export type CopyTarget = CopyTargetCustom | CopyTargetGameRoot;
 
+/** Per-target or global copy folder name overrides. Falls back to `packs.bp.name` / `packs.rp.name`. */
+export type CopyTargetNames = {
+    bp?: string;
+    rp?: string;
+};
+
 export type UserConfig = {
     /** Project root directory. Other relative paths are resolved from here. */
     root?: string;
@@ -253,8 +259,11 @@ export type UserConfig = {
         /** Default copy target. Built-ins: `win`, `winold`. */
         defaultTarget?: string;
 
+        /** Global folder name overrides for all targets. Per-target `name` takes precedence. */
+        name?: string | CopyTargetNames;
+
         /** Custom copy targets. */
-        targets?: Record<string, CopyTarget>;
+        targets?: Record<string, CopyTarget & { name?: string | CopyTargetNames }>;
     };
 
     /** Pack output configuration. */
@@ -323,7 +332,9 @@ export type ResolvedConfig = {
     };
     copy: {
         defaultTarget: string;
-        targets: Record<string, CopyTarget>;
+        /** Global folder name overrides for all targets. Per-target `name` takes precedence. */
+        name?: string | CopyTargetNames;
+        targets: Record<string, CopyTarget & { name?: string | CopyTargetNames }>;
     };
     pack: {
         name: string;

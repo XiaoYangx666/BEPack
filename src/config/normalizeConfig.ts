@@ -141,6 +141,7 @@ export function normalizeConfig(
         },
         copy: {
             defaultTarget: raw.copy?.defaultTarget ?? DEFAULT_CONFIG.copy.defaultTarget,
+            ...(raw.copy?.name ? { name: raw.copy.name } : {}),
             targets: raw.copy?.targets ?? {},
         },
         pack: {
