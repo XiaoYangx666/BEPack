@@ -43,6 +43,8 @@ common(cli.command("init", "Create BePack project"))
     .option("--format <format>", "ts/js/mjs")
     .option("--yes", "Use defaults")
     .option("--force", "Overwrite generated files")
+    .option("--from-bp <path>", "Reverse-engineer config from existing BP manifest.json")
+    .option("--from-rp <path>", "Reverse-engineer config from existing RP manifest.json")
     .action((options: any) => run("init", commandInit, options));
 common(cli.command("install", "Sync dependencies"))
     .option("--target <target>", "Target MC version")

@@ -1,39 +1,7 @@
 import type { DependencyCatalogEntry, ResolvedConfig } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
-import { minecraftScriptApiResolver } from "./resolvers/minecraftScriptApi.js";
-import { minecraftScriptApiBpResolver } from "./resolvers/minecraftScriptApiBp.js";
-import { minecraftVanillaDataResolver } from "./resolvers/minecraftVanillaData.js";
-
-export const BUILTIN_DEPENDENCY_CATALOG: Record<string, DependencyCatalogEntry> = {
-    "@minecraft/server": {
-        resolver: minecraftScriptApiResolver,
-        manifest: true,
-    },
-    "@minecraft/server-ui": {
-        resolver: minecraftScriptApiResolver,
-        manifest: true,
-    },
-    "@minecraft/server-net": {
-        resolver: minecraftScriptApiBpResolver,
-        manifest: true,
-    },
-    "@minecraft/server-admin": {
-        resolver: minecraftScriptApiBpResolver,
-        manifest: true,
-    },
-    "@minecraft/server-gametest": {
-        resolver: minecraftScriptApiBpResolver,
-        manifest: true,
-    },
-    "@minecraft/debug-utilities": {
-        resolver: minecraftScriptApiBpResolver,
-        manifest: true,
-    },
-    "@minecraft/vanilla-data": {
-        resolver: minecraftVanillaDataResolver,
-        manifest: false,
-    },
-};
+import { BUILTIN_DEPENDENCY_CATALOG } from "../constants/dependencyCatalog.js";
+export { BUILTIN_DEPENDENCY_CATALOG };
 
 export function createDependencyCatalog(
     config: ResolvedConfig

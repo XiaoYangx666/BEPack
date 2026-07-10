@@ -6,10 +6,8 @@ export {
     MinecraftPackageResolver,
     packageVersionForSpecifier,
 } from "./install/MinecraftPackageResolver.js";
-export {
-    createDependencyCatalog,
-    BUILTIN_DEPENDENCY_CATALOG,
-} from "./install/dependencyCatalog.js";
+export { createDependencyCatalog } from "./install/dependencyCatalog.js";
+export { BUILTIN_DEPENDENCY_CATALOG } from "./constants/dependencyCatalog.js";
 export { NpmRegistryClient } from "./utils/npmRegistry.js";
 export {
     DependencyResolverRegistry,
