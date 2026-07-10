@@ -70,7 +70,7 @@ export async function copyPacks(
     if (target.bp) {
         const folderName = names.bp ?? config.packs.bp.name;
         const to = path.join(target.bp, folderName);
-        const bpIncludes = getIncludes(DEFAULT_BP_INCLUDES, config.copy.include?.bp);
+        const bpIncludes = getIncludes(DEFAULT_BP_INCLUDES, config.packs.bp.include);
         if (!dryRun) {
             await copySelectedItems(bpRoot(cwd, config), to, bpIncludes);
         }

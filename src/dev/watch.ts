@@ -50,7 +50,7 @@ export function watchProject(
     const bpWatchPaths = resolveWatchPaths(
         bpRoot(cwd, config),
         DEFAULT_BP_INCLUDES,
-        config.copy.include?.bp,
+        config.packs.bp.include,
         cwd
     );
 
