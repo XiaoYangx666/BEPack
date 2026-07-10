@@ -1,5 +1,4 @@
 import path from "node:path";
-import { FIXED_PATHS } from "../constants/paths.js";
 import type { ResolvedConfig } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { pathExists, readJsonFile, writeJsonFile } from "../utils/fs.js";
@@ -33,5 +32,5 @@ export async function patchPackageJson(
     if (!Object.keys(pkg.dependencies).length) delete pkg.dependencies;
     if (!Object.keys(pkg.devDependencies).length) delete pkg.devDependencies;
     if (!dryRun) await writeJsonFile(file, pkg);
-    return { updated: true, path: "package.json", scriptOutFile: FIXED_PATHS.scriptOutFile };
+    return { updated: true, path: "package.json" };
 }

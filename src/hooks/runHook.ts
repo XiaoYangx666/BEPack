@@ -1,7 +1,15 @@
-import { FIXED_PATHS } from "../constants/paths.js";
 import type { CommandName, ResolvedConfig } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import type { Logger } from "../logger/logger.js";
+import {
+    bpManifest,
+    bpRoot,
+    distRoot,
+    rpManifest,
+    rpRoot,
+    scriptOutFile,
+    srcEntry,
+} from "../utils/path.js";
 
 function formatHookResult(result: unknown): string {
     if (result === undefined || result === null || result === "") return "hook ran";
@@ -12,6 +20,18 @@ function formatHookResult(result: unknown): string {
     } catch {
         return String(result);
     }
+}
+
+function resolvePaths(cwd: string, config: ResolvedConfig) {
+    return {
+        srcEntry: srcEntry(cwd, config),
+        bpRoot: bpRoot(cwd, config),
+        ...(config.packs.rp ? { rpRoot: rpRoot(cwd, config) } : {}),
+        scriptOutFile: scriptOutFile(cwd, config),
+        bpManifest: bpManifest(cwd, config),
+        ...(config.packs.rp ? { rpManifest: rpManifest(cwd, config) } : {}),
+        dist: distRoot(cwd, config),
+    };
 }
 
 export async function runHook(
@@ -29,7 +49,7 @@ export async function runHook(
             cwd,
             target: config.target,
             config,
-            paths: FIXED_PATHS,
+            paths: resolvePaths(cwd, config),
             logger,
         });
         logger.hook(String(name), formatHookResult(result));
