@@ -62,7 +62,7 @@ Each file in `src/commands/` exports a `command<Name>` async function:
 
 | Command | File | Description |
 |---------|------|-------------|
-| `init` | `init.ts` | Scaffold `bepack.config.ts` with random UUIDs |
+| `init` | `init.ts` | Scaffold `bepack.config.ts`（支持 `--from-bp` / `--from-rp` 从现有 manifest 反推） |
 | `install` | `install.ts` | Resolve deps, patch package.json, run package manager |
 | `manifest` | `manifest.ts` | Patch BP/RP `manifest.json` |
 | `build` | `build.ts` | Manifest → typecheck → rolldown → (optional install/copy/pack) |
@@ -103,12 +103,13 @@ DependencyService
 
 ### Manifest Patching (`src/manifest/`)
 
-- **`ManifestBuilder.ts`** — class that encapsulates a build session. Constructor pre-computes `version` tuple and `dependencyCatalog`, so `buildBp()` / `buildRp()` don't need config passed around.
-- **`dependencyVersion.ts`** — stateless pure functions: `isAllowedDependencySpecifier()`, `resolveManifestDependencyVersion()`, `isAchievementCompatibleSpecifier()`
+- **`ManifestFile.ts`** — manifest 文件 I/O + JSON 正规化。`read()` 读文件 → normalize → 返回 `Manifest`，`write()` validate → 写出。同时提供 `normalizeManifest`、`asArray` 等 coercion 工具函数。
+- **`ManifestReader.ts`** — 从已解析的 `Manifest` 对象中提取信息的纯方法（找 script/resources 模块 UUID、校验 header、提取依赖）。提供 `isScriptModule` / `isResourcesModule` 类型守卫供 Builder 共用。
+- **`ManifestDepManager.ts`** — 依赖校验（语法 + 政策）、识别（哪些 dep 是 BePack 管理的）、构建（specifier → manifest 版本）、替换（合并用户手写与管理依赖）。纯函数方法（`resolveVersion` / `isAllowedSpecifier` / `isAchievementCompatible`）为静态，测试可直接调用。
+- **`ManifestBuilder.ts`** — 构建 manifest 的 header、modules、metadata 部分。依赖管理委托给 `ManifestDepManager`。构造时预计算 `version` tuple，同一实例可复用构建 BP 和 RP。
 - **`types.ts`** — typed Manifest interfaces (replaces old `Record<string, any>`)
-- **`normalize.ts`** — safe coercion helpers (`normalizeManifest`, `asArray`, `removeEmptyObject`)
 - **`validate.ts`** — `validateManifest()` checks required fields, module types, dependency formats
-- **`patchManifest.ts`** — IO orchestrator (reads, calls `ManifestBuilder`, validates, writes). Creates one `ManifestBuilder` instance and reuses it for both BP and RP.
+- **`patchManifest.ts`** — IO orchestrator (reads via `ManifestFile`, calls `ManifestBuilder` + `ManifestDepManager`, writes via `ManifestFile`). Creates one builder instance and reuses it for both BP and RP.
 
 ### Copy (`src/copy/`)
 

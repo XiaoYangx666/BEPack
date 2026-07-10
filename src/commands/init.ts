@@ -4,14 +4,25 @@ import { randomUUID } from "node:crypto";
 import { ensureDir, pathExists } from "../utils/fs.js";
 import { BePackError } from "../errors/BePackError.js";
 import { Logger } from "../logger/logger.js";
-import {
-    readManifest,
-    validateManifestHeader,
-    findScriptModuleUuid,
-    findResourcesModuleUuid,
-    derivePackRoot,
-    matchDependencies,
-} from "../init/index.js";
+import { ManifestFile } from "../manifest/ManifestFile.js";
+import { ManifestReader } from "../manifest/ManifestReader.js";
+
+/**
+ * 从 manifest 文件路径推导 pack root 目录（相对 cwd）。
+ * 如果路径在 cwd 之外则抛出。
+ */
+function derivePackRoot(cwd: string, manifestPath: string): string {
+    const abs = path.resolve(cwd, manifestPath);
+    const dir = path.dirname(abs);
+    if (!dir.startsWith(cwd)) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            `Manifest path is outside the project directory: ${manifestPath}`
+        );
+    }
+    const rel = path.relative(cwd, dir);
+    return rel || ".";
+}
 
 async function assertFileNotExists(file: string, force: boolean): Promise<void> {
     if (!force && (await pathExists(file))) {
@@ -31,7 +42,10 @@ async function writeConfig(file: string, content: string, force: boolean): Promi
 }
 
 function formatConfig(config: Record<string, unknown>): string {
-    return `export default ${JSON.stringify(config, null, 4)}\n`;
+    const json = JSON.stringify(config, null, 4);
+    // 只移除合法 JS 标识符的引号，@minecraft/server 这类特殊键保留引号
+    const unquoted = json.replace(/\n( +)"([a-zA-Z_$][a-zA-Z0-9_$]*)": /g, "\n$1$2: ");
+    return `export default ${unquoted}\n`;
 }
 
 /** Convert manifest version tuple [1, 0, 0] to string "1.0.0". */
@@ -99,9 +113,15 @@ async function initFromManifests(
     const versions: string[] = [];
 
     if (hasBp) {
-        const manifest = await readManifest(options.fromBp);
-        const header = validateManifestHeader(manifest, "BP");
-        const moduleUuid = findScriptModuleUuid(manifest);
+        const manifest = await ManifestFile.read(options.fromBp);
+        if (!manifest) {
+            throw new BePackError(
+                "CONFIG_NOT_FOUND",
+                `BP manifest not found: ${options.fromBp}`
+            );
+        }
+        const header = ManifestReader.validateHeader(manifest, "BP");
+        const moduleUuid = ManifestReader.findScriptModuleUuid(manifest);
         if (!moduleUuid) {
             throw new BePackError(
                 "MANIFEST_INVALID",
@@ -116,7 +136,7 @@ async function initFromManifests(
             uuid: header.uuid,
             moduleUuid,
             ...(bpVersion ? { version: bpVersion } : {}),
-            deps: matchDependencies(manifest),
+            deps: ManifestReader.matchDependencies(manifest),
         };
 
         if (!hasRp) {
@@ -129,9 +149,15 @@ async function initFromManifests(
     }
 
     if (hasRp) {
-        const manifest = await readManifest(options.fromRp);
-        const header = validateManifestHeader(manifest, "RP");
-        const moduleUuid = findResourcesModuleUuid(manifest);
+        const manifest = await ManifestFile.read(options.fromRp);
+        if (!manifest) {
+            throw new BePackError(
+                "CONFIG_NOT_FOUND",
+                `RP manifest not found: ${options.fromRp}`
+            );
+        }
+        const header = ManifestReader.validateHeader(manifest, "RP");
+        const moduleUuid = ManifestReader.findResourcesModuleUuid(manifest);
         if (!moduleUuid) {
             throw new BePackError(
                 "MANIFEST_INVALID",

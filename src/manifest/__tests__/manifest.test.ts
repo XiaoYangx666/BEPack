@@ -1,11 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { ManifestBuilder } from "../ManifestBuilder.js";
+import { ManifestDepManager } from "../ManifestDepManager.js";
 import { validateManifest } from "../validate.js";
-import {
-    resolveManifestDependencyVersion,
-    isAllowedDependencySpecifier,
-    isAchievementCompatibleSpecifier,
-} from "../dependencyVersion.js";
+import { createDependencyCatalog } from "../../install/dependencyCatalog.js";
 import type { Manifest, ManifestVersion } from "../types.js";
 import type { ResolvedConfig } from "../../config/configTypes.js";
 
@@ -69,7 +66,16 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
 }
 
 function bp(overrides?: Partial<ResolvedConfig>): ManifestBuilder {
-    return new ManifestBuilder(baseConfig(overrides));
+    return createBuilder(baseConfig(overrides));
+}
+
+function createBuilder(
+    config: ResolvedConfig,
+    resolvedDeps?: Record<string, string>
+): ManifestBuilder {
+    const catalog = createDependencyCatalog(config);
+    const depManager = new ManifestDepManager(config, catalog, resolvedDeps);
+    return new ManifestBuilder(config, depManager);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +139,7 @@ describe("ManifestBuilder buildRp", () => {
                 },
             },
         });
-        const builder = new ManifestBuilder(config);
+        const builder = createBuilder(config);
         const manifest = builder.buildRp();
 
         expect(manifest.format_version).toBe(2);
@@ -183,7 +189,7 @@ describe("同一 ManifestBuilder 构建 BP 和 RP", () => {
                 },
             },
         });
-        const builder = new ManifestBuilder(config);
+        const builder = createBuilder(config);
 
         const bpResult = builder.buildBp();
         expect(bpResult.header!.name).toBe("Test BP");
@@ -270,7 +276,7 @@ describe("保留用户字段", () => {
         const config = baseConfig();
         expect(config.packs.bp.description).toBeUndefined();
         const existing: Manifest = { header: { description: "My custom" } };
-        const manifest = new ManifestBuilder(config).buildBp(existing);
+        const manifest = createBuilder(config).buildBp(existing);
         expect(manifest.header!.description).toBe("My custom");
     });
 });
@@ -317,7 +323,7 @@ describe("Module 管理", () => {
                 },
             ],
         };
-        const builder = new ManifestBuilder(config);
+        const builder = createBuilder(config);
         const manifest = builder.buildRp(existing);
 
         expect(manifest.modules).toHaveLength(2);
@@ -400,7 +406,7 @@ describe("Dependency 替换", () => {
                 },
             },
         });
-        const builder = new ManifestBuilder(config);
+        const builder = createBuilder(config);
         const manifest = builder.buildBp();
 
         // @minecraft/vanilla-data 在内置 catalog 中 manifest=false
@@ -439,13 +445,13 @@ describe("PBR capability", () => {
     }
 
     it("pbr=true 添加 pbr", () => {
-        const manifest = new ManifestBuilder(rpConfig(true)).buildRp();
+        const manifest = createBuilder(rpConfig(true)).buildRp();
         expect(manifest.capabilities).toEqual(["pbr"]);
     });
 
     it("pbr=true 时保留现有 capabilities", () => {
         const existing: Manifest = { capabilities: ["raytraced"] };
-        const manifest = new ManifestBuilder(rpConfig(true)).buildRp(existing);
+        const manifest = createBuilder(rpConfig(true)).buildRp(existing);
         expect(manifest.capabilities).toContain("pbr");
         expect(manifest.capabilities).toContain("raytraced");
         expect(manifest.capabilities).toHaveLength(2);
@@ -453,13 +459,13 @@ describe("PBR capability", () => {
 
     it("pbr=false 移除 pbr，保留其他 capability", () => {
         const existing: Manifest = { capabilities: ["pbr", "raytraced"] };
-        const manifest = new ManifestBuilder(rpConfig(false)).buildRp(existing);
+        const manifest = createBuilder(rpConfig(false)).buildRp(existing);
         expect(manifest.capabilities).not.toContain("pbr");
         expect(manifest.capabilities).toContain("raytraced");
     });
 
     it("pbr=false 且只有 pbr 时删除 capabilities", () => {
-        const manifest = new ManifestBuilder(rpConfig(false)).buildRp();
+        const manifest = createBuilder(rpConfig(false)).buildRp();
         expect(manifest.capabilities).toBeUndefined();
     });
 });
@@ -470,7 +476,7 @@ describe("PBR capability", () => {
 
 describe("achievement", () => {
     function withAchievement(deps: Record<string, string>): ManifestBuilder {
-        return new ManifestBuilder(
+        return createBuilder(
             baseConfig({
                 packs: {
                     bp: {
@@ -499,7 +505,7 @@ describe("achievement", () => {
     });
 
     it("achievement + stable 通过", () => {
-        const builder = new ManifestBuilder(
+        const builder = createBuilder(
             baseConfig({
                 packs: {
                     bp: {
@@ -524,7 +530,7 @@ describe("achievement", () => {
     });
 
     it("achievement=false 不设置 product_type", () => {
-        const builder = new ManifestBuilder(
+        const builder = createBuilder(
             baseConfig({
                 packs: {
                     bp: {
@@ -666,19 +672,19 @@ describe("validateManifest", () => {
 });
 
 // ---------------------------------------------------------------------------
-// dependencyVersion 纯函数
+// ManifestDepManager 静态方法
 // ---------------------------------------------------------------------------
 
-describe("resolveManifestDependencyVersion", () => {
+describe("ManifestDepManager.resolveVersion", () => {
     it("具体版本原样返回", () => {
-        expect(resolveManifestDependencyVersion({ specifier: "2.6.0", target: "latest" })).toBe(
+        expect(ManifestDepManager.resolveVersion({ specifier: "2.6.0", target: "latest" })).toBe(
             "2.6.0"
         );
     });
 
     it("stable 返回已解析版本", () => {
         expect(
-            resolveManifestDependencyVersion({
+            ManifestDepManager.resolveVersion({
                 specifier: "stable",
                 target: "latest",
                 resolvedVersion: "2.6.0",
@@ -688,19 +694,19 @@ describe("resolveManifestDependencyVersion", () => {
 
     it("stable 无已解析版本时抛出", () => {
         expect(() =>
-            resolveManifestDependencyVersion({ specifier: "stable", target: "latest" })
+            ManifestDepManager.resolveVersion({ specifier: "stable", target: "latest" })
         ).toThrow("Run `bepack install` to resolve stable");
     });
 
     it("beta target latest 返回 'beta'", () => {
-        expect(resolveManifestDependencyVersion({ specifier: "beta", target: "latest" })).toBe(
+        expect(ManifestDepManager.resolveVersion({ specifier: "beta", target: "latest" })).toBe(
             "beta"
         );
     });
 
     it("beta 旧 target 返回已解析版本", () => {
         expect(
-            resolveManifestDependencyVersion({
+            ManifestDepManager.resolveVersion({
                 specifier: "beta",
                 target: "1.20.80",
                 resolvedVersion: "2.0.0-beta.1.20.80-stable",
@@ -710,23 +716,23 @@ describe("resolveManifestDependencyVersion", () => {
 
     it("preview 无已解析版本时抛出", () => {
         expect(() =>
-            resolveManifestDependencyVersion({ specifier: "preview", target: "latest" })
+            ManifestDepManager.resolveVersion({ specifier: "preview", target: "latest" })
         ).toThrow("Run `bepack install` to resolve preview");
     });
 });
 
-describe("isAllowedDependencySpecifier", () => {
+describe("ManifestDepManager.isAllowedSpecifier", () => {
     it.each(["stable", "beta", "preview", "1.0.0", "2.6.0"])("接受 '%s'", (v) => {
-        expect(isAllowedDependencySpecifier(v)).toBe(true);
+        expect(ManifestDepManager.isAllowedSpecifier(v)).toBe(true);
     });
     it.each(["", "abc", "latest"])("拒绝 '%s'", (v) => {
-        expect(isAllowedDependencySpecifier(v)).toBe(false);
+        expect(ManifestDepManager.isAllowedSpecifier(v)).toBe(false);
     });
 });
 
-describe("isAchievementCompatibleSpecifier", () => {
-    it("stable 通过", () => expect(isAchievementCompatibleSpecifier("stable")).toBe(true));
-    it("版本号通过", () => expect(isAchievementCompatibleSpecifier("2.6.0")).toBe(true));
-    it("beta 拒绝", () => expect(isAchievementCompatibleSpecifier("beta")).toBe(false));
-    it("preview 拒绝", () => expect(isAchievementCompatibleSpecifier("preview")).toBe(false));
+describe("ManifestDepManager.isAchievementCompatible", () => {
+    it("stable 通过", () => expect(ManifestDepManager.isAchievementCompatible("stable")).toBe(true));
+    it("版本号通过", () => expect(ManifestDepManager.isAchievementCompatible("2.6.0")).toBe(true));
+    it("beta 拒绝", () => expect(ManifestDepManager.isAchievementCompatible("beta")).toBe(false));
+    it("preview 拒绝", () => expect(ManifestDepManager.isAchievementCompatible("preview")).toBe(false));
 });

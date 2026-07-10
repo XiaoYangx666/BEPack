@@ -6,41 +6,35 @@ import {
     SCRIPT_ENTRY,
 } from "../constants/manifest.js";
 import { parseVersionTuple } from "../utils/semver.js";
-import { createDependencyCatalog } from "../install/dependencyCatalog.js";
-import type { ResolvedConfig, DependencyCatalogEntry } from "../config/configTypes.js";
-import { normalizeManifest, asArray, removeEmptyObject } from "./normalize.js";
-import {
-    isAllowedDependencySpecifier,
-    resolveManifestDependencyVersion,
-    isAchievementCompatibleSpecifier,
-} from "./dependencyVersion.js";
+import type { ResolvedConfig } from "../config/configTypes.js";
+import { normalizeManifest, asArray, removeEmptyObject } from "./ManifestFile.js";
+import type { ManifestDepManager } from "./ManifestDepManager.js";
 import type {
     Manifest,
     ManifestVersion,
     ManifestHeader,
     ManifestModule,
-    ManifestDependency,
     ManifestScriptModule,
     ManifestResourcesModule,
 } from "./types.js";
 
 /**
- * ManifestBuilder 封装一次 manifest 构建过程的共享状态。
+ * ManifestBuilder 构建 manifest 的 header、modules、metadata 部分。
  *
- * 构造时预计算 version tuple 和 dependency catalog，
- * 构建 BP/RP manifest 时无需再层层传递 config 参数。
+ * 依赖相关的构建逻辑委托给 ManifestDepManager。
+ *
+ * 构造时预计算 version tuple，构建 BP/RP manifest 时无需再层层传递 config 参数。
+ * 同一实例可同时用于 buildBp 和 buildRp。
  */
 export class ManifestBuilder {
     private readonly config: ResolvedConfig;
     private readonly version: ManifestVersion;
-    private readonly catalog: Record<string, DependencyCatalogEntry>;
-    private readonly resolvedDeps: Record<string, string>;
+    private readonly depManager: ManifestDepManager;
 
-    constructor(config: ResolvedConfig, resolvedDeps?: Record<string, string>) {
+    constructor(config: ResolvedConfig, depManager: ManifestDepManager) {
         this.config = config;
         this.version = parseVersionTuple(config.version);
-        this.catalog = createDependencyCatalog(config);
-        this.resolvedDeps = resolvedDeps ?? {};
+        this.depManager = depManager;
     }
 
     // -----------------------------------------------------------------------
@@ -53,14 +47,17 @@ export class ManifestBuilder {
      */
     buildBp(existingValue?: unknown): Manifest {
         const existing = normalizeManifest(existingValue);
-        this.validateBpDependencies();
+        this.depManager.validateBpDependencies();
 
         const manifest: Manifest = {
             ...existing,
             format_version: MANIFEST_FORMAT_VERSION,
             header: this.buildBpHeader(existing),
             modules: this.replaceManagedBpModules(existing.modules),
-            dependencies: this.replaceManagedBpDependencies(existing.dependencies),
+            dependencies: this.depManager.replaceBpDependencies(
+                existing.dependencies,
+                this.config.packs.rp?.uuid
+            ),
         };
 
         this.applyAchievementMetadata(manifest);
@@ -80,45 +77,14 @@ export class ManifestBuilder {
             format_version: MANIFEST_FORMAT_VERSION,
             header: this.buildRpHeader(existing, rp),
             modules: this.replaceManagedRpModules(existing.modules),
-            dependencies: this.replaceManagedRpDependencies(existing.dependencies),
+            dependencies: this.depManager.replaceRpDependencies(
+                existing.dependencies,
+                this.config.packs.bp.uuid
+            ),
         };
 
         this.applyPbrCapability(manifest, rp);
         return manifest;
-    }
-
-    // -----------------------------------------------------------------------
-    // 依赖校验
-    // -----------------------------------------------------------------------
-
-    private validateBpDependencies(): void {
-        for (const [name, specifier] of Object.entries(this.config.packs.bp.dependencies)) {
-            if (!this.catalog[name]) {
-                throw new BePackError(
-                    "UNSUPPORTED_DEPENDENCY",
-                    `${name} is not a managed dependency. Add it to install.dependencyCatalog or remove it from packs.bp.dependencies.`,
-                    { details: { package: name } }
-                );
-            }
-            if (!isAllowedDependencySpecifier(specifier)) {
-                throw new BePackError(
-                    "DEPENDENCY_VERSION_INVALID",
-                    `${name} dependency version is invalid: ${specifier}`,
-                    { details: { package: name, specifier } }
-                );
-            }
-        }
-
-        if (this.config.packs.bp.achievement) {
-            for (const [name, specifier] of Object.entries(this.config.packs.bp.dependencies)) {
-                if (!isAchievementCompatibleSpecifier(specifier)) {
-                    throw new BePackError(
-                        "ACHIEVEMENT_REQUIRES_STABLE_API",
-                        `${name}: achievement requires stable Script API dependencies (${specifier} is not allowed).`
-                    );
-                }
-            }
-        }
     }
 
     // -----------------------------------------------------------------------
@@ -199,93 +165,6 @@ export class ManifestBuilder {
         const existing = asArray<ManifestModule>(existingModules);
         const userModules = existing.filter((m) => !this.isManagedRpModule(m));
         return [...userModules, this.createResourcesModule()];
-    }
-
-    // -----------------------------------------------------------------------
-    // Dependency 管理
-    // -----------------------------------------------------------------------
-
-    /**
-     * 判断 dependency 是否为 BePack 管理的 BP 依赖。
-     * 包括 catalog 中 manifest=true 的 module_name 依赖和 RP UUID 依赖。
-     */
-    private isManagedBpDependency(dep: ManifestDependency): boolean {
-        if (
-            "module_name" in dep &&
-            typeof dep.module_name === "string" &&
-            this.catalog[dep.module_name]?.manifest
-        ) {
-            return true;
-        }
-        if (
-            "uuid" in dep &&
-            typeof dep.uuid === "string" &&
-            this.config.packs.rp?.uuid === dep.uuid
-        ) {
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * 判断 dependency 是否为 BePack 管理的 RP 依赖（BP UUID 依赖）。
-     */
-    private isManagedRpDependency(dep: ManifestDependency): boolean {
-        return (
-            "uuid" in dep && typeof dep.uuid === "string" && dep.uuid === this.config.packs.bp.uuid
-        );
-    }
-
-    /** 构建 catalog 中 manifest=true 的 module_name 依赖列表。 */
-    private buildBpManagedDependencies(): ManifestDependency[] {
-        const deps: ManifestDependency[] = [];
-
-        for (const [name, specifier] of Object.entries(this.config.packs.bp.dependencies)) {
-            const entry = this.catalog[name];
-            if (!entry?.manifest) continue;
-
-            deps.push({
-                module_name: name,
-                version: resolveManifestDependencyVersion({
-                    specifier,
-                    target: this.config.target,
-                    resolvedVersion: this.resolvedDeps[name],
-                }),
-            });
-        }
-
-        return deps;
-    }
-
-    private replaceManagedBpDependencies(
-        existingDeps: ManifestDependency[] | undefined
-    ): ManifestDependency[] {
-        const existing = asArray<ManifestDependency>(existingDeps);
-
-        // 保留用户手写依赖，删除 BePack 管理依赖
-        const userDeps = existing.filter((dep) => !this.isManagedBpDependency(dep));
-
-        // 构建新管理依赖
-        const nextManaged = this.buildBpManagedDependencies();
-        if (this.config.packs.rp) {
-            nextManaged.push({
-                uuid: this.config.packs.rp.uuid,
-                version: this.version,
-            });
-        }
-
-        return [...userDeps, ...nextManaged];
-    }
-
-    private replaceManagedRpDependencies(
-        existingDeps: ManifestDependency[] | undefined
-    ): ManifestDependency[] {
-        const existing = asArray<ManifestDependency>(existingDeps);
-
-        // 保留用户手写依赖，删除旧的 BP UUID 依赖
-        const userDeps = existing.filter((dep) => !this.isManagedRpDependency(dep));
-
-        return [...userDeps, { uuid: this.config.packs.bp.uuid, version: this.version }];
     }
 
     // -----------------------------------------------------------------------
