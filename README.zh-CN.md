@@ -95,6 +95,9 @@ bepack pack --name release
 - **所有 BP 依赖统一声明在 `packs.bp.dependencies`**，包括写入 manifest 的（如 `@minecraft/server`）和仅代码使用的（如 `@minecraft/vanilla-data`）。catalog 控制每个包是否写入 manifest 和/或 package.json。
 - 托管包中 `manifest: true` 的默认会在构建时 external，`manifest: false`（如 `@minecraft/vanilla-data`）可以被打进 bundle。可通过 `build.external` 和 `build.externalDependencies` 调整。
 - 使用 `stable`、`beta` 或 `preview` 作为 specifier 时，请先运行 `bepack install` 或使用 `bepack build --install` 解析为具体 npm 版本。
+- `manifestFormat: 2 | 3` 控制 manifest 输出格式。`2` 使用数组版本 `[1,0,0]`；`3` 使用 SemVer 字符串 `"1.0.0"`（Minecraft 1.21.110+）。不设置时自动保留现有 manifest 的格式，新项目默认 2。
+- `packs.bp.include` 配置 BP 额外的打包/复制文件列表（取代 `copy.include.bp`）。BP 始终使用选择性打包。
+- `bepack dev --skip-typecheck` 可在开发模式跳过类型检查。
 
 完整配置参考和实现说明见 [README.reference.md](./README.reference.md)。
 

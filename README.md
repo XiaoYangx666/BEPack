@@ -95,6 +95,9 @@ bepack pack --name release
 - **All BP dependencies go in `packs.bp.dependencies`**, including both manifest dependencies (e.g. `@minecraft/server`) and code-only dependencies (e.g. `@minecraft/vanilla-data`). The catalog controls whether each package is written to manifest and/or package.json.
 - Managed dependency catalog packages with `manifest: true` are externalized during build by default. Packages with `manifest: false` (e.g. `@minecraft/vanilla-data`) can be bundled. Use `build.external` and `build.externalDependencies` to customize bundling.
 - Use `bepack install` or `bepack build --install` to resolve `stable`, `beta`, or `preview` specifiers to concrete npm versions.
+- `manifestFormat: 2 | 3` controls manifest output format. `2` uses array versions `[1,0,0]`; `3` uses SemVer strings `"1.0.0"` (Minecraft 1.21.110+). Not set = auto-preserve from existing manifest, default 2 for new ones.
+- `packs.bp.include` adds extra files/folders for copy and pack (replaces `copy.include.bp`). BP is always selective.
+- `bepack dev --skip-typecheck` skips type checking on dev rebuilds.
 
 For the full configuration reference and implementation notes, see [README.reference.md](./README.reference.md).
 

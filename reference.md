@@ -107,6 +107,10 @@ type UserConfig = {
     description?: string;
     target?: string;
 
+    /** Manifest format version: 2 (array versions, default) or 3 (SemVer string versions, Minecraft 1.21.110+ preview).
+     *  Not set = auto-preserve existing manifest's format_version. New manifests default to 2. */
+    manifestFormat?: 2 | 3;
+
     build?: {
         entry?: string;
         typecheck?: boolean;
@@ -127,6 +131,8 @@ type UserConfig = {
             /** 所有 BP 依赖都在此声明——包括清单依赖和纯代码依赖。 */
             dependencies?: Record<string, "stable" | "beta" | "preview" | string>;
             achievement?: boolean;
+            /** 额外的打包/复制文件列表（在默认 include 基础上追加）。 */
+            include?: string[];
         };
 
         rp?: {
@@ -151,7 +157,8 @@ type UserConfig = {
     copy?: {
         defaultTarget?: string;
         name?: string | { bp?: string; rp?: string };
-        include?: { bp?: string[]; rp?: string[] };
+        /** RP 额外文件（BP 的额外文件请用 packs.bp.include）。 */
+        include?: { rp?: string[] };
         targets?: Record<string, ({ type: "custom"; bp?: string; rp?: string } | { type: "gameRoot"; path: string }) & { name?: string | { bp?: string; rp?: string } }>;
     };
 
@@ -344,9 +351,26 @@ export default defineConfig({
 
 `bepack manifest` 和 `bepack install` 可以创建和修补清单。
 
+### format_version 支持
+
+BePack 同时支持 `format_version 2` 和 `format_version 3`（Minecraft 1.21.110+ preview）：
+
+| 特性 | format 2 | format 3 |
+|------|----------|----------|
+| 版本格式 | 数组 `[1, 0, 0]` | 数组或 SemVer 字符串 `"1.0.0"` |
+| 自定义设置面板 | 不支持 | 支持（预览） |
+| 兼容性 | 高 | format 3 兼容 format 2 |
+
+**format 选择优先级**：
+1. 配置中显式设置 `manifestFormat: 2 | 3` → 强制使用
+2. 未设置时保留 existing manifest 的 `format_version`
+3. 全新 manifest 默认 `2`
+
+**注意**：format 2 不兼容 format 3 的字符串版本。如果配置强制使用 format 2 但 existing manifest 是 format 3，BePack 会给出降级警告。
+
 BP 清单受控字段：
 
-- `format_version`
+- `format_version`（根据配置或 existing 保留）
 - `header.name`
 - `header.description`（仅在配置时）
 - `header.uuid`
@@ -426,10 +450,11 @@ timing    rolldown        45 ms
 `bepack dev`：
 
 - 在监视前先执行一次初始构建。
+- 支持 `--skip-typecheck` 跳过类型检查（与 `build` 命令一致）。
 - 默认监视的路径：
     - `build.entry` 目录（TypeScript 源码变化 → 触发 rolldown 重构建）
-    - BP 的 copy include 列表中的文件/文件夹（默认 19 项，不含 `scripts` 和 `manifest.json`）
-    - RP 的 copy include 列表中的文件/文件夹（如果配置了 `copy.include.rp`），否则监视整个 RP 目录
+    - BP 的默认 include 列表 + `packs.bp.include` 中的文件/文件夹（不含 `scripts` 和 `manifest.json`）
+    - RP 的 include 列表中的文件/文件夹（如果配置了 `copy.include.rp`），否则监视整个 RP 目录
 - 可通过 `dev.watch.include` 添加额外监听路径。
 - 忽略以下目录：
     - `node_modules`
@@ -557,19 +582,27 @@ recipes  spawn_rules  structures  texts  trading
 feature_rules  features  worldgen
 ```
 
-RP 默认复制整个目录。可以通过 `copy.include` 添加额外的文件/文件夹（不会替换默认列表）：
+BP 的额外文件/文件夹通过 `packs.bp.include` 配置（不会替换默认列表）：
+
+```ts
+packs: {
+    bp: {
+        root: "bp",
+        include: ["my_custom_data", "config.json"],  // 额外复制/打包
+    },
+}
+```
+
+RP 默认复制整个目录。可以通过 `copy.include.rp` 添加额外的文件/文件夹——一旦设置，RP 也变为选择性复制模式：
 
 ```ts
 copy: {
     defaultTarget: "server",
     include: {
-        bp: ["my_custom_data", "config.json"],   // 额外复制到 BP
-        rp: ["textures", "sounds", "models"],     // 启用 RP 选择性复制
+        rp: ["textures", "sounds", "models"],
     },
 }
 ```
-
-BP 的默认列表是固定的，`include.bp` 仅追加额外项。RP 的默认列表为空（复制全部），一旦设置了 `include.rp`，则变为选择性复制模式，只复制指定的文件/文件夹。
 
 复制项不存在时会被静默跳过，不会报错。
 
@@ -597,8 +630,12 @@ dev: {
 
 `bepack pack` 创建：
 
-- 仅配置 BP 时创建 `.mcpack`。BP 目录内容会写入归档根目录。
-- 同时配置 BP 和 RP 时创建 `.mcaddon`。BP 和 RP 文件夹会写入同一个归档。
+- 仅配置 BP 时创建 `.mcpack`。
+- 同时配置 BP 和 RP 时创建 `.mcaddon`。
+
+**BP 始终使用选择性打包**：只打包默认 include 列表（`scripts`、`manifest.json`、`animation_controllers` 等）和 `packs.bp.include` 中配置的额外文件。即使 `bp.root = "."`（项目根目录即行为包），也不会将整个项目打包进去。
+
+RP 默认打包整个目录；如果配置了 `copy.include.rp`，则改用选择性打包。
 
 输出文件名默认为：
 
@@ -703,10 +740,11 @@ bepack init --from-bp ./bp/manifest.json --from-rp ./rp/manifest.json
 |---|---|
 | 只传 BP | 顶层 `name`/`description` 设为 BP manifest 的值 |
 | 只传 RP | 同上 |
-| BP + RP 都传 | 分别设到 `packs.bp.name`/`packs.rp.name`，顶层不写 |
+| BP + RP 都传 | 顶层 `name`/`description` 从 BP 读取；同时分别设到 `packs.bp.name`/`packs.rp.name` |
+| format_version | 自动检测原 manifest 的 `format_version`，写入生成的配置的 `manifestFormat` 字段 |
 | pack root | 根据 manifest 路径相对当前目录自动推导 |
 | UUID | 直接读取 manifest 中的值，不重新生成 |
-| 版本 | 从 manifest header 读取。两个包版本不同时取最高者，并给出警告 |
+| 版本 | 从 manifest header 读取（支持数组 `[1,0,0]` 和字符串 `"1.0.0"`）。两个包版本不同时取最高者，并给出警告 |
 | 依赖 | manifest 中的 `module_name` 依赖如果在 BePack 内置 catalog 中，自动写入配置 |
 | Windows | 自动添加 `copy: { defaultTarget: "win" }" |
 
