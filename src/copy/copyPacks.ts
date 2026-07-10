@@ -5,50 +5,13 @@ import { BePackError } from "../errors/BePackError.js";
 import { copyDir, pathExists } from "../utils/fs.js";
 import { bpRoot, rpRoot } from "../utils/path.js";
 import { resolveCopyTarget } from "./resolveCopyTarget.js";
+import { DEFAULT_BP_INCLUDES, DEFAULT_RP_INCLUDES, getIncludes } from "../constants/copyIncludes.js";
 import type { Logger } from "../logger/logger.js";
 import pc from "picocolors";
 
 const colors = pc.createColors(
     process.env.NO_COLOR === undefined && process.env.FORCE_COLOR !== "0"
 );
-
-/** Default files/folders included when copying a behavior pack. */
-const DEFAULT_BP_INCLUDES = [
-    "scripts",
-    "manifest.json",
-    "animation_controllers",
-    "animations",
-    "biomes",
-    "blocks",
-    "entities",
-    "functions",
-    "items",
-    "loot_tables",
-    "pack_icon.png",
-    "recipes",
-    "spawn_rules",
-    "structures",
-    "texts",
-    "trading",
-    "feature_rules",
-    "features",
-    "worldgen",
-];
-
-/** Default files/folders included when copying a resource pack. */
-const DEFAULT_RP_INCLUDES: string[] = [];
-
-/**
- * Merge default includes with user-configured additions.
- * DEFAULT_RP_INCLUDES is empty — when the merged list is also empty,
- * the full directory is copied for backward compatibility.
- */
-function getIncludes(
-    defaults: string[],
-    userAdditions: string[] | undefined
-): string[] {
-    return userAdditions?.length ? [...defaults, ...userAdditions] : defaults;
-}
 
 /**
  * Copy specific items from source to target directory.
