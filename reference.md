@@ -674,31 +674,42 @@ CLI_ARGUMENT_CONFLICT
 
 ## 初始化
 
-`bepack init` 仅创建配置文件。它不会创建项目目录。
+`bepack init` 创建 `bepack.config.ts`。它不会创建项目目录。
 
-生成的配置使用当前配置结构：
+### 默认脚手架
 
-```ts
-export default {
-    root: ".",
-    name: "example-addon",
-    version: "1.0.0",
-    target: "latest",
-    build: {
-        entry: "src/main.ts",
-    },
-    packs: {
-        bp: {
-            root: "bp",
-            uuid: "...",
-            moduleUuid: "...",
-            dependencies: {
-                "@minecraft/server": "stable",
-            },
-        },
-    },
-    pack: {
-        outDir: "dist",
-    },
-};
+```bash
+bepack init
 ```
+
+生成标准配置模板，使用随机 UUID。
+
+### 从已有 manifest 反推
+
+```bash
+# 只从 BP manifest 反推
+bepack init --from-bp ./bp/manifest.json
+
+# 只从 RP manifest 反推
+bepack init --from-rp ./rp/manifest.json
+
+# BP + RP 都传
+bepack init --from-bp ./bp/manifest.json --from-rp ./rp/manifest.json
+```
+
+规则：
+
+| 场景 | 行为 |
+|---|---|
+| 只传 BP | 顶层 `name`/`description` 设为 BP manifest 的值 |
+| 只传 RP | 同上 |
+| BP + RP 都传 | 分别设到 `packs.bp.name`/`packs.rp.name`，顶层不写 |
+| pack root | 根据 manifest 路径相对当前目录自动推导 |
+| UUID | 直接读取 manifest 中的值，不重新生成 |
+| 版本 | 从 manifest header 读取。两个包版本不同时取最高者，并给出警告 |
+| 依赖 | manifest 中的 `module_name` 依赖如果在 BePack 内置 catalog 中，自动写入配置 |
+| Windows | 自动添加 `copy: { defaultTarget: "win" }" |
+
+manifest 路径必须在当前目录内，否则报错。
+
+如果配置文件已存在，init 会报错提示使用 `--force` 覆盖。
