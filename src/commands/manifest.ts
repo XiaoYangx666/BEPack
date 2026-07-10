@@ -12,7 +12,7 @@ export async function commandManifest(options: any) {
         overrides: { target: options.target },
     });
     await runHook("beforeManifest", "manifest", cwd, config, logger);
-    const files = await patchManifest({ cwd, config, dryRun: options.dryRun });
+    const files = await patchManifest({ cwd, config, dryRun: options.dryRun, logger });
     await runHook("afterManifest", "manifest", cwd, config, logger);
     logger.success("Manifest", options.dryRun ? "dry-run complete" : "updated manifest.json");
     return { ok: true, command: "manifest", target: config.target, files };

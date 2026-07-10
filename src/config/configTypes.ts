@@ -144,6 +144,10 @@ export type BpConfig = PackConfig & {
 
     /** Adds achievement-compatible metadata when every Script API dependency is stable. */
     achievement?: boolean;
+
+    /** Additional files/folders to include when copying/packing the behavior pack,
+     * on top of built-in defaults (scripts/, manifest.json, animations/, etc.). */
+    include?: string[];
 };
 
 export type RpConfig = PackConfig & {
@@ -186,7 +190,13 @@ export type UserConfig = {
     /** Addon description used as manifest default. */
     description?: string;
 
-    /** Minecraft game target version, or `latest`. Do not use `stable`/`beta` here. */
+    /** Manifest format version used when writing manifest.json.
+     * - `2`: array versions (e.g. `[1, 0, 0]`). Default for format_version 2 manifests.
+     * - `3`: SemVer string versions (e.g. `"1.0.0"`). Enables custom pack settings.
+     * Format 3 is backward compatible with format 2 (arrays are still accepted).
+     * When not set, the existing manifest's format_version is preserved.
+     * Default: 2 for new manifests. */
+    manifestFormat?: 2 | 3;
     target?: string;
 
     /** Behavior/resource pack configuration. */
@@ -276,9 +286,9 @@ export type UserConfig = {
         /** Global folder name overrides for all targets. Per-target `name` takes precedence. */
         name?: string | CopyTargetNames;
 
-        /** Additional files/folders to include when copying, on top of built-in defaults. */
+        /** Additional RP files/folders to include when copying, on top of built-in defaults.
+         *  For BP includes, use packs.bp.include instead. */
         include?: {
-            bp?: string[];
             rp?: string[];
         };
 
@@ -286,7 +296,6 @@ export type UserConfig = {
         targets?: Record<string, CopyTarget & { name?: string | CopyTargetNames }>;
     };
 
-    /** Pack output configuration. */
     pack?: {
         /** Output filename template without extension. Supports `{name}` and `{version}`. */
         name?: string;
@@ -312,6 +321,7 @@ export type ResolvedConfig = {
     version: string;
     description?: string;
     target: string;
+    manifestFormat?: 2 | 3;
     hooks: Hooks;
     packs: {
         bp: Required<Omit<PackConfig, "name" | "description">> & {
@@ -319,6 +329,7 @@ export type ResolvedConfig = {
             description?: string;
             dependencies: Record<string, DependencySpecifier>;
             achievement?: boolean;
+            include?: string[];
         };
         rp?: Required<Omit<PackConfig, "name" | "description">> & {
             name: string;
@@ -355,9 +366,9 @@ export type ResolvedConfig = {
         defaultTarget: string;
         /** Global folder name overrides for all targets. Per-target `name` takes precedence. */
         name?: string | CopyTargetNames;
-        /** Additional files/folders to include when copying, on top of built-in defaults. */
+        /** Additional RP files/folders to include when copying.
+         *  For BP includes, use packs.bp.include. */
         include?: {
-            bp?: string[];
             rp?: string[];
         };
         targets: Record<string, CopyTarget & { name?: string | CopyTargetNames }>;

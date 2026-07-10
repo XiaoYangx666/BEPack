@@ -48,10 +48,12 @@ function formatConfig(config: Record<string, unknown>): string {
     return `export default ${unquoted}\n`;
 }
 
-/** Convert manifest version tuple [1, 0, 0] to string "1.0.0". */
-function versionToString(v: [number, number, number] | undefined): string | undefined {
+/** Convert manifest version to string "1.0.0". Handles both tuple [1,0,0] and string "1.0.0" (format_version 3). */
+export function versionToString(v: unknown): string | undefined {
     if (!v) return undefined;
-    return v.join(".");
+    if (Array.isArray(v)) return v.join(".");
+    if (typeof v === "string") return v;
+    return undefined;
 }
 
 /** Compare two version tuples. Returns positive if a > b, negative if a < b, 0 if equal. */
@@ -62,6 +64,18 @@ function compareVersionTuple(
     if (a[0] !== b[0]) return a[0] - b[0];
     if (a[1] !== b[1]) return a[1] - b[1];
     return a[2] - b[2];
+}
+
+/** Parse a version value (tuple or string) into parts [x, y, z] for comparison. */
+export function parseVersionToTuple(v: unknown): [number, number, number] | undefined {
+    if (Array.isArray(v) && v.length === 3) return v as [number, number, number];
+    if (typeof v === "string") {
+        const parts = v.split(".").map(Number);
+        if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+            return parts as [number, number, number];
+        }
+    }
+    return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,9 +113,12 @@ async function initFromManifests(
         version?: string;
     } | undefined;
 
+    // Detect format_version from the first available manifest
+    let detectedFormatVersion: number | undefined;
+
     // name/description rules:
     // - only one pack → set top-level, no per-pack name
-    // - both packs    → set per-pack name, no top-level
+    // - both packs    → set top-level from BP, plus per-pack name
     let topName: string | undefined;
     let topDescription: string | undefined;
     let bpName: string | undefined;
@@ -120,6 +137,7 @@ async function initFromManifests(
                 `BP manifest not found: ${options.fromBp}`
             );
         }
+        detectedFormatVersion ??= manifest.format_version;
         const header = ManifestReader.validateHeader(manifest, "BP");
         const moduleUuid = ManifestReader.findScriptModuleUuid(manifest);
         if (!moduleUuid) {
@@ -139,13 +157,11 @@ async function initFromManifests(
             deps: ManifestReader.matchDependencies(manifest),
         };
 
-        if (!hasRp) {
-            topName = header.name;
-            topDescription = header.description;
-        } else {
-            bpName = header.name;
-            bpDescription = header.description;
-        }
+        // Always set top-level name from BP header (required by normalizeConfig)
+        topName = header.name;
+        topDescription = header.description;
+        bpName = header.name;
+        bpDescription = header.description;
     }
 
     if (hasRp) {
@@ -156,6 +172,7 @@ async function initFromManifests(
                 `RP manifest not found: ${options.fromRp}`
             );
         }
+        detectedFormatVersion ??= manifest.format_version;
         const header = ManifestReader.validateHeader(manifest, "RP");
         const moduleUuid = ManifestReader.findResourcesModuleUuid(manifest);
         if (!moduleUuid) {
@@ -177,16 +194,13 @@ async function initFromManifests(
         if (!hasBp) {
             topName = header.name;
             topDescription = header.description;
-        } else {
-            rpName = header.name;
-            rpDescription = header.description;
         }
+        rpName = header.name;
+        rpDescription = header.description;
     }
 
     // Resolve version conflict
     let resolvedVersion: string | undefined;
-    const parseVer = (v: string): [number, number, number] =>
-        v.split(".").map(Number) as [number, number, number];
 
     if (versions.length === 1) {
         resolvedVersion = versions[0];
@@ -197,9 +211,13 @@ async function initFromManifests(
             resolvedVersion = v0;
         } else {
             // Different versions — pick the higher one
-            const vA = parseVer(v0);
-            const vB = parseVer(v1);
-            resolvedVersion = compareVersionTuple(vA, vB) >= 0 ? v0 : v1;
+            const vA = parseVersionToTuple(v0);
+            const vB = parseVersionToTuple(v1);
+            if (vA && vB) {
+                resolvedVersion = compareVersionTuple(vA, vB) >= 0 ? v0 : v1;
+            } else {
+                resolvedVersion = v0;
+            }
             logger.warn(
                 `BP version (${v0}) and RP version (${v1}) differ. Using ${resolvedVersion}.`
             );
@@ -214,6 +232,9 @@ async function initFromManifests(
         pack: { outDir: "dist" },
     };
 
+    if (detectedFormatVersion !== undefined) {
+        config.manifestFormat = detectedFormatVersion;
+    }
     if (resolvedVersion) config.version = resolvedVersion;
     if (topName) config.name = topName;
     if (topDescription) config.description = topDescription;

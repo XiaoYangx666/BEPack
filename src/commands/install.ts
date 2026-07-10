@@ -49,6 +49,7 @@ export async function commandInstall(options: any) {
                 cwd,
                 config,
                 dryRun: options.dryRun,
+                logger,
                 resolvedDeps: resolvedManifestVersions,
             })
         );

@@ -667,7 +667,7 @@ describe("validateManifest", () => {
                 } as Manifest,
                 "bp"
             )
-        ).toThrow("version must be [number, number, number]");
+        ).toThrow("version must be [number, number, number] (format 2)");
     });
 });
 

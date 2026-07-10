@@ -86,6 +86,7 @@ export function normalizeConfig(
         version,
         ...(description !== undefined ? { description } : {}),
         target,
+        ...(raw.manifestFormat !== undefined ? { manifestFormat: raw.manifestFormat } : {}),
         packs: {
             bp: {
                 root: bp.root ?? "bp",
@@ -95,6 +96,7 @@ export function normalizeConfig(
                 ...(bpDescription !== undefined ? { description: bpDescription } : {}),
                 dependencies: bp.dependencies ?? {},
                 ...(bp.achievement !== undefined ? { achievement: bp.achievement } : {}),
+                ...(bp.include !== undefined ? { include: bp.include } : {}),
             },
             ...(rp
                 ? {

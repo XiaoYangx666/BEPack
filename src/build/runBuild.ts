@@ -39,6 +39,7 @@ export async function runBuild(options: RunBuildOptions) {
                 cwd: options.cwd,
                 config: options.config,
                 dryRun: Boolean(options.dryRun),
+                logger: options.logger,
                 ...(options.resolvedDeps ? { resolvedDeps: options.resolvedDeps } : {}),
             }),
         options.logger,

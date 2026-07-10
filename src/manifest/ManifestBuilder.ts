@@ -25,6 +25,13 @@ import type {
  *
  * 构造时预计算 version tuple，构建 BP/RP manifest 时无需再层层传递 config 参数。
  * 同一实例可同时用于 buildBp 和 buildRp。
+ *
+ * format_version 处理规则：
+ * - 用户配置 manifestFormat 时，优先使用配置值
+ * - 未配置时，保留 existing manifest 的 format_version
+ * - 全新 manifest（无 existing）默认使用 2
+ * - format 3 兼容 format 2：数组版本在两种格式下都合法
+ * - format 2 不兼容 format 3：遇到字符串版本会自动转为数组
  */
 export class ManifestBuilder {
     private readonly config: ResolvedConfig;
@@ -49,10 +56,12 @@ export class ManifestBuilder {
         const existing = normalizeManifest(existingValue);
         this.depManager.validateBpDependencies();
 
+        const effectiveFormat = this.getWriteFormatVersion(existing);
+
         const manifest: Manifest = {
             ...existing,
-            format_version: MANIFEST_FORMAT_VERSION,
-            header: this.buildBpHeader(existing),
+            format_version: effectiveFormat,
+            header: this.buildBpHeader(existing, effectiveFormat),
             modules: this.replaceManagedBpModules(existing.modules),
             dependencies: this.depManager.replaceBpDependencies(
                 existing.dependencies,
@@ -72,10 +81,12 @@ export class ManifestBuilder {
         const rp = this.requireRp();
         const existing = normalizeManifest(existingValue);
 
+        const effectiveFormat = this.getWriteFormatVersion(existing);
+
         const manifest: Manifest = {
             ...existing,
-            format_version: MANIFEST_FORMAT_VERSION,
-            header: this.buildRpHeader(existing, rp),
+            format_version: effectiveFormat,
+            header: this.buildRpHeader(existing, rp, effectiveFormat),
             modules: this.replaceManagedRpModules(existing.modules),
             dependencies: this.depManager.replaceRpDependencies(
                 existing.dependencies,
@@ -91,7 +102,7 @@ export class ManifestBuilder {
     // Header 构建
     // -----------------------------------------------------------------------
 
-    private buildBpHeader(existing: Manifest): ManifestHeader {
+    private buildBpHeader(existing: Manifest, formatVersion: number): ManifestHeader {
         return {
             ...(existing.header ?? {}),
             name: this.config.packs.bp.name,
@@ -100,13 +111,17 @@ export class ManifestBuilder {
                 : {}),
             uuid: this.config.packs.bp.uuid,
             version: this.version,
-            min_engine_version: MIN_ENGINE_VERSION,
+            min_engine_version: this.normalizeMinEngineVersion(
+                existing.header?.min_engine_version,
+                formatVersion
+            ),
         };
     }
 
     private buildRpHeader(
         existing: Manifest,
-        rp: NonNullable<ResolvedConfig["packs"]["rp"]>
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>,
+        formatVersion: number
     ): ManifestHeader {
         return {
             ...(existing.header ?? {}),
@@ -114,7 +129,10 @@ export class ManifestBuilder {
             ...(rp.description !== undefined ? { description: rp.description } : {}),
             uuid: rp.uuid,
             version: this.version,
-            min_engine_version: MIN_ENGINE_VERSION,
+            min_engine_version: this.normalizeMinEngineVersion(
+                existing.header?.min_engine_version,
+                formatVersion
+            ),
         };
     }
 
@@ -197,6 +215,59 @@ export class ManifestBuilder {
             else delete manifest.capabilities;
         }
         // rp.pbr === undefined: 保留现有 capabilities，不做修改
+    }
+
+    // -----------------------------------------------------------------------
+    // Format version 处理
+    // -----------------------------------------------------------------------
+
+    /**
+     * 确定写入 manifest 时使用的 format_version。
+     * 优先级：配置 > existing > 默认值 2
+     */
+    private getWriteFormatVersion(existing: Manifest): number {
+        if (this.config.manifestFormat !== undefined) return this.config.manifestFormat;
+        return existing.format_version ?? MANIFEST_FORMAT_VERSION;
+    }
+
+    /**
+     * 处理 min_engine_version：
+     * - 优先保留 existing 的值
+     * - existing 无值时使用默认值 MIN_ENGINE_VERSION
+     *
+     * format 兼容：
+     * - format 2：字符串版本 "x.y.z" 自动转为 [x, y, z] 数组
+     * - format 3：保留字符串版本不变（同时数组也可接受）
+     */
+    private normalizeMinEngineVersion(
+        existingValue: unknown,
+        formatVersion: number
+    ): ManifestVersion {
+        // 无 existing 值 → 使用默认值
+        if (existingValue === undefined || existingValue === null) {
+            return MIN_ENGINE_VERSION;
+        }
+
+        // existing 值是数组 → 直接保留（两种格式都兼容）
+        if (Array.isArray(existingValue)) {
+            return existingValue as [number, number, number];
+        }
+
+        // existing 值是字符串
+        if (typeof existingValue === "string") {
+            if (formatVersion === 2) {
+                // format 2 要求数组 → 自动转 "x.y.z" -> [x, y, z]
+                const parts = existingValue.split(".").map(Number);
+                if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+                    return parts as [number, number, number];
+                }
+            }
+            // format 3 保留字符串
+            return existingValue;
+        }
+
+        // 兜底
+        return MIN_ENGINE_VERSION;
     }
 
     // -----------------------------------------------------------------------

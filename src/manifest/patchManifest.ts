@@ -2,7 +2,7 @@ import path from "node:path";
 import { pathExists } from "../utils/fs.js";
 import { bpManifest, rpManifest, slash } from "../utils/path.js";
 import { createDependencyCatalog } from "../install/dependencyCatalog.js";
-import type { ResolvedConfig } from "../config/configTypes.js";
+import type { ResolvedConfig, LoggerLike } from "../config/configTypes.js";
 import { ManifestFile } from "./ManifestFile.js";
 import { ManifestBuilder } from "./ManifestBuilder.js";
 import { ManifestDepManager } from "./ManifestDepManager.js";
@@ -12,6 +12,7 @@ export type PatchManifestOptions = {
     config: ResolvedConfig;
     dryRun?: boolean;
     resolvedDeps?: Record<string, string>;
+    logger?: LoggerLike;
 };
 
 /**
@@ -36,6 +37,19 @@ export async function patchManifest(options: PatchManifestOptions) {
     // BP
     const bpExisting = await ManifestFile.read(bpPath);
     const bpExisted = bpExisting !== undefined;
+
+    // Warn if config forces format_version 2 but existing manifest uses format 3
+    if (
+        options.config.manifestFormat === 2 &&
+        bpExisting?.format_version === 3
+    ) {
+        const warn = options.logger?.warn ?? console.warn;
+        warn(
+            "Warning: config manifestFormat is 2, but existing manifest uses format_version 3. " +
+            "format_version 2 does not support string versions; any string versions in the existing manifest will be preserved as-is."
+        );
+    }
+
     const bpManifestObj = builder.buildBp(bpExisting);
     if (!options.dryRun) await ManifestFile.write(bpPath, bpManifestObj, "bp");
 
