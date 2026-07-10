@@ -18,11 +18,16 @@ export async function commandDev(options: any) {
     logger.clear();
     logger.bepack("dev", `target ${config.target}`);
     logger.progress("dev", "initial build started");
+    const typecheck = options.skipTypecheck
+        ? false
+        : options.typecheck
+          ? true
+          : config.build.typecheck;
     await runBuild({
         cwd,
         config,
         logger,
-        typecheck: config.build.typecheck,
+        typecheck: Boolean(typecheck),
         quiet: Boolean(options.json || options.silent),
     });
     if (!options.skipCopy && (options.copy || options.copyTarget || config.dev.copy)) {
