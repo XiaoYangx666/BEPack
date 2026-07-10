@@ -150,7 +150,17 @@ type UserConfig = {
 
     copy?: {
         defaultTarget?: string;
-        targets?: Record<string, { type: "custom"; bp?: string; rp?: string } | { type: "gameRoot"; path: string }>;
+        name?: string | { bp?: string; rp?: string };
+        include?: { bp?: string[]; rp?: string[] };
+        targets?: Record<string, ({ type: "custom"; bp?: string; rp?: string } | { type: "gameRoot"; path: string }) & { name?: string | { bp?: string; rp?: string } }>;
+    };
+
+    dev?: {
+        copy?: false | true | string;
+        watch?: {
+            include?: string[];
+            include?: string[];
+        };
     };
 
     pack?: {
@@ -416,20 +426,32 @@ timing    rolldown        45 ms
 `bepack dev`：
 
 - 在监视前先执行一次初始构建。
-- 监视配置的路径：
-    - `build.entry` 目录
-    - `packs.bp.root`
-    - `packs.rp.root`（如果配置了 RP）
-- 每次更改时清空终端输出。
-- 显示每次更新的耗时。
+- 默认监视的路径：
+    - `build.entry` 目录（TypeScript 源码变化 → 触发 rolldown 重构建）
+    - BP 的 copy include 列表中的文件/文件夹（默认 19 项，不含 `scripts` 和 `manifest.json`）
+    - RP 的 copy include 列表中的文件/文件夹（如果配置了 `copy.include.rp`），否则监视整个 RP 目录
+- 可通过 `dev.watch.include` 添加额外监听路径。
 - 忽略以下目录：
     - `node_modules`
     - `.git`
     - `pack.outDir`
-    - `<packs.bp.root>/scripts`
-    - 生成的 BP/RP `manifest.json`
+- 每次更改时清空终端输出，显示每次更新的耗时。
+- 构建锁：构建过程中来的其他文件变化会排队，构建结束后统一处理一次，不会并发构建。
+- src 文件变化触发重建 + 复制，非 src 文件变化只触发复制。不涉及的文件不触发任何操作。
 
-这避免了因 BePack 修补清单或写入构建输出而导致的循环。
+BP 的监听范围精确匹配 copy 的 include 规则，编辑不会被复制的文件不会触发重构建。
+可通过 `dev.watch.include` 添加额外监听路径：
+
+```ts
+export default defineConfig({
+    dev: {
+        copy: true,
+        watch: {
+            include: ["docs", "tools/config.json"],
+        },
+    },
+});
+```
 
 ## 复制
 
@@ -550,6 +572,8 @@ copy: {
 BP 的默认列表是固定的，`include.bp` 仅追加额外项。RP 的默认列表为空（复制全部），一旦设置了 `include.rp`，则变为选择性复制模式，只复制指定的文件/文件夹。
 
 复制项不存在时会被静默跳过，不会报错。
+
+Dev 模式使用相同的 include 规则来决定监听哪些文件，详见「开发模式」章节。
 
 ### 复制与构建/开发联动
 

@@ -126,9 +126,7 @@ export function normalizeConfig(
             typecheck: raw.build?.typecheck ?? DEFAULT_CONFIG.build.typecheck,
             copy: raw.build?.copy ?? DEFAULT_CONFIG.build.copy,
             preserveModules:
-                raw.build?.preserveModules ??
-                raw.build?.preserveModule ??
-                DEFAULT_CONFIG.build.preserveModules,
+                raw.build?.preserveModules ?? DEFAULT_CONFIG.build.preserveModules,
             external: raw.build?.external ?? DEFAULT_CONFIG.build.external,
             externalDependencies:
                 raw.build?.externalDependencies ?? DEFAULT_CONFIG.build.externalDependencies,
@@ -138,6 +136,7 @@ export function normalizeConfig(
         },
         dev: {
             copy: raw.dev?.copy ?? DEFAULT_CONFIG.dev.copy,
+            ...(raw.dev?.watch ? { watch: raw.dev.watch } : {}),
         },
         copy: {
             defaultTarget: raw.copy?.defaultTarget ?? DEFAULT_CONFIG.copy.defaultTarget,

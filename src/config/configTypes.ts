@@ -1,5 +1,4 @@
 import type { NpmRegistryClient } from "../utils/npmRegistry.js";
-import type { FIXED_PATHS } from "../constants/paths.js";
 
 export type CommandName = "init" | "install" | "manifest" | "build" | "dev" | "copy" | "pack";
 /**
@@ -91,7 +90,16 @@ export type HookContext = {
     cwd: string;
     target: string;
     config: ResolvedConfig;
-    paths: typeof FIXED_PATHS;
+    /** Convenience resolved paths. Values reflect the user's actual config. */
+    paths: {
+        srcEntry: string;
+        bpRoot: string;
+        rpRoot?: string;
+        scriptOutFile: string;
+        bpManifest: string;
+        rpManifest?: string;
+        dist: string;
+    };
     logger: LoggerLike;
 };
 
@@ -157,6 +165,12 @@ export type CopyTarget = CopyTargetCustom | CopyTargetGameRoot;
 export type CopyTargetNames = {
     bp?: string;
     rp?: string;
+};
+
+/** Dev mode watch configuration. */
+export type DevWatchConfig = {
+    /** Additional files/directories to watch (relative to cwd), on top of copy include items. */
+    include?: string[];
 };
 
 export type UserConfig = {
@@ -226,9 +240,6 @@ export type UserConfig = {
         /** Copy after build: false, true for default target, or a target name. */
         copy?: CopySetting;
 
-        /** Legacy alias for preserveModules. */
-        preserveModule?: boolean;
-
         /** Whether rolldown should preserve module files. Defaults to true. */
         preserveModules?: boolean;
 
@@ -252,6 +263,9 @@ export type UserConfig = {
     dev?: {
         /** Copy after dev updates: false, true for default target, or a target name. */
         copy?: CopySetting;
+
+        /** Watch configuration. Defaults to src entry dir + copy include items. */
+        watch?: DevWatchConfig;
     };
 
     /** Copy targets for `bepack copy` and build/dev copy. */
@@ -335,6 +349,7 @@ export type ResolvedConfig = {
     };
     dev: {
         copy: CopySetting;
+        watch?: DevWatchConfig;
     };
     copy: {
         defaultTarget: string;
