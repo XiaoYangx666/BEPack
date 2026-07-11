@@ -70,7 +70,19 @@ export function normalizeConfig(
             "packs.bp.uuid and packs.bp.moduleUuid are required."
         );
     }
+    if (bp.root === undefined) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            "packs.bp.root is required. Set the behavior pack directory in bepack.config.ts."
+        );
+    }
     const rp = raw.packs.rp;
+    if (rp && rp.root === undefined) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            "packs.rp.root is required when packs.rp is configured."
+        );
+    }
     const bpDescription = bp.description ?? description;
     const rpDescription = rp?.description ?? description;
     return {
@@ -89,7 +101,7 @@ export function normalizeConfig(
         ...(raw.manifestFormat !== undefined ? { manifestFormat: raw.manifestFormat } : {}),
         packs: {
             bp: {
-                root: bp.root ?? "bp",
+                root: bp.root,
                 uuid: bp.uuid,
                 moduleUuid: bp.moduleUuid,
                 name: bp.name ?? name,
@@ -101,7 +113,7 @@ export function normalizeConfig(
             ...(rp
                 ? {
                       rp: {
-                          root: rp.root ?? "rp",
+                          root: rp.root!,
                           uuid: rp.uuid,
                           moduleUuid: rp.moduleUuid,
                           name: rp.name ?? name,
@@ -127,8 +139,7 @@ export function normalizeConfig(
             entry: raw.build?.entry ?? DEFAULT_CONFIG.build.entry,
             typecheck: raw.build?.typecheck ?? DEFAULT_CONFIG.build.typecheck,
             copy: raw.build?.copy ?? DEFAULT_CONFIG.build.copy,
-            preserveModules:
-                raw.build?.preserveModules ?? DEFAULT_CONFIG.build.preserveModules,
+            preserveModules: raw.build?.preserveModules ?? DEFAULT_CONFIG.build.preserveModules,
             external: raw.build?.external ?? DEFAULT_CONFIG.build.external,
             externalDependencies:
                 raw.build?.externalDependencies ?? DEFAULT_CONFIG.build.externalDependencies,

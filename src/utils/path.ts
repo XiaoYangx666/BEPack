@@ -22,7 +22,7 @@ export function bpRoot(cwd: string, config: ResolvedConfig): string {
 }
 
 export function rpRoot(cwd: string, config: ResolvedConfig): string {
-    return resolveFrom(projectRoot(cwd, config), config.packs.rp?.root ?? "rp");
+    return resolveFrom(projectRoot(cwd, config), config.packs.rp?.root ?? "");
 }
 
 export function distRoot(cwd: string, config: ResolvedConfig): string {
