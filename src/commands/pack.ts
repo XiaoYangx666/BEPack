@@ -1,41 +1,16 @@
 import path from "node:path";
 import { loadConfig } from "../config/loadConfig.js";
-import { packMcaddon } from "../pack/packMcaddon.js";
+import { getConfiguredPacks } from "../config/configTypes.js";
+import type { PackType } from "../config/configTypes.js";
 import { zipSelectedItems, zipAddonSelected, zipAddonHybrid } from "../pack/zip.js";
 import { runHook } from "../hooks/runHook.js";
 import { Logger } from "../logger/logger.js";
-import { bpRoot, distRoot, rpRoot } from "../utils/path.js";
+import { packRoot, projectRoot, distRoot } from "../utils/path.js";
 import { pathExists } from "../utils/fs.js";
 import { BePackError } from "../errors/BePackError.js";
 import { DEFAULT_BP_INCLUDES, DEFAULT_RP_INCLUDES, getIncludes } from "../constants/copyIncludes.js";
 
 type LoadedConfig = Awaited<ReturnType<typeof loadConfig>>["config"];
-
-async function validatePackInputs(cwd: string, config: LoadedConfig): Promise<void> {
-    const missing: string[] = [];
-    if (!config.configured.buildEntry) missing.push("build.entry");
-    if (!config.configured.bpRoot) missing.push("packs.bp.root");
-    if (config.packs.rp && !config.configured.rpRoot) missing.push("packs.rp.root");
-    if (!config.configured.packOutDir) missing.push("pack.outDir");
-    if (missing.length > 0) {
-        throw new BePackError(
-            "PACK_FAILED",
-            `pack requires explicit config: ${missing.join(", ")}.`,
-            { details: { missing } }
-        );
-    }
-
-    const missingPaths: string[] = [];
-    const rootPath = path.resolve(cwd, config.root);
-    if (!(await pathExists(rootPath))) missingPaths.push(`root: ${rootPath}`);
-    const entryPath = path.resolve(rootPath, config.build.entry);
-    if (!(await pathExists(entryPath))) missingPaths.push(`build.entry: ${entryPath}`);
-    if (missingPaths.length > 0) {
-        throw new BePackError("PACK_FAILED", "pack input paths do not exist.", {
-            details: { missingPaths },
-        });
-    }
-}
 
 function assertOutputOutsideDir(output: string, dir: string, label: string): void {
     const resolvedOutput = path.resolve(output);
@@ -53,23 +28,27 @@ function assertOutputOutsideDir(output: string, dir: string, label: string): voi
     }
 }
 
-/**
- * BP 始终使用选择性打包（只打包 DEFAULT_BP_INCLUDES + packs.bp.include 中的文件）。
- * 这样可以安全支持 bp.root = "."（项目根目录即行为包）。
- *
- * RP 若配置了 include，也走选择性打包；否则完整打包 RP 目录。
- */
-function getBpPackItems(config: LoadedConfig): string[] {
-    return getIncludes(DEFAULT_BP_INCLUDES, config.packs.bp.include);
-}
+/** Resolve include items for a given pack type when packaging. */
+function getPackItems(
+    config: LoadedConfig,
+    packType: PackType
+): { items: string[]; selective: boolean } {
+    if (packType === "bp") {
+        const items = getIncludes(DEFAULT_BP_INCLUDES, config.packs.bp?.include);
+        return { items, selective: true };
+    }
 
-function shouldUseSelectiveRpPack(config: LoadedConfig): boolean {
-    const rpIncludes = getIncludes(DEFAULT_RP_INCLUDES, config.copy.include?.rp);
-    return rpIncludes.length > 0;
-}
-
-function getRpPackItems(config: LoadedConfig): string[] {
-    return getIncludes(DEFAULT_RP_INCLUDES, config.copy.include?.rp);
+    // RP
+    const rpIncludes = getIncludes(DEFAULT_RP_INCLUDES, config.packs.rp?.include);
+    if (rpIncludes.length > 0) {
+        return { items: rpIncludes, selective: true };
+    }
+    // Also check legacy copy.include.rp
+    const legacyRpIncludes = getIncludes(DEFAULT_RP_INCLUDES, config.copy.include?.rp);
+    if (legacyRpIncludes.length > 0) {
+        return { items: legacyRpIncludes, selective: true };
+    }
+    return { items: [], selective: false };
 }
 
 export async function packProject(
@@ -77,35 +56,41 @@ export async function packProject(
     config: LoadedConfig,
     options: { name?: string; dryRun?: boolean } = {}
 ) {
-    await validatePackInputs(cwd, config);
+    const root = projectRoot(cwd, config);
     const fileName = (options.name ?? config.pack.name)
         .replaceAll("{name}", config.name)
         .replaceAll("{version}", config.version);
     const dist = distRoot(cwd, config);
-    const bp = bpRoot(cwd, config);
-    const rp = config.packs.rp ? rpRoot(cwd, config) : undefined;
+    const packs = getConfiguredPacks(config);
 
-    const bpItems = getBpPackItems(config);
+    if (packs.length === 0) {
+        throw new BePackError("PACK_FAILED", "No packs configured. At least one pack is required.");
+    }
 
-    if (rp) {
+    const bp = config.packs.bp ? { root: packRoot(root, config, "bp")!, config: config } : undefined;
+    const rp = config.packs.rp ? { root: packRoot(root, config, "rp")!, config: config } : undefined;
+
+    if (bp && rp) {
+        // BP + RP → .mcaddon
         const output = path.join(dist, `${fileName}.mcaddon`);
         if (!options.dryRun) {
-            const useSelectiveRp = shouldUseSelectiveRpPack(config);
-            if (useSelectiveRp) {
-                // BP + RP 都选择性打包
+            const bpInfo = getPackItems(config, "bp");
+            const rpInfo = getPackItems(config, "rp");
+
+            assertOutputOutsideDir(output, bp.root, "BP");
+            if (rpInfo.selective) {
                 await zipAddonSelected(
                     [
-                        { source: bp, items: bpItems },
-                        { source: rp, items: getRpPackItems(config) },
+                        { source: bp.root, items: bpInfo.items },
+                        { source: rp.root, items: rpInfo.items },
                     ],
                     output
                 );
             } else {
-                // BP 选择性打包 + RP 完整目录
-                assertOutputOutsideDir(output, rp, "RP");
+                // BP selective + RP full directory
                 await zipAddonHybrid(
-                    [{ source: bp, items: bpItems }],
-                    [{ dir: rp }],
+                    [{ source: bp.root, items: bpInfo.items }],
+                    [{ dir: rp.root }],
                     output
                 );
             }
@@ -113,12 +98,33 @@ export async function packProject(
         return output;
     }
 
-    // BP-only .mcpack
-    const output = path.join(dist, `${fileName}.mcpack`);
-    if (!options.dryRun) {
-        await zipSelectedItems(bp, bpItems, output);
+    if (bp) {
+        // BP-only → .mcpack
+        const output = path.join(dist, `${fileName}.mcpack`);
+        if (!options.dryRun) {
+            const bpInfo = getPackItems(config, "bp");
+            await zipSelectedItems(bp.root, bpInfo.items, output);
+        }
+        return output;
     }
-    return output;
+
+    if (rp) {
+        // RP-only → .mcpack
+        const output = path.join(dist, `${fileName}.mcpack`);
+        if (!options.dryRun) {
+            const rpInfo = getPackItems(config, "rp");
+            if (rpInfo.selective) {
+                await zipSelectedItems(rp.root, rpInfo.items, output);
+            } else {
+                // RP full directory
+                const { packMcpack } = await import("../pack/packMcpack.js");
+                return await packMcpack(rp.root, dist, fileName, options.dryRun);
+            }
+        }
+        return output;
+    }
+
+    throw new BePackError("PACK_FAILED", "No packs configured.");
 }
 
 export async function runPack(

@@ -18,11 +18,16 @@ export async function commandDev(options: any) {
     logger.clear();
     logger.bepack("dev", `target ${config.target}`);
     logger.progress("dev", "initial build started");
+
+    // Typecheck override: CLI --skip-typecheck / --typecheck > config
+    const compile = config.packs.bp?.compile;
     const typecheck = options.skipTypecheck
         ? false
         : options.typecheck
           ? true
-          : config.build.typecheck;
+          : compile?.typecheck ?? false;
+
+    // Initial build: manifest for all packs + compile if configured
     await runBuild({
         cwd,
         config,
@@ -30,12 +35,15 @@ export async function commandDev(options: any) {
         typecheck: Boolean(typecheck),
         quiet: Boolean(options.json || options.silent),
     });
+
+    // Initial copy (if configured)
     if (!options.skipCopy && (options.copy || options.copyTarget || config.dev.copy)) {
         const target =
             options.copyTarget ??
             (typeof config.dev.copy === "string" ? config.dev.copy : undefined);
         await copyPacks(cwd, config, target, false, logger);
     }
+
     logger.done("dev", `initial build complete in ${logger.formatDuration(Date.now() - start)}`);
     watchProject(cwd, config, logger, options.copyTarget);
     return { ok: true, command: "dev", initialBuildDurationMs: Date.now() - start };

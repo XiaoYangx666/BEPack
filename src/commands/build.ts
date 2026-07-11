@@ -32,21 +32,7 @@ export async function commandBuild(options: any) {
         configPath: options.config,
         overrides: {
             target: options.target,
-            ...(options.preserveModules ||
-            options.useNpx ||
-            options.minify ||
-            options.timing !== undefined
-                ? {
-                      build: {
-                          ...(options.preserveModules
-                              ? { preserveModules: true }
-                              : {}),
-                          ...(options.useNpx ? { useNpx: true } : {}),
-                          ...(options.minify ? { minify: true } : {}),
-                          ...(options.timing !== undefined ? { timing: options.timing } : {}),
-                      },
-                  }
-                : {}),
+            ...(options.timing !== undefined ? { build: { timing: options.timing } } : {}),
         },
     });
     logger.bepack("build", `target ${config.target}`);
@@ -64,11 +50,15 @@ export async function commandBuild(options: any) {
                 .map(([name, dep]) => [name, dep.manifestVersion as string])
         );
     }
+
+    // Typecheck override: CLI --skip-typecheck / --typecheck > config
+    const compile = config.packs.bp?.compile;
     const typecheck = options.skipTypecheck
         ? false
         : options.typecheck
           ? true
-          : config.build.typecheck;
+          : compile?.typecheck ?? false;
+
     const build = await runBuild({
         cwd,
         config,
@@ -78,6 +68,7 @@ export async function commandBuild(options: any) {
         quiet: Boolean(options.json || options.silent),
         ...(resolvedDeps ? { resolvedDeps } : {}),
     });
+
     let copy = null;
     const shouldCopy = options.skipCopy
         ? false
@@ -92,9 +83,9 @@ export async function commandBuild(options: any) {
             options.dryRun,
             logger
         );
-    let pack = null;
+    let packResult = null;
     if (!options.skipPack && options.pack)
-        pack = await runPack(cwd, config, logger, { name: options.name, dryRun: options.dryRun });
+        packResult = await runPack(cwd, config, logger, { name: options.name, dryRun: options.dryRun });
     logger.done("build", `complete in ${logger.formatDuration(build.durationMs)}`);
-    return { ok: true, command: "build", durationMs: build.durationMs, build, copy, pack };
+    return { ok: true, command: "build", durationMs: build.durationMs, build, copy, pack: packResult };
 }

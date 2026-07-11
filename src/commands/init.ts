@@ -101,7 +101,7 @@ async function initFromManifests(
     let bpInfo: {
         root: string;
         uuid: string;
-        moduleUuid: string;
+        moduleUuid?: string;
         version?: string;
         deps: Record<string, string>;
     } | undefined;
@@ -139,20 +139,16 @@ async function initFromManifests(
         }
         detectedFormatVersion ??= manifest.format_version;
         const header = ManifestReader.validateHeader(manifest, "BP");
-        const moduleUuid = ManifestReader.findScriptModuleUuid(manifest);
-        if (!moduleUuid) {
-            throw new BePackError(
-                "MANIFEST_INVALID",
-                "BP manifest is missing a script module with uuid"
-            );
-        }
+        // Script module is optional — data-only BP may not have one.
+        // If found, enable compile + moduleUuid.
+        const scriptModuleUuid = ManifestReader.findScriptModuleUuid(manifest);
         const bpVersion = versionToString(manifest.header?.version);
         if (bpVersion) versions.push(bpVersion);
 
         bpInfo = {
             root: derivePackRoot(cwd, options.fromBp),
             uuid: header.uuid,
-            moduleUuid,
+            ...(scriptModuleUuid ? { moduleUuid: scriptModuleUuid } : {}),
             ...(bpVersion ? { version: bpVersion } : {}),
             deps: ManifestReader.matchDependencies(manifest),
         };
@@ -228,7 +224,6 @@ async function initFromManifests(
     const config: Record<string, unknown> = {
         root: ".",
         target: "latest",
-        build: { entry: "src/main.ts" },
         pack: { outDir: "dist" },
     };
 
@@ -245,8 +240,11 @@ async function initFromManifests(
         const bp: Record<string, unknown> = {
             root: bpInfo.root,
             uuid: bpInfo.uuid,
-            moduleUuid: bpInfo.moduleUuid,
         };
+        if (bpInfo.moduleUuid) {
+            bp.moduleUuid = bpInfo.moduleUuid;
+            bp.compile = { entry: "src/main.ts" };
+        }
         if (bpName) bp.name = bpName;
         if (bpDescription) bp.description = bpDescription;
         if (Object.keys(bpInfo.deps).length > 0) {
@@ -288,12 +286,12 @@ function scaffoldConfig(): string {
         name: "example-addon",
         version: "1.0.0",
         target: "latest",
-        build: { entry: "src/main.ts" },
         packs: {
             bp: {
                 root: "bp",
                 uuid: randomUUID(),
                 moduleUuid: randomUUID(),
+                compile: { entry: "src/main.ts" },
                 dependencies: { "@minecraft/server": "stable" },
             },
         },
