@@ -51,7 +51,7 @@ Config files (`bepack.config.ts` / `.mjs` / `.js`) export a default function or 
 UserConfig → loadConfig() → normalizeConfig() → ResolvedConfig
 ```
 
-- **`src/config/configTypes.ts`** — all TypeScript types: `UserConfig`, `ResolvedConfig`, `DependencyResolverRule`, `HookContext`, etc.
+- **`src/config/configTypes.ts`** — all TypeScript types: `UserConfig`, `ResolvedConfig`, `DependencyResolverRule`, `HookContext`, etc. `BpCompileResolved` includes: `entry`, `tsconfig`, `typecheck`, `preserveModules`, `external`, `useNpx`, `minify`, `incremental`
 - **`src/config/defaultConfig.ts`** — defaults (entry: `src/main.ts`, preserveModules: true, etc.)
 - **`src/config/loadConfig.ts`** — finds config file, imports it (strips TS syntax with regex fallback), calls normalizer
 - **`src/config/normalizeConfig.ts`** — merges user config with defaults and CLI overrides
@@ -62,7 +62,7 @@ Each file in `src/commands/` exports a `command<Name>` async function:
 
 | Command | File | Description |
 |---------|------|-------------|
-| `init` | `init.ts` | Scaffold `bepack.config.ts`（支持 `--from-bp` / `--from-rp` 从现有 manifest 反推） |
+| `init` | `init.ts` | Scaffold `bepack.config.ts`（支持 `--from-bp` / `--from-rp` 从现有 manifest 反推）。反推时自动检测 `format_version`，若与实际版本格式不符则降级为 format 2 并警告 |
 | `install` | `install.ts` | Resolve deps, patch package.json, run package manager |
 | `manifest` | `manifest.ts` | Patch BP/RP `manifest.json` |
 | `build` | `build.ts` | Manifest → typecheck → rolldown → (optional install/copy/pack) |
@@ -77,8 +77,8 @@ patchManifest() → runHook("beforeBuild") → runTypecheck() → runRolldown() 
 ```
 
 - **`runBuild.ts`** — orchestrates the full build, supports `--timing` for per-step timing
+- **`runTypecheck.ts`** — runs `tsc --noEmit`, optionally via `npx tsc`. Supports `incremental` mode (default on): passes `--incremental --tsBuildInfoFile` to tsc, caching build info to `node_modules/.cache/bepack/tsbuildinfo.json` for faster rebuilds
 - **`runRolldown.ts`** — clears `bp/scripts/`, bundles with rolldown (preserveModules or single file), computes file stats. Externalizes `@minecraft/*` packages that are in the manifest dependency catalog
-- **`runTypecheck.ts`** — runs `tsc --noEmit`, optionally via `npx tsc`
 
 ### Dependency Resolution (`src/install/`)
 
@@ -106,9 +106,9 @@ DependencyService
 - **`ManifestFile.ts`** — manifest 文件 I/O + JSON 正规化。`read()` 读文件 → normalize → 返回 `Manifest`，`write()` validate → 写出。同时提供 `normalizeManifest`、`asArray` 等 coercion 工具函数。
 - **`ManifestReader.ts`** — 从已解析的 `Manifest` 对象中提取信息的纯方法（找 script/resources 模块 UUID、校验 header、提取依赖）。提供 `isScriptModule` / `isResourcesModule` 类型守卫供 Builder 共用。
 - **`ManifestDepManager.ts`** — 依赖校验（语法 + 政策）、识别（哪些 dep 是 BePack 管理的）、构建（specifier → manifest 版本）、替换（合并用户手写与管理依赖）。纯函数方法（`resolveVersion` / `isAllowedSpecifier` / `isAchievementCompatible`）为静态，测试可直接调用。
-- **`ManifestBuilder.ts`** — 构建 manifest 的 header、modules、metadata 部分。依赖管理委托给 `ManifestDepManager`。构造时预计算 `version` tuple，同一实例可复用构建 BP 和 RP。
-- **`types.ts`** — typed Manifest interfaces (replaces old `Record<string, any>`)
-- **`validate.ts`** — `validateManifest()` checks required fields, module types, dependency formats
+- **`ManifestBuilder.ts`** — 构建 manifest 的 header、modules、metadata 部分。依赖管理委托给 `ManifestDepManager`。构造时预计算 `version` tuple/string，同一实例可复用构建 BP 和 RP。根据 `manifestFormat`（2 或 3）自动适配版本格式：format 2 输出数组 `[1,0,0]`，format 3 输出字符串 `"1.0.0"`。
+- **`types.ts`** — typed Manifest interfaces (replaces old `Record<string, any>`). `ManifestVersion = [number, number, number] | string` — format 2 用数组，format 3 用字符串。
+- **`validate.ts`** — `validateManifest()` checks required fields, module types, dependency formats. **format_version-aware**: format 2 严格数组，format 3 严格字符串（不接受数组）。
 - **`patchManifest.ts`** — IO orchestrator (reads via `ManifestFile`, calls `ManifestBuilder` + `ManifestDepManager`, writes via `ManifestFile`). Creates one builder instance and reuses it for both BP and RP.
 
 ### Copy (`src/copy/`)
