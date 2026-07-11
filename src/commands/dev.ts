@@ -1,3 +1,5 @@
+import path from "node:path";
+import { unlink } from "node:fs/promises";
 import { loadConfig } from "../config/loadConfig.js";
 import { runBuild } from "../build/runBuild.js";
 import { copyPacks } from "../copy/copyPacks.js";
@@ -35,7 +37,12 @@ export async function commandDev(options: any) {
     const dryRun = Boolean(options.dryRun);
     const quiet = Boolean(options.json || options.silent);
 
-    // Initial build: manifest for all packs + compile if configured
+    // Initial build: clear old cache first so first incremental run is effectively full,
+    // but still generate fresh .tsbuildinfo for subsequent rebuilds.
+    if (compile?.cache.dev) {
+        const cacheFile = path.join(cwd, compile.cache.file);
+        await unlink(cacheFile).catch(() => {});
+    }
     await runBuild({
         cwd,
         config,

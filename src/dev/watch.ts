@@ -198,12 +198,30 @@ export function watchProject(
         }
     });
 
-    const summary = [
-        ...(compile ? ["src"] : []),
-        ...(config.packs.bp ? [`bp(${bpWatchPaths.length})`] : []),
-        ...(config.packs.rp ? [`rp(${rpWatchPaths.length})`] : []),
-    ];
-    logger.progress("dev", `watching ${summary.join(", ")}`);
-    logger.verbose(`watch paths: ${watchRoots.join(", ")}`);
+    // Condensed watch log: group by pack directory prefix
+    const bpRoot = config.packs.bp ? slash(path.relative(cwd, packRoot(root, config, "bp")!)) : null;
+    const rpRoot = config.packs.rp ? slash(path.relative(cwd, packRoot(root, config, "rp")!)) : null;
+    const srcEntryDir = compile && srcEntry(cwd, config) ? relative(path.dirname(srcEntry(cwd, config)!)) : null;
+    let srcInBpRp = false;
+    const groups: string[] = [];
+    let bpCount = 0;
+    let rpCount = 0;
+    for (const w of watchRoots) {
+        if (bpRoot && (w === bpRoot || w.startsWith(bpRoot + "/"))) {
+            bpCount++;
+            if (srcEntryDir && (w === srcEntryDir || w.startsWith(srcEntryDir + "/"))) srcInBpRp = true;
+        } else if (rpRoot && (w === rpRoot || w.startsWith(rpRoot + "/"))) {
+            rpCount++;
+            if (srcEntryDir && (w === srcEntryDir || w.startsWith(srcEntryDir + "/"))) srcInBpRp = true;
+        } else if (srcEntryDir && (w === srcEntryDir || w.startsWith(srcEntryDir + "/"))) {
+            // standalone source entry — will be added below
+        } else {
+            groups.push(w);
+        }
+    }
+    if (srcEntryDir && !srcInBpRp) groups.unshift(srcEntryDir);
+    if (bpCount > 0) groups.push(`bp(${bpCount})`);
+    if (rpCount > 0) groups.push(`rp(${rpCount})`);
+    logger.progress("dev", `watching ${groups.join(", ")}`);
     return watcher;
 }

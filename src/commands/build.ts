@@ -59,8 +59,8 @@ export async function commandBuild(options: any) {
           ? true
           : compile?.typecheck ?? false;
 
-    // Cache override: CLI --cache / --no-cache > config.cache.build > false
-    const cache = options.cache !== undefined ? options.cache : (compile?.cache.build ?? false);
+    // Cache override: CLI --cache/--no-cache > config.cache.build > false
+    const cache = options.cache ?? (compile?.cache.build ?? false);
 
     const build = await runBuild({
         cwd,
