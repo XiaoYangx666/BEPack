@@ -15,6 +15,16 @@ const colors = pc.createColors(
     process.env.NO_COLOR === undefined && process.env.FORCE_COLOR !== "0"
 );
 
+process.on("uncaughtException", (error) => {
+    console.error(`${colors.red("✖")} ${error.message ?? error}`);
+    process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+    console.error(`${colors.red("✖")} ${(reason as any)?.message ?? reason}`);
+    process.exit(1);
+});
+
 const cli = cac("bepack");
 
 function common(command: any) {
