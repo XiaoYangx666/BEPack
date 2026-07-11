@@ -169,6 +169,10 @@ export type BpCompileOptions = {
 
     /** Minify output via rolldown. Default: false. */
     minify?: boolean;
+
+    /** Enable TypeScript incremental compilation, caching .tsbuildinfo to node_modules/.cache/bepack/.
+     *  Default: true. */
+    incremental?: boolean;
 };
 
 export type BpConfig = PackConfig & {
@@ -338,6 +342,7 @@ export type BpCompileResolved = {
     external: BuildExternal[];
     useNpx: boolean;
     minify: boolean;
+    incremental: boolean;
 };
 
 export type ResolvedConfig = {

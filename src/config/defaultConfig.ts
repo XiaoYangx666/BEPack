@@ -52,6 +52,7 @@ export const BP_COMPILE_DEFAULTS: BpCompileResolved = {
     external: [/^@minecraft\/server.*/],
     useNpx: false,
     minify: false,
+    incremental: true,
 };
 
 export function defineConfig(config: UserConfig): UserConfig;

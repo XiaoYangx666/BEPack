@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { ResolvedConfig } from "../config/configTypes.js";
 import { patchManifest } from "../manifest/patchManifest.js";
 import { runTypecheck } from "./runTypecheck.js";
@@ -62,12 +63,17 @@ export async function runBuild(options: RunBuildOptions) {
     let typecheckRan = false;
     if (compile && !options.dryRun && options.typecheck !== false) {
         const compileConfig = options.config.packs.bp!.compile!;
+        const tsBuildInfoFile = compileConfig.incremental
+            ? path.join(options.cwd, "node_modules", ".cache", "bepack", "tsbuildinfo.json")
+            : undefined;
         await timed(
             "typecheck",
             () =>
                 runTypecheck(root, {
                     quiet: Boolean(options.quiet),
                     useNpx: compileConfig.useNpx,
+                    incremental: compileConfig.incremental,
+                    ...(tsBuildInfoFile ? { tsBuildInfoFile } : {}),
                 }),
             options.logger,
             timing

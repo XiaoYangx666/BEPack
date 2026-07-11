@@ -132,6 +132,7 @@ type UserConfig = {
                 external?: (string | RegExp)[];
                 useNpx?: boolean;
                 minify?: boolean;
+                incremental?: boolean;
             };
             /** 所有 BP 依赖都在此声明——包括清单依赖和纯代码依赖。 */
             dependencies?: Record<string, "stable" | "beta" | "preview" | string>;
@@ -434,6 +435,7 @@ hooks.afterBuild
 
 - 默认：系统 `tsc --noEmit`。
 - `build.useNpx: true` 或 `--use-npx`：`npx tsc --noEmit`。
+- `packs.bp.compile.incremental: true`（默认）：启用 TypeScript 增量编译，`--incremental --tsBuildInfoFile` 写入 `node_modules/.cache/bepack/tsbuildinfo.json`，后续编译更快。设为 `false` 可关闭。
 - 缺少 `tsconfig.json` 会提前失败，返回 `TYPECHECK_FAILED`。
 
 Rolldown 行为：

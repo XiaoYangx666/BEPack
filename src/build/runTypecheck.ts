@@ -1,15 +1,22 @@
 import path from "node:path";
 import { exec } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { BePackError } from "../errors/BePackError.js";
 import { pathExists } from "../utils/fs.js";
 
 type TypecheckOptions = {
     quiet?: boolean;
     useNpx?: boolean;
+    incremental?: boolean;
+    tsBuildInfoFile?: string;
 };
 
-function resolveCommand(useNpx: boolean): string {
-    return useNpx ? "npx tsc --noEmit" : "tsc --noEmit";
+function resolveCommand(useNpx: boolean, incremental: boolean, tsBuildInfoFile?: string): string {
+    let cmd = useNpx ? "npx tsc --noEmit" : "tsc --noEmit";
+    if (incremental && tsBuildInfoFile) {
+        cmd += ` --incremental --tsBuildInfoFile "${tsBuildInfoFile}"`;
+    }
+    return cmd;
 }
 
 export async function runTypecheck(cwd: string, options: TypecheckOptions = {}): Promise<void> {
@@ -22,7 +29,16 @@ export async function runTypecheck(cwd: string, options: TypecheckOptions = {}):
         );
     }
 
-    const command = resolveCommand(Boolean(options.useNpx));
+    // Ensure cache directory exists for incremental builds
+    if (options.incremental && options.tsBuildInfoFile) {
+        await mkdir(path.dirname(options.tsBuildInfoFile), { recursive: true });
+    }
+
+    const command = resolveCommand(
+        Boolean(options.useNpx),
+        Boolean(options.incremental),
+        options.tsBuildInfoFile
+    );
     await new Promise<void>((resolve, reject) => {
         let stdout = "";
         let stderr = "";
