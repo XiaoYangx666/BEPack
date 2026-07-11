@@ -99,7 +99,7 @@ bepack pack --name release
 - 使用 `stable`、`beta` 或 `preview` 作为 specifier 时，请先运行 `bepack install` 或使用 `bepack build --install` 解析为具体 npm 版本。
 - `manifestFormat: 2 | 3` 控制 manifest 输出格式。`2` 使用数组版本 `[1,0,0]`；`3` 使用 SemVer 字符串 `"1.0.0"`（所有版本字段必须为字符串，不接受数组）。不设置时自动保留现有 manifest 的格式，新项目默认 2。
 - `packs.bp.include` / `packs.rp.include` 配置各自 Pack 的额外打包/复制文件列表。BP 始终选择性打包；RP 配置了 include 时选择性打包，否则全目录。
-- `packs.bp.compile.incremental` 启用 TypeScript 增量编译（默认 `true`），缓存 `.tsbuildinfo` 到 `node_modules/.cache/bepack/`，后续编译更快。
+- `packs.bp.compile.cache` 配置 TypeScript 增量编译缓存。`cache.dev`（默认 `true`）启用在 dev 模式下的缓存；`cache.build`（默认 `false`）启用在 build 模式下的缓存。`bepack build --cache` / `--no-cache` 可逐次覆盖。
 - `bepack dev --skip-typecheck` 可在开发模式跳过类型检查。
 
 完整配置参考和实现说明见 [README.reference.md](./README.reference.md)。

@@ -146,6 +146,22 @@ export type PackConfig = {
     description?: string;
 };
 
+/** TypeScript incremental compilation cache settings. */
+export type CacheOptions = {
+    /** Use cache in dev mode. Default: true. */
+    dev?: boolean;
+    /** Use cache in build mode. Default: false. */
+    build?: boolean;
+    /** Path to .tsbuildinfo file (relative to project root). */
+    file?: string;
+};
+
+export type CacheResolved = {
+    dev: boolean;
+    build: boolean;
+    file: string;
+};
+
 /** BP compile configuration. Only available on behavior packs. */
 export type BpCompileOptions = {
     /** Script entry file, relative to project root. Default: "src/main.ts". */
@@ -170,9 +186,11 @@ export type BpCompileOptions = {
     /** Minify output via rolldown. Default: false. */
     minify?: boolean;
 
-    /** Enable TypeScript incremental compilation, caching .tsbuildinfo to node_modules/.cache/bepack/.
-     *  Default: true. */
-    incremental?: boolean;
+    /** TypeScript incremental compilation cache settings.
+     *  `dev` defaults to true, `build` defaults to false.
+     *  `file` defaults to "node_modules/.cache/bepack/tsconfig.tsbuildinfo".
+     *  CLI `--cache` / `--no-cache` overrides build mode. */
+    cache?: CacheOptions;
 };
 
 export type BpConfig = PackConfig & {
@@ -342,7 +360,7 @@ export type BpCompileResolved = {
     external: BuildExternal[];
     useNpx: boolean;
     minify: boolean;
-    incremental: boolean;
+    cache: CacheResolved;
 };
 
 export type ResolvedConfig = {

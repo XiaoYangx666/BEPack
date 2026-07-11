@@ -99,7 +99,7 @@ bepack pack --name release
 - Use `bepack install` or `bepack build --install` to resolve `stable`, `beta`, or `preview` specifiers to concrete npm versions.
 - `manifestFormat: 2 | 3` controls manifest output format. `2` uses array versions `[1,0,0]`; `3` uses SemVer strings `"1.0.0"` (all version fields must be strings, arrays rejected). Not set = auto-preserve from existing manifest, default 2 for new ones.
 - `packs.bp.include` / `packs.rp.include` adds extra files/folders for copy and pack. BP is always selective; RP is selective when include items are configured, otherwise full directory.
-- `packs.bp.compile.incremental` enables TypeScript incremental compilation (default `true`), caching `.tsbuildinfo` to `node_modules/.cache/bepack/` for faster rebuilds.
+- `packs.bp.compile.cache` configures TypeScript incremental compilation caching. `cache.dev` (default `true`) enables cache in dev mode; `cache.build` (default `false`) enables cache in build mode. Use `bepack build --cache` / `--no-cache` to override per-run.
 - `bepack dev --skip-typecheck` skips type checking on dev rebuilds.
 
 For the full configuration reference and implementation notes, see [README.reference.md](./README.reference.md).

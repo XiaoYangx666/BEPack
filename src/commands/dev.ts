@@ -33,6 +33,7 @@ export async function commandDev(options: any) {
         config,
         logger,
         typecheck: Boolean(typecheck),
+        cache: compile?.cache.dev ?? true,
         quiet: Boolean(options.json || options.silent),
     });
 

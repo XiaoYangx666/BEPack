@@ -1,6 +1,8 @@
-import { DEFAULT_CONFIG, BP_COMPILE_DEFAULTS } from "./defaultConfig.js";
+import { DEFAULT_CONFIG, BP_COMPILE_DEFAULTS, CACHE_DEFAULTS } from "./defaultConfig.js";
 import type {
     BpCompileResolved,
+    CacheOptions,
+    CacheResolved,
     ResolvedConfig,
     UserConfig,
     BpConfig,
@@ -69,8 +71,17 @@ function normalizeCompile(
         external: compile?.external ?? defs.external,
         useNpx: compile?.useNpx ?? defs.useNpx,
         minify: compile?.minify ?? defs.minify,
-        incremental: compile?.incremental ?? defs.incremental,
+        cache: normalizeCache(compile?.cache),
     };
+
+function normalizeCache(cache: CacheOptions | undefined): CacheResolved {
+    const defs = CACHE_DEFAULTS;
+    return {
+        dev: cache?.dev ?? defs.dev,
+        build: cache?.build ?? defs.build,
+        file: cache?.file ?? defs.file,
+    };
+}
 }
 
 export function normalizeConfig(

@@ -73,6 +73,8 @@ common(cli.command("build", "Build project"))
     .option("--preserve-modules", "Preserve module output")
     .option("--use-npx", "Use npx tsc for typecheck")
     .option("--minify", "Minify output")
+    .option("--cache", "Enable incremental compilation cache")
+    .option("--no-cache", "Disable incremental compilation cache")
     .option("--timing", "Show per-step timing")
     .action((options: any) => run("build", commandBuild, options));
 common(cli.command("copy", "Copy packs"))

@@ -132,7 +132,11 @@ type UserConfig = {
                 external?: (string | RegExp)[];
                 useNpx?: boolean;
                 minify?: boolean;
-                incremental?: boolean;
+                cache?: {
+                    dev?: boolean;    // 默认 true
+                    build?: boolean;  // 默认 false
+                    file?: string;    // 默认 "node_modules/.cache/bepack/tsconfig.tsbuildinfo"
+                };
             };
             /** 所有 BP 依赖都在此声明——包括清单依赖和纯代码依赖。 */
             dependencies?: Record<string, "stable" | "beta" | "preview" | string>;
@@ -435,7 +439,7 @@ hooks.afterBuild
 
 - 默认：系统 `tsc --noEmit`。
 - `build.useNpx: true` 或 `--use-npx`：`npx tsc --noEmit`。
-- `packs.bp.compile.incremental: true`（默认）：启用 TypeScript 增量编译，`--incremental --tsBuildInfoFile` 写入 `node_modules/.cache/bepack/tsbuildinfo.json`，后续编译更快。设为 `false` 可关闭。
+- `packs.bp.compile.cache`：增量编译缓存配置。`cache.dev`（默认 `true`）控制 dev 模式；`cache.build`（默认 `false`）控制 build 模式。`cache.file` 指定 `.tsbuildinfo` 路径。`bepack build --cache` / `--no-cache` 可覆盖 build 模式。`dev` 命令默认启用缓存。
 - 缺少 `tsconfig.json` 会提前失败，返回 `TYPECHECK_FAILED`。
 
 Rolldown 行为：

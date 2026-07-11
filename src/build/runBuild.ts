@@ -13,6 +13,8 @@ export type RunBuildOptions = {
     logger: Logger;
     /** Force typecheck (overrides config). Default: config.packs.bp.compile.typecheck */
     typecheck?: boolean;
+    /** Enable TypeScript incremental compilation cache. */
+    cache?: boolean;
     dryRun?: boolean;
     quiet?: boolean;
     resolvedDeps?: Record<string, string>;
@@ -63,8 +65,8 @@ export async function runBuild(options: RunBuildOptions) {
     let typecheckRan = false;
     if (compile && !options.dryRun && options.typecheck !== false) {
         const compileConfig = options.config.packs.bp!.compile!;
-        const tsBuildInfoFile = compileConfig.incremental
-            ? path.join(options.cwd, "node_modules", ".cache", "bepack", "tsbuildinfo.json")
+        const tsBuildInfoFile = options.cache
+            ? path.join(options.cwd, compileConfig.cache.file)
             : undefined;
         await timed(
             "typecheck",
@@ -72,7 +74,7 @@ export async function runBuild(options: RunBuildOptions) {
                 runTypecheck(root, {
                     quiet: Boolean(options.quiet),
                     useNpx: compileConfig.useNpx,
-                    incremental: compileConfig.incremental,
+                    incremental: Boolean(options.cache),
                     ...(tsBuildInfoFile ? { tsBuildInfoFile } : {}),
                 }),
             options.logger,

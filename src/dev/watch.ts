@@ -127,6 +127,7 @@ export function watchProject(
                     config,
                     logger,
                     typecheck: config.packs.bp!.compile!.typecheck,
+                    cache: config.packs.bp!.compile!.cache.dev,
                 });
             } else {
                 // Non-source change: just update manifest and copy
@@ -162,6 +163,7 @@ export function watchProject(
                             config,
                             logger,
                             typecheck: config.packs.bp!.compile!.typecheck,
+                            cache: config.packs.bp!.compile!.cache.dev,
                         });
                     } else {
                         const { patchManifest } = await import("../manifest/patchManifest.js");

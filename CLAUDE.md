@@ -51,7 +51,7 @@ Config files (`bepack.config.ts` / `.mjs` / `.js`) export a default function or 
 UserConfig → loadConfig() → normalizeConfig() → ResolvedConfig
 ```
 
-- **`src/config/configTypes.ts`** — all TypeScript types: `UserConfig`, `ResolvedConfig`, `DependencyResolverRule`, `HookContext`, etc. `BpCompileResolved` includes: `entry`, `tsconfig`, `typecheck`, `preserveModules`, `external`, `useNpx`, `minify`, `incremental`
+- **`src/config/configTypes.ts`** — all TypeScript types: `UserConfig`, `ResolvedConfig`, `DependencyResolverRule`, `HookContext`, `CacheOptions`/`CacheResolved`, etc. `BpCompileResolved` includes: `entry`, `tsconfig`, `typecheck`, `preserveModules`, `external`, `useNpx`, `minify`, `cache`
 - **`src/config/defaultConfig.ts`** — defaults (entry: `src/main.ts`, preserveModules: true, etc.)
 - **`src/config/loadConfig.ts`** — finds config file, imports it (strips TS syntax with regex fallback), calls normalizer
 - **`src/config/normalizeConfig.ts`** — merges user config with defaults and CLI overrides
@@ -77,7 +77,7 @@ patchManifest() → runHook("beforeBuild") → runTypecheck() → runRolldown() 
 ```
 
 - **`runBuild.ts`** — orchestrates the full build, supports `--timing` for per-step timing
-- **`runTypecheck.ts`** — runs `tsc --noEmit`, optionally via `npx tsc`. Supports `incremental` mode (default on): passes `--incremental --tsBuildInfoFile` to tsc, caching build info to `node_modules/.cache/bepack/tsbuildinfo.json` for faster rebuilds
+- **`runTypecheck.ts`** — runs `tsc --noEmit`, optionally via `npx tsc`. Supports incremental cache: passes `--incremental --tsBuildInfoFile` to tsc, caching build info to `node_modules/.cache/bepack/` for faster rebuilds
 - **`runRolldown.ts`** — clears `bp/scripts/`, bundles with rolldown (preserveModules or single file), computes file stats. Externalizes `@minecraft/*` packages that are in the manifest dependency catalog
 
 ### Dependency Resolution (`src/install/`)
