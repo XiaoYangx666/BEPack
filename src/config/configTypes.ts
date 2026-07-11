@@ -233,8 +233,8 @@ export type UserConfig = {
 
     /** Manifest format version used when writing manifest.json.
      * - `2`: array versions (e.g. `[1, 0, 0]`). Default for format_version 2 manifests.
-     * - `3`: SemVer string versions (e.g. `"1.0.0"`). Enables custom pack settings.
-     * Format 3 is backward compatible with format 2 (arrays are still accepted).
+     * - `3`: SemVer string versions (e.g. `"1.0.0"`). All version fields must be strings.
+     * Format 3 does NOT accept array versions — every version must be a string.
      * When not set, the existing manifest's format_version is preserved.
      * Default: 2 for new manifests. */
     manifestFormat?: 2 | 3;

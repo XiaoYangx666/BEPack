@@ -29,11 +29,13 @@ import type {
 export class ManifestBuilder {
     private readonly config: ResolvedConfig;
     private readonly version: ManifestVersion;
+    private readonly versionStr: string;
     private readonly depManager: ManifestDepManager;
 
     constructor(config: ResolvedConfig, depManager: ManifestDepManager) {
         this.config = config;
         this.version = parseVersionTuple(config.version);
+        this.versionStr = config.version;
         this.depManager = depManager;
     }
 
@@ -58,13 +60,14 @@ export class ManifestBuilder {
             format_version: effectiveFormat,
             header: this.buildBpHeader(existing, bp, effectiveFormat),
             ...(bp.moduleUuid
-                ? { modules: this.replaceManagedBpModules(existing.modules, bp) }
+                ? { modules: this.replaceManagedBpModules(existing.modules, bp, effectiveFormat) }
                 : existing.modules
                   ? { modules: existing.modules }
                   : {}),
             dependencies: this.depManager.replaceBpDependencies(
                 existing.dependencies,
-                this.config.packs.rp?.uuid
+                this.config.packs.rp?.uuid,
+                effectiveFormat
             ),
         };
 
@@ -87,10 +90,11 @@ export class ManifestBuilder {
             ...existing,
             format_version: effectiveFormat,
             header: this.buildRpHeader(existing, rp, effectiveFormat),
-            modules: this.replaceManagedRpModules(existing.modules, rp),
+            modules: this.replaceManagedRpModules(existing.modules, rp, effectiveFormat),
             dependencies: this.depManager.replaceRpDependencies(
                 existing.dependencies,
-                this.config.packs.bp?.uuid ?? ""
+                this.config.packs.bp?.uuid ?? "",
+                effectiveFormat
             ),
         };
 
@@ -114,7 +118,7 @@ export class ManifestBuilder {
                 ? { description: bp.description }
                 : {}),
             uuid: bp.uuid,
-            version: this.version,
+            version: this.getVersionFor(formatVersion),
             min_engine_version: this.normalizeMinEngineVersion(
                 existing.header?.min_engine_version,
                 formatVersion
@@ -132,7 +136,7 @@ export class ManifestBuilder {
             name: rp.name,
             ...(rp.description !== undefined ? { description: rp.description } : {}),
             uuid: rp.uuid,
-            version: this.version,
+            version: this.getVersionFor(formatVersion),
             min_engine_version: this.normalizeMinEngineVersion(
                 existing.header?.min_engine_version,
                 formatVersion
@@ -161,43 +165,47 @@ export class ManifestBuilder {
     }
 
     private createScriptModule(
-        bp: NonNullable<ResolvedConfig["packs"]["bp"]>
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>,
+        formatVersion: number
     ): ManifestScriptModule {
         return {
             type: "script",
             language: "javascript",
             uuid: bp.moduleUuid!,
-            version: MODULE_VERSION,
+            version: this.getModuleVersion(formatVersion),
             entry: SCRIPT_ENTRY,
         };
     }
 
     private createResourcesModule(
-        rp: NonNullable<ResolvedConfig["packs"]["rp"]>
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>,
+        formatVersion: number
     ): ManifestResourcesModule {
         return {
             type: "resources",
             uuid: rp.moduleUuid,
-            version: MODULE_VERSION,
+            version: this.getModuleVersion(formatVersion),
         };
     }
 
     private replaceManagedBpModules(
         existingModules: ManifestModule[] | undefined,
-        bp: NonNullable<ResolvedConfig["packs"]["bp"]>
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>,
+        formatVersion: number
     ): ManifestModule[] {
         const existing = asArray<ManifestModule>(existingModules);
         const userModules = existing.filter((m) => !this.isManagedBpModule(m, bp));
-        return [...userModules, this.createScriptModule(bp)];
+        return [...userModules, this.createScriptModule(bp, formatVersion)];
     }
 
     private replaceManagedRpModules(
         existingModules: ManifestModule[] | undefined,
-        rp: NonNullable<ResolvedConfig["packs"]["rp"]>
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>,
+        formatVersion: number
     ): ManifestModule[] {
         const existing = asArray<ManifestModule>(existingModules);
         const userModules = existing.filter((m) => !this.isManagedRpModule(m, rp));
-        return [...userModules, this.createResourcesModule(rp)];
+        return [...userModules, this.createResourcesModule(rp, formatVersion)];
     }
 
     // -----------------------------------------------------------------------
@@ -239,6 +247,16 @@ export class ManifestBuilder {
     // Format version 处理
     // -----------------------------------------------------------------------
 
+    /** 根据 format_version 返回正确的版本格式 */
+    private getVersionFor(formatVersion: number): ManifestVersion {
+        return formatVersion === 3 ? this.versionStr : this.version;
+    }
+
+    /** 根据 format_version 返回 module 的版本格式 */
+    private getModuleVersion(formatVersion: number): ManifestVersion {
+        return formatVersion === 3 ? "1.0.0" : MODULE_VERSION;
+    }
+
     private getWriteFormatVersion(existing: Manifest): number {
         if (this.config.manifestFormat !== undefined) return this.config.manifestFormat;
         return existing.format_version ?? MANIFEST_FORMAT_VERSION;
@@ -249,10 +267,13 @@ export class ManifestBuilder {
         formatVersion: number
     ): ManifestVersion {
         if (existingValue === undefined || existingValue === null) {
-            return MIN_ENGINE_VERSION;
+            return formatVersion === 3 ? "1.21.0" : MIN_ENGINE_VERSION;
         }
 
         if (Array.isArray(existingValue)) {
+            if (formatVersion === 3) {
+                return existingValue.join(".");
+            }
             return existingValue as [number, number, number];
         }
 
@@ -266,7 +287,7 @@ export class ManifestBuilder {
             return existingValue;
         }
 
-        return MIN_ENGINE_VERSION;
+        return formatVersion === 3 ? "1.21.0" : MIN_ENGINE_VERSION;
     }
 
     // -----------------------------------------------------------------------

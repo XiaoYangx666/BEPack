@@ -24,23 +24,23 @@ function isStrict(value: unknown): value is [number, number, number] {
     );
 }
 
-function isLenient(value: unknown): boolean {
-    return isStrict(value) || (typeof value === "string" && /^\d+\.\d+\.\d+$/.test(value));
+function isStrictString(value: unknown): value is string {
+    return typeof value === "string" && /^\d+\.\d+\.\d+$/.test(value);
 }
 
 /**
  * 根据 format_version 选择校验函数：
  * - format 2 → 严格模式（仅数组）
- * - format 3 → 宽松模式（数组或 SemVer 字符串）
- * - 未知时按严格模式处理
+ * - format 3 → 严格字符串模式（仅 SemVer 字符串）
+ * - 未知时按 format 2 严格模式处理
  */
-function versionChecker(fv: number | undefined): typeof isLenient {
-    return fv === 3 ? isLenient : isStrict;
+function versionChecker(fv: number | undefined): (value: unknown) => boolean {
+    return fv === 3 ? isStrictString : isStrict;
 }
 
 function versionError(fv: number | undefined, field: string): string {
     return fv === 3
-        ? `${field} must be [number, number, number] or SemVer string (format 3)`
+        ? `${field} must be SemVer string like "x.y.z" (format 3)`
         : `${field} must be [number, number, number] (format 2)`;
 }
 
@@ -86,6 +86,22 @@ const RULES: ValidationRule[] = [
         const errs: string[] = [];
         if (kind === "bp" && !hasScript) errs.push("BP manifest must have a script module");
         if (kind === "rp" && !hasResources) errs.push("RP manifest must have a resources module");
+        return errs.length > 0 ? errs : null;
+    },
+
+    // Modules 版本格式
+    (m) => {
+        if (!Array.isArray(m.modules)) return null;
+        const check = versionChecker(m.format_version);
+        const errs: string[] = [];
+        for (let i = 0; i < m.modules.length; i++) {
+            const mod = m.modules[i];
+            if (mod && mod.version !== undefined && mod.version !== null && !check(mod.version)) {
+                errs.push(
+                    `modules[${i}] (uuid: ${mod.uuid ?? "unknown"}): ${versionError(m.format_version, "version")}`
+                );
+            }
+        }
         return errs.length > 0 ? errs : null;
     },
 
@@ -147,7 +163,7 @@ const RULES: ValidationRule[] = [
  *
  * format_version-aware:
  * - format 2: 所有版本字段必须为 [number, number, number] 数组
- * - format 3: 所有版本字段可以是数组或 SemVer 字符串 "x.y.z"
+ * - format 3: 所有版本字段必须为 SemVer 字符串 "x.y.z"
  */
 export function validateManifest(manifest: Manifest, kind: "bp" | "rp"): void {
     const errors: string[] = [];

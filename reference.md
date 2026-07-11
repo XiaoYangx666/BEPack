@@ -107,6 +107,7 @@ type UserConfig = {
     target?: string;
 
     /** Manifest format version: 2 (array versions, default) or 3 (SemVer string versions, Minecraft 1.21.110+ preview).
+     *  Format 3 requires ALL version fields to be strings — arrays are rejected.
      *  Not set = auto-preserve existing manifest's format_version. New manifests default to 2. */
     manifestFormat?: 2 | 3;
 
@@ -365,16 +366,20 @@ BePack 同时支持 `format_version 2` 和 `format_version 3`（Minecraft 1.21.1
 
 | 特性 | format 2 | format 3 |
 |------|----------|----------|
-| 版本格式 | 数组 `[1, 0, 0]` | 数组或 SemVer 字符串 `"1.0.0"` |
+| 版本格式 | 数组 `[1, 0, 0]` | SemVer 字符串 `"1.0.0"`（**不接受数组**） |
 | 自定义设置面板 | 不支持 | 支持（预览） |
-| 兼容性 | 高 | format 3 兼容 format 2 |
+| 兼容性 | 高 | **不兼容** format 2 的数组版本 |
+
+版本字段适用范围：`header.version`、`header.min_engine_version`、`modules[].version`、dependencies 中 uuid 依赖的 `version`。Script API 的 `module_name` 依赖始终为字符串，不受影响。
 
 **format 选择优先级**：
 1. 配置中显式设置 `manifestFormat: 2 | 3` → 强制使用
 2. 未设置时保留 existing manifest 的 `format_version`
 3. 全新 manifest 默认 `2`
 
-**注意**：format 2 不兼容 format 3 的字符串版本。如果配置强制使用 format 2 但 existing manifest 是 format 3，BePack 会给出降级警告。
+**注意**：
+- format 2 不兼容 format 3 的字符串版本。如果配置强制使用 format 2 但 existing manifest 是 format 3，BePack 会给出降级警告。
+- `bepack init --from-bp/--from-rp` 会自动检测 manifest 的 `format_version` 和 `header.version` 实际格式是否一致。如果不一致（如 format=3 但 version 是数组），会按照 format 2 处理并给出警告。
 
 BP 清单受控字段：
 
@@ -751,7 +756,7 @@ bepack init --from-bp ./bp/manifest.json --from-rp ./rp/manifest.json
 | 只传 BP | 顶层 `name`/`description` 设为 BP manifest 的值 |
 | 只传 RP | 同上 |
 | BP + RP 都传 | 顶层 `name`/`description` 从 BP 读取；同时分别设到 `packs.bp.name`/`packs.rp.name` |
-| format_version | 自动检测原 manifest 的 `format_version`，写入生成的配置的 `manifestFormat` 字段 |
+| format_version | 自动检测原 manifest 的 `format_version`，写入生成的配置的 `manifestFormat` 字段。如果 `format_version` 与 `header.version` 的实际格式不符（如 format=3 但 version 是数组），降级为 format 2 并警告 |
 | pack root | 根据 manifest 路径相对当前目录自动推导 |
 | UUID | 直接读取 manifest 中的值，不重新生成 |
 | 版本 | 从 manifest header 读取（支持数组 `[1,0,0]` 和字符串 `"1.0.0"`）。两个包版本不同时取最高者，并给出警告 |

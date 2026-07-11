@@ -16,6 +16,7 @@ export class ManifestDepManager {
     private readonly catalog: Record<string, DependencyCatalogEntry>;
     private readonly resolvedDeps: Record<string, string>;
     private readonly version: ManifestVersion;
+    private readonly versionStr: string;
 
     constructor(
         config: ResolvedConfig,
@@ -26,6 +27,7 @@ export class ManifestDepManager {
         this.catalog = catalog;
         this.resolvedDeps = resolvedDeps ?? {};
         this.version = parseVersionTuple(config.version);
+        this.versionStr = config.version;
     }
 
     // -----------------------------------------------------------------------
@@ -195,12 +197,19 @@ export class ManifestDepManager {
     // 依赖替换
     // -----------------------------------------------------------------------
 
+    /** 根据 formatVersion 返回 uuid 依赖的正确版本格式 */
+    private getFormatAwareVersion(formatVersion?: number): ManifestVersion {
+        const fv = formatVersion ?? this.config.manifestFormat ?? 2;
+        return fv === 3 ? this.versionStr : this.version;
+    }
+
     /**
      * 替换 BP 依赖：保留用户手写依赖 + 插入管理依赖 + RP UUID 交叉引用。
      */
     replaceBpDependencies(
         existingDeps: ManifestDependency[] | undefined,
-        rpUuid: string | undefined
+        rpUuid: string | undefined,
+        formatVersion?: number
     ): ManifestDependency[] {
         const existing = asArray<ManifestDependency>(existingDeps);
 
@@ -212,7 +221,7 @@ export class ManifestDepManager {
         if (rpUuid) {
             nextManaged.push({
                 uuid: rpUuid,
-                version: this.version,
+                version: this.getFormatAwareVersion(formatVersion),
             });
         }
 
@@ -224,7 +233,8 @@ export class ManifestDepManager {
      */
     replaceRpDependencies(
         existingDeps: ManifestDependency[] | undefined,
-        bpUuid: string
+        bpUuid: string,
+        formatVersion?: number
     ): ManifestDependency[] {
         const existing = asArray<ManifestDependency>(existingDeps);
 
@@ -235,7 +245,7 @@ export class ManifestDepManager {
             ...userDeps,
             {
                 uuid: bpUuid,
-                version: this.version,
+                version: this.getFormatAwareVersion(formatVersion),
             },
         ];
     }

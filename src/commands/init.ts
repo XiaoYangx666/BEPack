@@ -116,6 +116,9 @@ async function initFromManifests(
     // Detect format_version from the first available manifest
     let detectedFormatVersion: number | undefined;
 
+    // Track if format_version doesn't match actual version format
+    let versionFormatMismatch = false;
+
     // name/description rules:
     // - only one pack → set top-level, no per-pack name
     // - both packs    → set top-level from BP, plus per-pack name
@@ -138,6 +141,15 @@ async function initFromManifests(
             );
         }
         detectedFormatVersion ??= manifest.format_version;
+        // Check format_version vs actual header.version format
+        if (manifest.format_version !== undefined && manifest.header?.version !== undefined) {
+            if (
+                (manifest.format_version === 3 && Array.isArray(manifest.header.version)) ||
+                (manifest.format_version === 2 && typeof manifest.header.version === "string")
+            ) {
+                versionFormatMismatch = true;
+            }
+        }
         const header = ManifestReader.validateHeader(manifest, "BP");
         // Script module is optional — data-only BP may not have one.
         // If found, enable compile + moduleUuid.
@@ -169,6 +181,15 @@ async function initFromManifests(
             );
         }
         detectedFormatVersion ??= manifest.format_version;
+        // Check format_version vs actual header.version format
+        if (manifest.format_version !== undefined && manifest.header?.version !== undefined) {
+            if (
+                (manifest.format_version === 3 && Array.isArray(manifest.header.version)) ||
+                (manifest.format_version === 2 && typeof manifest.header.version === "string")
+            ) {
+                versionFormatMismatch = true;
+            }
+        }
         const header = ManifestReader.validateHeader(manifest, "RP");
         const moduleUuid = ManifestReader.findResourcesModuleUuid(manifest);
         if (!moduleUuid) {
@@ -218,6 +239,15 @@ async function initFromManifests(
                 `BP version (${v0}) and RP version (${v1}) differ. Using ${resolvedVersion}.`
             );
         }
+    }
+
+    // If format_version doesn't match actual version format, fall back to format 2
+    if (versionFormatMismatch) {
+        logger.warn(
+            `Detected format_version ${detectedFormatVersion} doesn't match the actual version format ` +
+            `used in manifest. Falling back to format_version 2.`
+        );
+        detectedFormatVersion = 2;
     }
 
     // Build config object

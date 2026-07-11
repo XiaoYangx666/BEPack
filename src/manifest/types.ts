@@ -1,7 +1,7 @@
 /** manifest.json 版本号格式：
  * - format_version 2: [主版本, 次版本, 修订号] 数组
- * - format_version 3: "主版本.次版本.修订号" 字符串（SemVer）
- * format 3 兼容 format 2，数组格式在两种格式下都支持。
+ * - format_version 3: "主版本.次版本.修订号" 字符串（SemVer，不允许数组）
+ * format 3 不兼容 format 2 的数组格式，所有版本字段必须为字符串。
  */
 export type ManifestVersion = [number, number, number] | string;
 

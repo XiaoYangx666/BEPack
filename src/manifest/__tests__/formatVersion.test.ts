@@ -171,14 +171,14 @@ describe("ManifestBuilder min_engine_version 处理", () => {
         expect(manifest.header!.min_engine_version).toBe("1.26.30");
     });
 
-    it("config.manifestFormat=3 也保留数组", () => {
+    it("config.manifestFormat=3 将数组 min_engine_version 转为字符串", () => {
         const builder = createBuilder(baseConfig({ manifestFormat: 3 }));
         const manifest = builder.buildBp({
             format_version: 2,
             header: { min_engine_version: [1, 20, 0] as ManifestVersion },
         } as Manifest);
-        // format 3 接受数组 → 保留原样
-        expect(manifest.header!.min_engine_version).toEqual([1, 20, 0]);
+        // format 3 需要字符串 → 数组自动转为字符串
+        expect(manifest.header!.min_engine_version).toBe("1.20.0");
     });
 });
 
@@ -198,6 +198,16 @@ describe("validateManifest format-aware 校验", () => {
             language: "javascript",
             uuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
             version: [1, 0, 0] as ManifestVersion,
+            entry: "main.js",
+        },
+    ];
+
+    const validModulesFmt3 = [
+        {
+            type: "script",
+            language: "javascript",
+            uuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            version: "1.0.0",
             entry: "main.js",
         },
     ];
@@ -233,31 +243,35 @@ describe("validateManifest format-aware 校验", () => {
         );
     });
 
-    it("format 3 + 数组版本 → 通过", () => {
+    it("format 3 + 数组版本 → 拒绝", () => {
         const manifest: Manifest = {
             format_version: 3,
             header: { ...validHeader, version: [1, 0, 0], min_engine_version: [1, 21, 0] },
-            modules: validModules,
+            modules: validModulesFmt3,
         };
-        expect(() => validateManifest(manifest, "bp")).not.toThrow();
+        expect(() => validateManifest(manifest, "bp")).toThrow(
+            'header.version must be SemVer string like "x.y.z" (format 3)'
+        );
     });
 
     it("format 3 + 字符串版本 → 通过", () => {
         const manifest: Manifest = {
             format_version: 3,
             header: { ...validHeader, version: "1.0.0", min_engine_version: "1.21.0" },
-            modules: validModules,
+            modules: validModulesFmt3,
         };
         expect(() => validateManifest(manifest, "bp")).not.toThrow();
     });
 
-    it("format 3 + 混合（数组 version + 字符串 min_engine）→ 通过", () => {
+    it("format 3 + 混合（数组 version + 字符串 min_engine）→ 拒绝", () => {
         const manifest: Manifest = {
             format_version: 3,
             header: { ...validHeader, version: [1, 0, 0], min_engine_version: "1.21.0" },
-            modules: validModules,
+            modules: validModulesFmt3,
         };
-        expect(() => validateManifest(manifest, "bp")).not.toThrow();
+        expect(() => validateManifest(manifest, "bp")).toThrow(
+            'header.version must be SemVer string like "x.y.z" (format 3)'
+        );
     });
 
     it("format 2 + uuid dep 字符串版本 → 拒绝", () => {
@@ -275,21 +289,23 @@ describe("validateManifest format-aware 校验", () => {
     it("format 3 + uuid dep 字符串版本 → 通过", () => {
         const manifest: Manifest = {
             format_version: 3,
-            header: { ...validHeader, version: [1, 0, 0], min_engine_version: [1, 21, 0] },
-            modules: validModules,
+            header: { ...validHeader, version: "1.0.0", min_engine_version: "1.21.0" },
+            modules: validModulesFmt3,
             dependencies: [{ uuid: "c", version: "1.0.0" }],
         };
         expect(() => validateManifest(manifest, "bp")).not.toThrow();
     });
 
-    it("format 3 + uuid dep 数组版本 → 通过", () => {
+    it("format 3 + uuid dep 数组版本 → 拒绝", () => {
         const manifest: Manifest = {
             format_version: 3,
-            header: { ...validHeader, version: [1, 0, 0], min_engine_version: [1, 21, 0] },
-            modules: validModules,
+            header: { ...validHeader, version: "1.0.0", min_engine_version: "1.21.0" },
+            modules: validModulesFmt3,
             dependencies: [{ uuid: "c", version: [1, 0, 0] as ManifestVersion }],
         };
-        expect(() => validateManifest(manifest, "bp")).not.toThrow();
+        expect(() => validateManifest(manifest, "bp")).toThrow(
+            'version must be SemVer string like "x.y.z" (format 3)'
+        );
     });
 
     it("format 无值时按 strict（format 2 规则）校验", () => {
