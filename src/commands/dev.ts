@@ -54,7 +54,7 @@ export async function commandDev(options: any) {
     logger.done("dev", `initial build complete in ${logger.formatDuration(Date.now() - start)}`);
     watchProject(cwd, config, logger, {
         copy,
-        copyTarget,
+        ...(copyTarget ? { copyTarget } : {}),
         typecheck: Boolean(typecheck),
         cache,
         dryRun,
