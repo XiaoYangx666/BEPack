@@ -38,14 +38,14 @@ export default defineConfig({
     name: "my-addon",
     version: "1.0.0",
     target: "latest",
-    build: {
-        entry: "src/main.ts",
-    },
     packs: {
         bp: {
             root: "bp",
             uuid: "00000000-0000-0000-0000-000000000001",
             moduleUuid: "00000000-0000-0000-0000-000000000002",
+            compile: {
+                entry: "src/main.ts",
+            },
             dependencies: {
                 "@minecraft/server": "stable",
             },
@@ -89,14 +89,16 @@ bepack pack --name release
 
 - `name` is required and is used for pack output names and manifest defaults.
 - `description` is optional. If omitted, BePack will not overwrite existing manifest descriptions.
-- `packs.bp` is required.
-- `packs.rp` is optional. When present, `bepack pack` creates a `.mcaddon`.
-- `build` clears `<packs.bp.root>/scripts` before writing new output.
+- At least one pack (`packs.bp` or `packs.rp`) is required. BP-only, RP-only, and BP+RP projects are all supported.
+- BP compilation config (entry, typecheck, bundler options) goes in `packs.bp.compile`. Without it, `build` and `dev` skip TypeScript compilation.
+- `packs.bp.moduleUuid` is optional — only needed when `compile` is configured (to manage the script module). Data-only BPs can omit it.
+- `packs.rp.moduleUuid` is required (always needs a resources module).
+- `build` clears `<packs.bp.root>/scripts` before writing new output (only when compile is configured).
 - **All BP dependencies go in `packs.bp.dependencies`**, including both manifest dependencies (e.g. `@minecraft/server`) and code-only dependencies (e.g. `@minecraft/vanilla-data`). The catalog controls whether each package is written to manifest and/or package.json.
-- Managed dependency catalog packages with `manifest: true` are externalized during build by default. Packages with `manifest: false` (e.g. `@minecraft/vanilla-data`) can be bundled. Use `build.external` and `build.externalDependencies` to customize bundling.
+- Managed dependency catalog packages with `manifest: true` are externalized during build by default. Packages with `manifest: false` (e.g. `@minecraft/vanilla-data`) can be bundled. Use `packs.bp.compile.external` and `packs.bp.compile.externalDependencies` to customize bundling.
 - Use `bepack install` or `bepack build --install` to resolve `stable`, `beta`, or `preview` specifiers to concrete npm versions.
 - `manifestFormat: 2 | 3` controls manifest output format. `2` uses array versions `[1,0,0]`; `3` uses SemVer strings `"1.0.0"` (Minecraft 1.21.110+). Not set = auto-preserve from existing manifest, default 2 for new ones.
-- `packs.bp.include` adds extra files/folders for copy and pack (replaces `copy.include.bp`). BP is always selective.
+- `packs.bp.include` / `packs.rp.include` adds extra files/folders for copy and pack. BP is always selective; RP is selective when include items are configured, otherwise full directory.
 - `bepack dev --skip-typecheck` skips type checking on dev rebuilds.
 
 For the full configuration reference and implementation notes, see [README.reference.md](./README.reference.md).

@@ -66,15 +66,14 @@ export default defineConfig({
     root: ".",
     target: "latest",
 
-    build: {
-        entry: "src/main.ts",
-    },
-
     packs: {
         bp: {
             root: "bp",
             uuid: "00000000-0000-0000-0000-000000000001",
             moduleUuid: "00000000-0000-0000-0000-000000000002",
+            compile: {
+                entry: "src/main.ts",
+            },
             dependencies: {
                 "@minecraft/server": "stable",
             },
@@ -111,15 +110,9 @@ type UserConfig = {
      *  Not set = auto-preserve existing manifest's format_version. New manifests default to 2. */
     manifestFormat?: 2 | 3;
 
+    /** 编译配置移至 packs.bp.compile。顶层 build 只保留命令行为配置。 */
     build?: {
-        entry?: string;
-        typecheck?: boolean;
-        useNpx?: boolean;
-        preserveModules?: boolean;
-        external?: (string | RegExp)[];
-        externalDependencies?: boolean;
         copy?: false | true | string;
-        minify?: boolean;
         timing?: boolean;
     };
 
@@ -127,7 +120,18 @@ type UserConfig = {
         bp?: {
             root?: string;
             uuid: string;
-            moduleUuid: string;
+            /** BP 的 moduleUuid 可选。只有配置了 compile 时才需要（用来管理 script 模块）。 */
+            moduleUuid?: string;
+            /** BP 编译配置（入口、TypeScript 检查、Rolldown 选项）。 */
+            compile?: {
+                entry: string;
+                tsconfig?: string;
+                typecheck?: boolean;
+                preserveModules?: boolean;
+                external?: (string | RegExp)[];
+                useNpx?: boolean;
+                minify?: boolean;
+            };
             /** 所有 BP 依赖都在此声明——包括清单依赖和纯代码依赖。 */
             dependencies?: Record<string, "stable" | "beta" | "preview" | string>;
             achievement?: boolean;
@@ -140,6 +144,8 @@ type UserConfig = {
             uuid: string;
             moduleUuid: string;
             pbr?: boolean;
+            /** 额外的打包/复制文件列表。 */
+            include?: string[];
         };
     };
 
@@ -180,19 +186,21 @@ type UserConfig = {
 路径约定：
 
 - `root` 为项目根目录。
-- `build.entry` 为 Script API TypeScript 入口文件。
+- `packs.bp.compile.entry` 为 Script API TypeScript 入口文件（仅 BP 配置了 compile 时）。
 - `packs.bp.root` 为行为包根目录。
 - `packs.rp.root` 为资源包根目录。
 - `pack.outDir` 为 `.mcpack` / `.mcaddon` 的输出目录。
 
-对于 `bepack pack`，这些字段必须显式配置，且输入路径必须存在：
+对于 `bepack pack`，以下字段必须显式配置，且输入路径必须存在：
 
 ```txt
-build.entry
-packs.bp.root
+packs.bp.root（如果配置了 BP）
 packs.rp.root（如果配置了 RP）
 pack.outDir
 ```
+
+> 注意：`bepack pack` 不再校验编译入口（`packs.bp.compile.entry`），
+> 也不要求 BP 存在。仅 RP 项目也可以打包为 `.mcpack`。
 
 ## 依赖安装与解析
 
@@ -425,15 +433,17 @@ hooks.afterBuild
 
 Rolldown 行为：
 
-- 默认 `preserveModules: true`。
+- 默认 `preserveModules: true`（在 `packs.bp.compile.preserveModules` 中配置）。
 - 输出到 `<packs.bp.root>/scripts`。
 - 每次构建前会清空 `<packs.bp.root>/scripts` 目录。
-- `build.entry` 控制输入文件。
-- 外部包来自 `build.external`，默认情况下也来自受管理的依赖目录。
-- `build.minify: true` 或 `--minify` 启用 Rolldown 代码压缩，输出更小的 JS 文件。
+- `packs.bp.compile.entry` 控制输入文件。
+- 外部包来自 `packs.bp.compile.external`，默认情况下也来自受管理的依赖目录。
+- `packs.bp.compile.minify: true` 或 `--minify` 启用 Rolldown 代码压缩，输出更小的 JS 文件。
 - 构建完成后显示输出文件的大小统计（单文件显示路径和体积，多文件显示总文件数和总体积）。
 
-`build.externalDependencies` 默认为 `true`，因此内置的 `manifest: true` 受管理包（例如 `@minecraft/server`、`@minecraft/server-ui`、`@minecraft/server-net`）不会被内联打包。`manifest: false` 的包（例如 `@minecraft/vanilla-data`）可以被内联打包。设置 `externalDependencies` 为 `false` 可自定义，或通过 `build.external` 添加额外条目。
+> 注意：构建命令（`build` / `dev`）不再要求 BP 必须存在。如果项目只有 RP 或 BP 没有配置 `compile`，则跳过编译流程，只执行 manifest 修补和可选的文件复制/打包。
+
+`packs.bp.compile.externalDependencies` 默认为 `true`，因此内置的 `manifest: true` 受管理包（例如 `@minecraft/server`、`@minecraft/server-ui`、`@minecraft/server-net`）不会被内联打包。`manifest: false` 的包（例如 `@minecraft/vanilla-data`）可以被内联打包。设置 `externalDependencies` 为 `false` 可自定义，或通过 `packs.bp.compile.external` 添加额外条目。
 
 `build.timing: true` 或 `--timing` 可在构建时显示各步骤的耗时明细，便于排查性能瓶颈：
 
@@ -449,12 +459,12 @@ timing    rolldown        45 ms
 
 `bepack dev`：
 
-- 在监视前先执行一次初始构建。
+- 在监视前先执行一次初始构建（manifest + 若有 compile 则编译）。
 - 支持 `--skip-typecheck` 跳过类型检查（与 `build` 命令一致）。
 - 默认监视的路径：
-    - `build.entry` 目录（TypeScript 源码变化 → 触发 rolldown 重构建）
+    - `packs.bp.compile.entry` 所在目录（仅在 BP 配置了 compile 时，TypeScript 源码变化 → 触发编译）
     - BP 的默认 include 列表 + `packs.bp.include` 中的文件/文件夹（不含 `scripts` 和 `manifest.json`）
-    - RP 的 include 列表中的文件/文件夹（如果配置了 `copy.include.rp`），否则监视整个 RP 目录
+    - RP 的 include 列表中的文件/文件夹（如果配置了 `packs.rp.include`），否则监视整个 RP 目录
 - 可通过 `dev.watch.include` 添加额外监听路径。
 - 忽略以下目录：
     - `node_modules`
@@ -593,13 +603,13 @@ packs: {
 }
 ```
 
-RP 默认复制整个目录。可以通过 `copy.include.rp` 添加额外的文件/文件夹——一旦设置，RP 也变为选择性复制模式：
+RP 的额外文件/文件夹通过 `packs.rp.include` 配置——一旦设置，RP 也变为选择性复制模式：
 
 ```ts
-copy: {
-    defaultTarget: "server",
-    include: {
-        rp: ["textures", "sounds", "models"],
+packs: {
+    rp: {
+        root: "rp",
+        include: ["textures", "sounds", "models"],  // 额外复制/打包
     },
 }
 ```
@@ -635,7 +645,7 @@ dev: {
 
 **BP 始终使用选择性打包**：只打包默认 include 列表（`scripts`、`manifest.json`、`animation_controllers` 等）和 `packs.bp.include` 中配置的额外文件。即使 `bp.root = "."`（项目根目录即行为包），也不会将整个项目打包进去。
 
-RP 默认打包整个目录；如果配置了 `copy.include.rp`，则改用选择性打包。
+RP 默认打包整个目录；如果配置了 `packs.rp.include`，则改用选择性打包。
 
 输出文件名默认为：
 

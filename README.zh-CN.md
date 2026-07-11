@@ -38,14 +38,14 @@ export default defineConfig({
     name: "my-addon",
     version: "1.0.0",
     target: "latest",
-    build: {
-        entry: "src/main.ts",
-    },
     packs: {
         bp: {
             root: "bp",
             uuid: "00000000-0000-0000-0000-000000000001",
             moduleUuid: "00000000-0000-0000-0000-000000000002",
+            compile: {
+                entry: "src/main.ts",
+            },
             dependencies: {
                 "@minecraft/server": "stable",
             },
@@ -89,14 +89,16 @@ bepack pack --name release
 
 - `name` 必填，用于输出文件名和 manifest 默认名称。
 - `description` 可选；不写时 BePack 不会覆盖已有 manifest 的 description。
-- `packs.bp` 必填。
-- `packs.rp` 可选；配置后 `bepack pack` 会输出 `.mcaddon`。
-- `build` 每次写入前会清空 `<packs.bp.root>/scripts`。
+- 至少配置一个 Pack（`packs.bp` 或 `packs.rp`），支持仅 BP、仅 RP、BP+RP 三种项目形态。
+- BP 编译配置（入口、类型检查、打包选项）放在 `packs.bp.compile` 中；未配置时 `build` 和 `dev` 跳过 TypeScript 编译。
+- `packs.bp.moduleUuid` 可选——仅在配置了 `compile` 时需要（用来管理 script 模块）。纯数据 BP 可省略。
+- `packs.rp.moduleUuid` 必填（始终需要 resources 模块）。
+- `build` 仅在配置了 compile 时，会清空 `<packs.bp.root>/scripts` 后写入新文件。
 - **所有 BP 依赖统一声明在 `packs.bp.dependencies`**，包括写入 manifest 的（如 `@minecraft/server`）和仅代码使用的（如 `@minecraft/vanilla-data`）。catalog 控制每个包是否写入 manifest 和/或 package.json。
-- 托管包中 `manifest: true` 的默认会在构建时 external，`manifest: false`（如 `@minecraft/vanilla-data`）可以被打进 bundle。可通过 `build.external` 和 `build.externalDependencies` 调整。
+- 托管包中 `manifest: true` 的默认会在构建时 external，`manifest: false`（如 `@minecraft/vanilla-data`）可以被打进 bundle。可通过 `packs.bp.compile.external` 和 `packs.bp.compile.externalDependencies` 调整。
 - 使用 `stable`、`beta` 或 `preview` 作为 specifier 时，请先运行 `bepack install` 或使用 `bepack build --install` 解析为具体 npm 版本。
 - `manifestFormat: 2 | 3` 控制 manifest 输出格式。`2` 使用数组版本 `[1,0,0]`；`3` 使用 SemVer 字符串 `"1.0.0"`（Minecraft 1.21.110+）。不设置时自动保留现有 manifest 的格式，新项目默认 2。
-- `packs.bp.include` 配置 BP 额外的打包/复制文件列表（取代 `copy.include.bp`）。BP 始终使用选择性打包。
+- `packs.bp.include` / `packs.rp.include` 配置各自 Pack 的额外打包/复制文件列表。BP 始终选择性打包；RP 配置了 include 时选择性打包，否则全目录。
 - `bepack dev --skip-typecheck` 可在开发模式跳过类型检查。
 
 完整配置参考和实现说明见 [README.reference.md](./README.reference.md)。
