@@ -88,6 +88,7 @@ common(cli.command("dev", "Watch project"))
     .option("--copy", "Copy on change")
     .option("--copy-target <target>", "Copy target")
     .option("--skip-copy", "Skip copy")
+    .option("--typecheck", "Run typecheck")
     .option("--skip-typecheck", "Skip typecheck")
     .option("--timing", "Show per-step timing")
     .action((options: any) => run("dev", commandDev, options));
