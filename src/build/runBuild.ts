@@ -4,12 +4,13 @@ import { runTypecheck } from "./runTypecheck.js";
 import { runRolldown } from "./runRolldown.js";
 import { runHook } from "../hooks/runHook.js";
 import type { Logger } from "../logger/logger.js";
-import { projectRoot, slash } from "../utils/path.js";
+import { projectRoot, slash, hasBpCompile } from "../utils/path.js";
 
 export type RunBuildOptions = {
     cwd: string;
     config: ResolvedConfig;
     logger: Logger;
+    /** Force typecheck (overrides config). Default: config.packs.bp.compile.typecheck */
     typecheck?: boolean;
     dryRun?: boolean;
     quiet?: boolean;
@@ -32,6 +33,9 @@ export async function runBuild(options: RunBuildOptions) {
     const start = Date.now();
     const timing = options.config.build.timing;
     const root = projectRoot(options.cwd, options.config);
+    const compile = hasBpCompile(options.config);
+
+    // Phase 1: Manifest patching (for all configured packs)
     await timed(
         "manifest",
         () =>
@@ -45,35 +49,55 @@ export async function runBuild(options: RunBuildOptions) {
         options.logger,
         timing
     );
-    options.logger.manifest("manifest.json updated");
+    const patchedPacks: string[] = [];
+    if (options.config.packs.bp) patchedPacks.push("bp");
+    if (options.config.packs.rp) patchedPacks.push("rp");
+    options.logger.manifest(
+        `manifest.json updated (${patchedPacks.join(", ")})`
+    );
+
+    // Phase 2: Compilation (only when BP has compile config)
     await runHook("beforeBuild", "build", options.cwd, options.config, options.logger);
-    if (!options.dryRun && options.typecheck !== false)
+
+    let typecheckRan = false;
+    if (compile && !options.dryRun && options.typecheck !== false) {
+        const compileConfig = options.config.packs.bp!.compile!;
         await timed(
             "typecheck",
             () =>
                 runTypecheck(root, {
                     quiet: Boolean(options.quiet),
-                    useNpx: options.config.build.useNpx,
+                    useNpx: compileConfig.useNpx,
                 }),
             options.logger,
             timing
         );
-    if (options.typecheck !== false) options.logger.typescript("typecheck complete");
-    if (!options.dryRun)
+        typecheckRan = true;
+        options.logger.typescript("typecheck complete");
+    }
+
+    if (compile && !options.dryRun) {
         await timed(
             "rolldown",
             () => runRolldown(options.cwd, options.config, options.logger),
             options.logger,
             timing
         );
-    options.logger.rolldown(
-        options.config.build.preserveModules ? "preserve modules build complete" : "bundle complete"
-    );
+        options.logger.rolldown(
+            options.config.packs.bp!.compile!.preserveModules
+                ? "preserve modules build complete"
+                : "bundle complete"
+        );
+    }
+
     await runHook("afterBuild", "build", options.cwd, options.config, options.logger);
     const durationMs = Date.now() - start;
     return {
-        script: slash(`${options.config.packs.bp.root}/scripts/main.js`),
-        typecheck: options.typecheck !== false,
+        script: compile
+            ? slash(`${options.config.packs.bp!.root}/scripts/main.js`)
+            : undefined,
+        compiled: compile,
+        typecheck: typecheckRan,
         durationMs,
     };
 }

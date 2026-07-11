@@ -10,9 +10,6 @@ import type { ManifestDependency, ManifestVersion } from "./types.js";
  * - 识别（哪些 dep 是 BePack 管理的）
  * - 构建（将 config 中的依赖 specifier 转为 manifest 格式）
  * - 替换（合并用户手写依赖与 BePack 管理依赖）
- *
- * 三个纯函数（isAllowedSpecifier / resolveVersion / isAchievementCompatible）
- * 作为静态方法暴露，方便测试直接调用。
  */
 export class ManifestDepManager {
     private readonly config: ResolvedConfig;
@@ -49,11 +46,6 @@ export class ManifestDepManager {
 
     /**
      * 将依赖 specifier 解析为写入 manifest.json 的具体版本字符串。
-     *
-     * - `stable`: 需要已解析版本（来自 install）。
-     * - `beta`:  现代 target 返回 "beta"，否则回退到已解析版本。
-     * - `preview`: 需要已解析版本。
-     * - 具体版本: 原样返回。
      */
     static resolveVersion(options: {
         specifier: string;
@@ -96,7 +88,6 @@ export class ManifestDepManager {
 
     /**
      * 检查 specifier 是否与 achievement 模式兼容。
-     * achievement 模式只允许 stable 和具体版本，不允许 beta/preview。
      */
     static isAchievementCompatible(specifier: string): boolean {
         return specifier !== "beta" && specifier !== "preview";
@@ -108,6 +99,8 @@ export class ManifestDepManager {
 
     /** 校验 config 中声明的 BP 依赖是否合法。 */
     validateBpDependencies(): void {
+        if (!this.config.packs.bp) return;
+
         for (const [name, specifier] of Object.entries(this.config.packs.bp.dependencies)) {
             if (!this.catalog[name]) {
                 throw new BePackError(
@@ -143,7 +136,6 @@ export class ManifestDepManager {
 
     /**
      * 判断 dependency 是否为 BePack 管理的 BP 依赖。
-     * 包括 catalog 中 manifest=true 的 module_name 依赖和 RP UUID 依赖。
      */
     isManagedBpDependency(dep: ManifestDependency): boolean {
         if (
@@ -178,6 +170,8 @@ export class ManifestDepManager {
 
     /** 构建 catalog 中 manifest=true 的 module_name 依赖列表。 */
     private buildManagedDependencies(): ManifestDependency[] {
+        if (!this.config.packs.bp) return [];
+
         const deps: ManifestDependency[] = [];
 
         for (const [name, specifier] of Object.entries(this.config.packs.bp.dependencies)) {

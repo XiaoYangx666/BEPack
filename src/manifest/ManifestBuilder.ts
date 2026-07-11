@@ -25,13 +25,6 @@ import type {
  *
  * 构造时预计算 version tuple，构建 BP/RP manifest 时无需再层层传递 config 参数。
  * 同一实例可同时用于 buildBp 和 buildRp。
- *
- * format_version 处理规则：
- * - 用户配置 manifestFormat 时，优先使用配置值
- * - 未配置时，保留 existing manifest 的 format_version
- * - 全新 manifest（无 existing）默认使用 2
- * - format 3 兼容 format 2：数组版本在两种格式下都合法
- * - format 2 不兼容 format 3：遇到字符串版本会自动转为数组
  */
 export class ManifestBuilder {
     private readonly config: ResolvedConfig;
@@ -51,8 +44,10 @@ export class ManifestBuilder {
     /**
      * 构建（或重建）BP manifest。
      * 纯函数——不会修改传入的 existingValue。
+     * 调用前应确保 config.packs.bp 已配置。
      */
     buildBp(existingValue?: unknown): Manifest {
+        const bp = this.requireBp();
         const existing = normalizeManifest(existingValue);
         this.depManager.validateBpDependencies();
 
@@ -61,21 +56,26 @@ export class ManifestBuilder {
         const manifest: Manifest = {
             ...existing,
             format_version: effectiveFormat,
-            header: this.buildBpHeader(existing, effectiveFormat),
-            modules: this.replaceManagedBpModules(existing.modules),
+            header: this.buildBpHeader(existing, bp, effectiveFormat),
+            ...(bp.moduleUuid
+                ? { modules: this.replaceManagedBpModules(existing.modules, bp) }
+                : existing.modules
+                  ? { modules: existing.modules }
+                  : {}),
             dependencies: this.depManager.replaceBpDependencies(
                 existing.dependencies,
                 this.config.packs.rp?.uuid
             ),
         };
 
-        this.applyAchievementMetadata(manifest);
+        this.applyAchievementMetadata(manifest, bp);
         return manifest;
     }
 
     /**
      * 构建（或重建）RP manifest。
      * 纯函数——不会修改传入的 existingValue。
+     * 调用前应确保 config.packs.rp 已配置。
      */
     buildRp(existingValue?: unknown): Manifest {
         const rp = this.requireRp();
@@ -87,10 +87,10 @@ export class ManifestBuilder {
             ...existing,
             format_version: effectiveFormat,
             header: this.buildRpHeader(existing, rp, effectiveFormat),
-            modules: this.replaceManagedRpModules(existing.modules),
+            modules: this.replaceManagedRpModules(existing.modules, rp),
             dependencies: this.depManager.replaceRpDependencies(
                 existing.dependencies,
-                this.config.packs.bp.uuid
+                this.config.packs.bp?.uuid ?? ""
             ),
         };
 
@@ -102,14 +102,18 @@ export class ManifestBuilder {
     // Header 构建
     // -----------------------------------------------------------------------
 
-    private buildBpHeader(existing: Manifest, formatVersion: number): ManifestHeader {
+    private buildBpHeader(
+        existing: Manifest,
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>,
+        formatVersion: number
+    ): ManifestHeader {
         return {
             ...(existing.header ?? {}),
-            name: this.config.packs.bp.name,
-            ...(this.config.packs.bp.description !== undefined
-                ? { description: this.config.packs.bp.description }
+            name: bp.name,
+            ...(bp.description !== undefined
+                ? { description: bp.description }
                 : {}),
-            uuid: this.config.packs.bp.uuid,
+            uuid: bp.uuid,
             version: this.version,
             min_engine_version: this.normalizeMinEngineVersion(
                 existing.header?.min_engine_version,
@@ -140,59 +144,73 @@ export class ManifestBuilder {
     // Module 管理
     // -----------------------------------------------------------------------
 
-    private isManagedBpModule(module: ManifestModule): boolean {
+    private isManagedBpModule(
+        module: ManifestModule,
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>
+    ): boolean {
         if (module.type !== "script" || module.language !== "javascript") return false;
-        return module.uuid === this.config.packs.bp.moduleUuid || module.entry === SCRIPT_ENTRY;
+        return module.uuid === bp.moduleUuid || module.entry === SCRIPT_ENTRY;
     }
 
-    private isManagedRpModule(module: ManifestModule): boolean {
+    private isManagedRpModule(
+        module: ManifestModule,
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>
+    ): boolean {
         if (module.type !== "resources") return false;
-        if (!this.config.packs.rp) return false;
-        return module.uuid === this.config.packs.rp.moduleUuid;
+        return module.uuid === rp.moduleUuid;
     }
 
-    private createScriptModule(): ManifestScriptModule {
+    private createScriptModule(
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>
+    ): ManifestScriptModule {
         return {
             type: "script",
             language: "javascript",
-            uuid: this.config.packs.bp.moduleUuid,
+            uuid: bp.moduleUuid!,
             version: MODULE_VERSION,
             entry: SCRIPT_ENTRY,
         };
     }
 
-    private createResourcesModule(): ManifestResourcesModule {
+    private createResourcesModule(
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>
+    ): ManifestResourcesModule {
         return {
             type: "resources",
-            uuid: this.requireRp().moduleUuid,
+            uuid: rp.moduleUuid,
             version: MODULE_VERSION,
         };
     }
 
     private replaceManagedBpModules(
-        existingModules: ManifestModule[] | undefined
+        existingModules: ManifestModule[] | undefined,
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>
     ): ManifestModule[] {
         const existing = asArray<ManifestModule>(existingModules);
-        const userModules = existing.filter((m) => !this.isManagedBpModule(m));
-        return [...userModules, this.createScriptModule()];
+        const userModules = existing.filter((m) => !this.isManagedBpModule(m, bp));
+        return [...userModules, this.createScriptModule(bp)];
     }
 
     private replaceManagedRpModules(
-        existingModules: ManifestModule[] | undefined
+        existingModules: ManifestModule[] | undefined,
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>
     ): ManifestModule[] {
         const existing = asArray<ManifestModule>(existingModules);
-        const userModules = existing.filter((m) => !this.isManagedRpModule(m));
-        return [...userModules, this.createResourcesModule()];
+        const userModules = existing.filter((m) => !this.isManagedRpModule(m, rp));
+        return [...userModules, this.createResourcesModule(rp)];
     }
 
     // -----------------------------------------------------------------------
     // Achievement / PBR
     // -----------------------------------------------------------------------
 
-    private applyAchievementMetadata(manifest: Manifest): void {
-        if (this.config.packs.bp.achievement === true) {
+    private applyAchievementMetadata(
+        manifest: Manifest,
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>
+    ): void {
+        if (bp.achievement === true) {
             manifest.metadata = { ...(manifest.metadata ?? {}), product_type: "addon" };
-        } else if (this.config.packs.bp.achievement === false && manifest.metadata) {
+        } else if (bp.achievement === false && manifest.metadata) {
             const meta = { ...manifest.metadata };
             delete meta.product_type;
             const cleaned = removeEmptyObject(meta);
@@ -221,58 +239,49 @@ export class ManifestBuilder {
     // Format version 处理
     // -----------------------------------------------------------------------
 
-    /**
-     * 确定写入 manifest 时使用的 format_version。
-     * 优先级：配置 > existing > 默认值 2
-     */
     private getWriteFormatVersion(existing: Manifest): number {
         if (this.config.manifestFormat !== undefined) return this.config.manifestFormat;
         return existing.format_version ?? MANIFEST_FORMAT_VERSION;
     }
 
-    /**
-     * 处理 min_engine_version：
-     * - 优先保留 existing 的值
-     * - existing 无值时使用默认值 MIN_ENGINE_VERSION
-     *
-     * format 兼容：
-     * - format 2：字符串版本 "x.y.z" 自动转为 [x, y, z] 数组
-     * - format 3：保留字符串版本不变（同时数组也可接受）
-     */
     private normalizeMinEngineVersion(
         existingValue: unknown,
         formatVersion: number
     ): ManifestVersion {
-        // 无 existing 值 → 使用默认值
         if (existingValue === undefined || existingValue === null) {
             return MIN_ENGINE_VERSION;
         }
 
-        // existing 值是数组 → 直接保留（两种格式都兼容）
         if (Array.isArray(existingValue)) {
             return existingValue as [number, number, number];
         }
 
-        // existing 值是字符串
         if (typeof existingValue === "string") {
             if (formatVersion === 2) {
-                // format 2 要求数组 → 自动转 "x.y.z" -> [x, y, z]
                 const parts = existingValue.split(".").map(Number);
                 if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
                     return parts as [number, number, number];
                 }
             }
-            // format 3 保留字符串
             return existingValue;
         }
 
-        // 兜底
         return MIN_ENGINE_VERSION;
     }
 
     // -----------------------------------------------------------------------
     // 辅助
     // -----------------------------------------------------------------------
+
+    private requireBp(): NonNullable<ResolvedConfig["packs"]["bp"]> {
+        if (!this.config.packs.bp) {
+            throw new BePackError(
+                "CONFIG_INVALID",
+                "packs.bp is required to build the BP manifest."
+            );
+        }
+        return this.config.packs.bp;
+    }
 
     private requireRp(): NonNullable<ResolvedConfig["packs"]["rp"]> {
         if (!this.config.packs.rp) {

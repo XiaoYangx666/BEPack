@@ -1,10 +1,11 @@
-import type { CommandName, ResolvedConfig } from "../config/configTypes.js";
+import type { CommandName, ResolvedConfig, HookContext } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import type { Logger } from "../logger/logger.js";
 import {
     bpManifest,
     bpRoot,
     distRoot,
+    hasBpCompile,
     rpManifest,
     rpRoot,
     scriptOutFile,
@@ -22,16 +23,25 @@ function formatHookResult(result: unknown): string {
     }
 }
 
-function resolvePaths(cwd: string, config: ResolvedConfig) {
-    return {
-        srcEntry: srcEntry(cwd, config),
-        bpRoot: bpRoot(cwd, config),
-        ...(config.packs.rp ? { rpRoot: rpRoot(cwd, config) } : {}),
-        scriptOutFile: scriptOutFile(cwd, config),
-        bpManifest: bpManifest(cwd, config),
-        ...(config.packs.rp ? { rpManifest: rpManifest(cwd, config) } : {}),
+function resolvePaths(cwd: string, config: ResolvedConfig): HookContext["paths"] {
+    const paths: HookContext["paths"] = {
         dist: distRoot(cwd, config),
     };
+    if (config.packs.bp) {
+        paths.bpRoot = bpRoot(cwd, config);
+        paths.bpManifest = bpManifest(cwd, config)!;
+        if (hasBpCompile(config)) {
+            const entry = srcEntry(cwd, config);
+            if (entry) paths.srcEntry = entry;
+            const scriptFile = scriptOutFile(cwd, config);
+            if (scriptFile) paths.scriptOutFile = scriptFile;
+        }
+    }
+    if (config.packs.rp) {
+        paths.rpRoot = rpRoot(cwd, config);
+        paths.rpManifest = rpManifest(cwd, config)!;
+    }
+    return paths;
 }
 
 export async function runHook(

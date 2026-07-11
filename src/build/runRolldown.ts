@@ -5,20 +5,19 @@ import type { ResolvedConfig } from "../config/configTypes.js";
 import type { Logger } from "../logger/logger.js";
 import { BePackError } from "../errors/BePackError.js";
 import { emptyDir } from "../utils/fs.js";
-import { scriptOutDir, scriptOutFile, srcEntry } from "../utils/path.js";
+import { scriptOutDir, scriptOutFile, srcEntry, hasBpCompile } from "../utils/path.js";
 import { createDependencyCatalog } from "../install/dependencyCatalog.js";
 
 function buildExternal(config: ResolvedConfig): (string | RegExp)[] {
-    const external = [...config.build.external];
-    if (config.build.externalDependencies) {
-        const existingStrings = new Set(
-            external.filter((item): item is string => typeof item === "string")
-        );
-        for (const [packageName, entry] of Object.entries(createDependencyCatalog(config))) {
-            if (entry.manifest && !existingStrings.has(packageName)) {
-                external.push(packageName);
-                existingStrings.add(packageName);
-            }
+    if (!config.packs.bp?.compile) return [];
+    const external = [...config.packs.bp.compile.external];
+    const existingStrings = new Set(
+        external.filter((item): item is string => typeof item === "string")
+    );
+    for (const [packageName, entry] of Object.entries(createDependencyCatalog(config))) {
+        if (entry.manifest && !existingStrings.has(packageName)) {
+            external.push(packageName);
+            existingStrings.add(packageName);
         }
     }
     return external;
@@ -35,37 +34,54 @@ export async function runRolldown(
     config: ResolvedConfig,
     logger?: Logger
 ): Promise<void> {
+    if (!hasBpCompile(config)) {
+        throw new BePackError(
+            "BUILD_FAILED",
+            "rolldown requires packs.bp.compile to be configured."
+        );
+    }
+
+    const entry = srcEntry(cwd, config);
+    const outDir = scriptOutDir(cwd, config);
+    const outFile = scriptOutFile(cwd, config);
+    if (!entry || !outDir || !outFile) {
+        throw new BePackError(
+            "BUILD_FAILED",
+            "rolldown requires a valid compile entry and output directory."
+        );
+    }
+
     try {
-        await emptyDir(scriptOutDir(cwd, config));
+        await emptyDir(outDir);
         const bundle = await rolldown({
-            input: srcEntry(cwd, config),
+            input: entry,
             external: buildExternal(config),
             onwarn(warning, warn) {
                 if (warning.code === "CIRCULAR_DEPENDENCY") return;
                 warn(warning);
             },
             experimental: {
-                attachDebugInfo: config.build.preserveModules ? "none" : "simple",
+                attachDebugInfo: config.packs.bp!.compile!.preserveModules ? "none" : "simple",
             },
         });
-        if (config.build.preserveModules) {
+        if (config.packs.bp!.compile!.preserveModules) {
             await bundle.write({
-                dir: scriptOutDir(cwd, config),
+                dir: outDir,
                 format: "esm",
                 preserveModules: true,
-                preserveModulesRoot: path.dirname(srcEntry(cwd, config)),
+                preserveModulesRoot: path.dirname(entry),
                 entryFileNames: "[name].js",
-                minify: config.build.minify,
+                minify: config.packs.bp!.compile!.minify,
             });
         } else {
             await bundle.write({
-                file: scriptOutFile(cwd, config),
+                file: outFile,
                 format: "esm",
-                minify: config.build.minify,
+                minify: config.packs.bp!.compile!.minify,
             });
         }
         await bundle.close();
-        await printStats(scriptOutDir(cwd, config), logger);
+        await printStats(outDir, logger);
     } catch (cause) {
         throw new BePackError(
             "BUILD_FAILED",

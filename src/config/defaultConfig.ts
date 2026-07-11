@@ -1,12 +1,14 @@
-import type { ConfigContext, ResolvedConfig, UserConfig } from "./configTypes.js";
+import type {
+    ConfigContext,
+    ResolvedConfig,
+    UserConfig,
+    BpCompileResolved,
+} from "./configTypes.js";
 
 export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
     root: ".",
     configured: {
         root: false,
-        buildEntry: false,
-        bpRoot: false,
-        rpRoot: false,
         packOutDir: false,
     },
     name: "minecraft-addon",
@@ -24,19 +26,7 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
         dependencyResolvers: [],
     },
     build: {
-        entry: "src/main.ts",
-        typecheck: true,
         copy: false,
-        preserveModules: true,
-        external: [
-            /^@minecraft\/server.*/,
-            "@minecraft/common",
-            "@minecraft/debug-utilities",
-            "@minecraft/diagnostics",
-        ],
-        externalDependencies: true,
-        useNpx: false,
-        minify: false,
         timing: false,
     },
     dev: {
@@ -51,6 +41,17 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
         outDir: "dist",
     },
     hooks: {},
+};
+
+/** Defaults applied when packs.bp.compile is configured but a field is omitted. */
+export const BP_COMPILE_DEFAULTS: BpCompileResolved = {
+    entry: "src/main.ts",
+    tsconfig: "tsconfig.json",
+    typecheck: true,
+    preserveModules: true,
+    external: [/^@minecraft\/server.*/],
+    useNpx: false,
+    minify: false,
 };
 
 export function defineConfig(config: UserConfig): UserConfig;

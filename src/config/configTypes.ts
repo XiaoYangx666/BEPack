@@ -90,15 +90,21 @@ export type HookContext = {
     cwd: string;
     target: string;
     config: ResolvedConfig;
-    /** Convenience resolved paths. Values reflect the user's actual config. */
+    /** Convenience resolved paths. Only includes paths for packs that are configured. */
     paths: {
-        srcEntry: string;
-        bpRoot: string;
-        rpRoot?: string;
-        scriptOutFile: string;
-        bpManifest: string;
-        rpManifest?: string;
         dist: string;
+        /** BP root directory. Only present when packs.bp is configured. */
+        bpRoot?: string;
+        /** RP root directory. Only present when packs.rp is configured. */
+        rpRoot?: string;
+        /** BP manifest path. Only present when packs.bp is configured. */
+        bpManifest?: string;
+        /** RP manifest path. Only present when packs.rp is configured. */
+        rpManifest?: string;
+        /** Compilation entry. Only present when packs.bp?.compile is configured. */
+        srcEntry?: string;
+        /** Compiled script output. Only present when packs.bp?.compile is configured. */
+        scriptOutFile?: string;
     };
     logger: LoggerLike;
 };
@@ -128,8 +134,10 @@ export type PackConfig = {
     /** Header UUID written to manifest.json. */
     uuid: string;
 
-    /** Module UUID written to manifest.json. */
-    moduleUuid: string;
+    /** Module UUID written to manifest.json.
+     *  For BP: required only when compile is configured (to manage script module).
+     *  For RP: always required (to manage resources module). */
+    moduleUuid?: string;
 
     /** Manifest header name. Defaults to top-level `name`. */
     name?: string;
@@ -138,7 +146,36 @@ export type PackConfig = {
     description?: string;
 };
 
+/** BP compile configuration. Only available on behavior packs. */
+export type BpCompileOptions = {
+    /** Script entry file, relative to project root. Default: "src/main.ts". */
+    entry: string;
+
+    /** Path to tsconfig.json relative to project root. Default: "tsconfig.json". */
+    tsconfig?: string;
+
+    /** Whether to run `tsc --noEmit` before rolldown. Default: true. */
+    typecheck?: boolean;
+
+    /** Whether rolldown should preserve module files. Default: true. */
+    preserveModules?: boolean;
+
+    /** Additional packages/modules that Rolldown should not bundle. */
+    external?: BuildExternal[];
+
+
+    /** Use `npx tsc --noEmit` instead of system `tsc --noEmit`. Default: false. */
+    useNpx?: boolean;
+
+    /** Minify output via rolldown. Default: false. */
+    minify?: boolean;
+};
+
 export type BpConfig = PackConfig & {
+    /** BP compile configuration (TypeScript entry, tsconfig, bundler options).
+     *  When set, enables TypeScript compilation and rolldown bundling. */
+    compile?: BpCompileOptions;
+
     /** Script API dependencies managed in both package.json and bp/manifest.json. */
     dependencies?: Record<string, DependencySpecifier>;
 
@@ -153,6 +190,10 @@ export type BpConfig = PackConfig & {
 export type RpConfig = PackConfig & {
     /** Adds `pbr` capability to the resource pack manifest. */
     pbr?: boolean;
+
+    /** Additional files/folders to include when copying/packing the resource pack,
+     * on top of built-in defaults. */
+    include?: string[];
 };
 
 /** Copy target with explicit bp/rp paths. */
@@ -182,7 +223,7 @@ export type UserConfig = {
     root?: string;
 
     /** Addon/package name used for manifest defaults and pack output names. */
-    name: string;
+    name?: string;
 
     /** Addon version. Must be `x.y.z` when written to manifest.json. */
     version?: string;
@@ -199,9 +240,9 @@ export type UserConfig = {
     manifestFormat?: 2 | 3;
     target?: string;
 
-    /** Behavior/resource pack configuration. */
+    /** Behavior/resource pack configuration. At least one pack must be configured. */
     packs?: {
-        /** Behavior pack configuration. Required. */
+        /** Behavior pack configuration. Optional. */
         bp?: BpConfig;
 
         /** Resource pack configuration. Optional. */
@@ -239,31 +280,11 @@ export type UserConfig = {
         dependencyResolvers?: DependencyResolverRule[];
     };
 
-    /** Build pipeline configuration. */
+    /** Build pipeline configuration — post-build actions only.
+     *  Compilation config (entry, typecheck, bundler options) goes under packs.bp.compile. */
     build?: {
-        /** Script entry file, relative to `root` unless absolute. */
-        entry?: string;
-
-        /** Whether to run `tsc --noEmit` before rolldown. */
-        typecheck?: boolean;
-
         /** Copy after build: false, true for default target, or a target name. */
         copy?: CopySetting;
-
-        /** Whether rolldown should preserve module files. Defaults to true. */
-        preserveModules?: boolean;
-
-        /** Additional packages/modules that Rolldown should not bundle. */
-        external?: BuildExternal[];
-
-        /** Whether managed dependency catalog packages are externalized automatically. */
-        externalDependencies?: boolean;
-
-        /** Use `npx tsc --noEmit` instead of system `tsc --noEmit`. */
-        useNpx?: boolean;
-
-        /** Minify output. Passed through to rolldown. Defaults to false. */
-        minify?: boolean;
 
         /** Show per-step timing in build/dev output. Defaults to false. */
         timing?: boolean;
@@ -286,8 +307,8 @@ export type UserConfig = {
         /** Global folder name overrides for all targets. Per-target `name` takes precedence. */
         name?: string | CopyTargetNames;
 
-        /** Additional RP files/folders to include when copying, on top of built-in defaults.
-         *  For BP includes, use packs.bp.include instead. */
+        /** Additional RP files/folders to include when copying.
+         *  @deprecated Use packs.rp.include instead. */
         include?: {
             rp?: string[];
         };
@@ -308,13 +329,21 @@ export type UserConfig = {
     hooks?: Hooks;
 };
 
+/** Resolved BP compile configuration (all fields filled with defaults). */
+export type BpCompileResolved = {
+    entry: string;
+    tsconfig: string;
+    typecheck: boolean;
+    preserveModules: boolean;
+    external: BuildExternal[];
+    useNpx: boolean;
+    minify: boolean;
+};
+
 export type ResolvedConfig = {
     root: string;
     configured: {
         root: boolean;
-        buildEntry: boolean;
-        bpRoot: boolean;
-        rpRoot: boolean;
         packOutDir: boolean;
     };
     name: string;
@@ -324,17 +353,25 @@ export type ResolvedConfig = {
     manifestFormat?: 2 | 3;
     hooks: Hooks;
     packs: {
-        bp: Required<Omit<PackConfig, "name" | "description">> & {
+        bp?: {
+            root: string;
+            uuid: string;
+            moduleUuid?: string;
             name: string;
             description?: string;
+            compile?: BpCompileResolved;
             dependencies: Record<string, DependencySpecifier>;
             achievement?: boolean;
-            include?: string[];
+            include: string[];
         };
-        rp?: Required<Omit<PackConfig, "name" | "description">> & {
+        rp?: {
+            root: string;
+            uuid: string;
+            moduleUuid: string;
             name: string;
             description?: string;
             pbr?: boolean;
+            include: string[];
         };
     };
     install: {
@@ -348,14 +385,7 @@ export type ResolvedConfig = {
         dependencyResolvers: DependencyResolverRule[];
     };
     build: {
-        entry: string;
-        typecheck: boolean;
         copy: CopySetting;
-        preserveModules: boolean;
-        external: BuildExternal[];
-        externalDependencies: boolean;
-        useNpx: boolean;
-        minify: boolean;
         timing: boolean;
     };
     dev: {
@@ -366,8 +396,7 @@ export type ResolvedConfig = {
         defaultTarget: string;
         /** Global folder name overrides for all targets. Per-target `name` takes precedence. */
         name?: string | CopyTargetNames;
-        /** Additional RP files/folders to include when copying.
-         *  For BP includes, use packs.bp.include. */
+        /** @deprecated Use packs.rp.include instead. */
         include?: {
             rp?: string[];
         };
@@ -386,3 +415,52 @@ export type LoadConfigOptions = {
     mode?: string;
     overrides?: Partial<UserConfig>;
 };
+
+// ---------------------------------------------------------------------------
+// Internal Pack abstraction — iterate over configured packs uniformly
+// ---------------------------------------------------------------------------
+
+export type PackType = "bp" | "rp";
+
+/** Unified pack info for generic operations (copy, watch, pack, paths). */
+export type PackInfo = {
+    type: PackType;
+    root: string;
+    uuid: string;
+    moduleUuid?: string;
+    name: string;
+    include: string[];
+};
+
+/** Iterate over all configured packs, returning uniform PackInfo objects. */
+export function getConfiguredPacks(config: ResolvedConfig): PackInfo[] {
+    const packs: PackInfo[] = [];
+    if (config.packs.bp) {
+        packs.push({
+            type: "bp",
+            root: config.packs.bp.root,
+            uuid: config.packs.bp.uuid,
+            ...(config.packs.bp.moduleUuid !== undefined
+                ? { moduleUuid: config.packs.bp.moduleUuid }
+                : {}),
+            name: config.packs.bp.name,
+            include: config.packs.bp.include,
+        });
+    }
+    if (config.packs.rp) {
+        packs.push({
+            type: "rp",
+            root: config.packs.rp.root,
+            uuid: config.packs.rp.uuid,
+            moduleUuid: config.packs.rp.moduleUuid,
+            name: config.packs.rp.name,
+            include: config.packs.rp.include,
+        });
+    }
+    return packs;
+}
+
+/** Resolve a pack root directory to an absolute path. */
+export function packRoot(pack: PackInfo, projectRoot: string): string {
+    return pack.root.startsWith("/") ? pack.root : `${projectRoot}/${pack.root}`;
+}

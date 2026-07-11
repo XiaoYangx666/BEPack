@@ -1,9 +1,10 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import type { ResolvedConfig } from "../config/configTypes.js";
+import type { PackType, ResolvedConfig } from "../config/configTypes.js";
+import { getConfiguredPacks } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { copyDir, pathExists } from "../utils/fs.js";
-import { bpRoot, rpRoot } from "../utils/path.js";
+import { packRoot, projectRoot } from "../utils/path.js";
 import { resolveCopyTarget } from "./resolveCopyTarget.js";
 import { DEFAULT_BP_INCLUDES, DEFAULT_RP_INCLUDES, getIncludes } from "../constants/copyIncludes.js";
 import type { Logger } from "../logger/logger.js";
@@ -49,6 +50,58 @@ async function validateTargetDir(dir: string, label: string): Promise<void> {
     }
 }
 
+/** Resolve include items for a given pack type. */
+function getPackIncludeItems(
+    config: ResolvedConfig,
+    packType: PackType
+): { defaults: string[]; userAdditions: string[] | undefined } {
+    if (packType === "bp") {
+        return {
+            defaults: DEFAULT_BP_INCLUDES,
+            userAdditions: config.packs.bp?.include,
+        };
+    }
+    // RP: check packs.rp.include first, then legacy copy.include.rp
+    const userAdditions = config.packs.rp?.include;
+    return {
+        defaults: DEFAULT_RP_INCLUDES,
+        userAdditions: userAdditions?.length ? userAdditions : config.copy.include?.rp,
+    };
+}
+
+async function copyOnePack(
+    packType: PackType,
+    source: string,
+    targetDir: string,
+    folderName: string,
+    config: ResolvedConfig,
+    dryRun: boolean,
+    logger?: Logger
+): Promise<string> {
+    const { defaults, userAdditions } = getPackIncludeItems(config, packType);
+    const includes = getIncludes(defaults, userAdditions);
+    const to = path.join(targetDir, folderName);
+
+    if (!dryRun) {
+        if (includes.length > 0 && userAdditions?.length) {
+            // Selective copy when user explicitly configured include items
+            await copySelectedItems(source, to, includes);
+        } else if (packType === "rp" && includes.length === 0) {
+            // RP with no includes: full directory copy for backward compatibility
+            await copyDir(source, to);
+        } else {
+            // BP always selective; RP with defaults only also selective
+            await copySelectedItems(source, to, includes);
+        }
+    }
+
+    const itemCount = includes.length > 0 ? includes.length : undefined;
+    logger?.copy(
+        `${dryRun ? "would copy" : "copied"} ${packType}${itemCount ? ` (${itemCount} items)` : ""} -> ${colors.gray(to)}`
+    );
+    return to;
+}
+
 export async function copyPacks(
     cwd: string,
     config: ResolvedConfig,
@@ -59,42 +112,32 @@ export async function copyPacks(
     const { name: targetNameResolved, target, names } = resolveCopyTarget(config, targetName);
     const copied: string[] = [];
 
-    // Validate target directories exist before copying
-    if (target.bp) {
-        await validateTargetDir(target.bp, "bp");
-    }
-    if (config.packs.rp && target.rp) {
-        await validateTargetDir(target.rp, "rp");
+    const root = projectRoot(cwd, config);
+    const packs = getConfiguredPacks(config);
+
+    for (const p of packs) {
+        // Determine target path for this pack type
+        let packTargetDir: string | undefined;
+        if (p.type === "bp") packTargetDir = target.bp;
+        else packTargetDir = target.rp;
+
+        if (!packTargetDir) continue;
+
+        await validateTargetDir(packTargetDir, p.type);
+
+        const folderName = names[p.type] ?? p.name;
+        const source = packRoot(root, config, p.type)!;
+        const dest = await copyOnePack(
+            p.type,
+            source,
+            packTargetDir,
+            folderName,
+            config,
+            dryRun,
+            logger
+        );
+        copied.push(dest);
     }
 
-    if (target.bp) {
-        const folderName = names.bp ?? config.packs.bp.name;
-        const to = path.join(target.bp, folderName);
-        const bpIncludes = getIncludes(DEFAULT_BP_INCLUDES, config.packs.bp.include);
-        if (!dryRun) {
-            await copySelectedItems(bpRoot(cwd, config), to, bpIncludes);
-        }
-        logger?.copy(
-            `${dryRun ? "would copy" : "copied"} bp (${bpIncludes.length} items) -> ${colors.gray(to)}`
-        );
-        copied.push(to);
-    }
-    if (config.packs.rp && target.rp) {
-        const folderName = names.rp ?? config.packs.rp.name;
-        const to = path.join(target.rp, folderName);
-        const rpIncludes = getIncludes(DEFAULT_RP_INCLUDES, config.copy.include?.rp);
-        if (!dryRun) {
-            if (rpIncludes.length > 0) {
-                await copySelectedItems(rpRoot(cwd, config), to, rpIncludes);
-            } else {
-                // No includes configured — full copy for backward compatibility
-                await copyDir(rpRoot(cwd, config), to);
-            }
-        }
-        logger?.copy(
-            `${dryRun ? "would copy" : "copied"} rp${rpIncludes.length ? ` (${rpIncludes.length} items)` : ""} -> ${colors.gray(to)}`
-        );
-        copied.push(to);
-    }
     return { target: targetNameResolved, copied };
 }

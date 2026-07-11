@@ -16,9 +16,6 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
         root: ".",
         configured: {
             root: false,
-            buildEntry: false,
-            bpRoot: false,
-            rpRoot: false,
             packOutDir: false,
         },
         name: "test-addon",
@@ -32,6 +29,7 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
                 moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                 name: "Test BP",
                 dependencies: {},
+                include: [],
             },
         },
         install: {
@@ -45,14 +43,7 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
             dependencyResolvers: [],
         },
         build: {
-            entry: "src/main.ts",
-            typecheck: true,
             copy: false,
-            preserveModules: true,
-            external: [],
-            externalDependencies: true,
-            useNpx: false,
-            minify: false,
             timing: false,
         },
         dev: { copy: false },
@@ -91,8 +82,8 @@ describe("ManifestBuilder format_version 行为", () => {
     it("保留 existing.format_version = 3（RP）", () => {
         const config = baseConfig({
             packs: {
-                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", dependencies: {} },
-                rp: { root: "rp", uuid: "c", moduleUuid: "d", name: "RP" },
+                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", dependencies: {}, include: [] },
+                rp: { root: "rp", uuid: "c", moduleUuid: "d", name: "RP", include: [] },
             },
         });
         const builder = createBuilder(config);

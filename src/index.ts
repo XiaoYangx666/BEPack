@@ -28,4 +28,11 @@ export type {
     DependencyResolverRule,
     DependencyResolverResult,
     NpmPackageMetadata,
+    PackType,
+    PackInfo,
+    BpConfig,
+    RpConfig,
+    BpCompileOptions,
+    BpCompileResolved,
 } from "./config/configTypes.js";
+export { getConfiguredPacks } from "./config/configTypes.js";

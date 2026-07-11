@@ -41,13 +41,19 @@ export class DependencyService {
     /**
      * Resolve all managed dependencies from packs.bp.dependencies.
      * Returns a map of package name to ResolvedDependency.
+     * Returns empty when BP is not configured or has no dependencies.
      */
     async resolveAll(): Promise<Record<string, ResolvedDependency>> {
         const result: Record<string, ResolvedDependency> = {};
+        const deps = this.config.packs.bp?.dependencies;
+        if (!deps || Object.keys(deps).length === 0) {
+            this.log("no BP dependencies to resolve");
+            return result;
+        }
 
         this.log(`resolving dependencies for target ${this.config.target}`);
 
-        for (const [name, specifier] of Object.entries(this.config.packs.bp.dependencies)) {
+        for (const [name, specifier] of Object.entries(deps)) {
             const entry = getDependencyCatalogEntry(this.catalog, name);
             const resolved = await this.resolveOne(name, specifier, entry);
             const manifest = entry.manifest ?? false;

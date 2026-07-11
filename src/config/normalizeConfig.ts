@@ -1,5 +1,11 @@
-import { DEFAULT_CONFIG } from "./defaultConfig.js";
-import type { BpConfig, ResolvedConfig, RpConfig, UserConfig } from "./configTypes.js";
+import { DEFAULT_CONFIG, BP_COMPILE_DEFAULTS } from "./defaultConfig.js";
+import type {
+    BpCompileResolved,
+    ResolvedConfig,
+    UserConfig,
+    BpConfig,
+    RpConfig,
+} from "./configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 
 function stripUndefined<T extends Record<string, unknown>>(value: T | undefined): Partial<T> {
@@ -12,10 +18,16 @@ function stripUndefined<T extends Record<string, unknown>>(value: T | undefined)
 function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): UserConfig {
     const packs: UserConfig["packs"] = {};
     if (config.packs?.bp || overrides.packs?.bp) {
-        packs.bp = { ...config.packs?.bp, ...stripUndefined(overrides.packs?.bp) } as BpConfig;
+        packs.bp = {
+            ...(config.packs?.bp ?? ({} as BpConfig)),
+            ...stripUndefined(overrides.packs?.bp),
+        } as BpConfig;
     }
     if (config.packs?.rp || overrides.packs?.rp) {
-        packs.rp = { ...config.packs?.rp, ...stripUndefined(overrides.packs?.rp) } as RpConfig;
+        packs.rp = {
+            ...(config.packs?.rp ?? ({} as RpConfig)),
+            ...stripUndefined(overrides.packs?.rp),
+        } as RpConfig;
     }
     const copyTargets: NonNullable<NonNullable<UserConfig["copy"]>["targets"]> = {
         ...(config.copy?.targets ?? {}),
@@ -41,6 +53,25 @@ function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): Us
     };
 }
 
+/**
+ * Normalize compile options into a fully-resolved BpCompileResolved.
+ * Falls back to BP_COMPILE_DEFAULTS for any missing field.
+ */
+function normalizeCompile(
+    compile: NonNullable<NonNullable<UserConfig["packs"]>["bp"]>["compile"]
+): BpCompileResolved {
+    const defs = BP_COMPILE_DEFAULTS;
+    return {
+        entry: compile?.entry ?? defs.entry,
+        tsconfig: compile?.tsconfig ?? defs.tsconfig,
+        typecheck: compile?.typecheck ?? defs.typecheck,
+        preserveModules: compile?.preserveModules ?? defs.preserveModules,
+        external: compile?.external ?? defs.external,
+        useNpx: compile?.useNpx ?? defs.useNpx,
+        minify: compile?.minify ?? defs.minify,
+    };
+}
+
 export function normalizeConfig(
     config: UserConfig,
     overrides: Partial<UserConfig> = {}
@@ -54,44 +85,68 @@ export function normalizeConfig(
             { details: { target } }
         );
     }
-    if (!raw.packs?.bp) {
-        throw new BePackError("CONFIG_INVALID", "packs.bp is required.");
+
+    const hasBp = !!raw.packs?.bp;
+    const hasRp = !!raw.packs?.rp;
+    if (!hasBp && !hasRp) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            "At least one pack (packs.bp or packs.rp) is required."
+        );
     }
+
     if (!raw.name || raw.name.trim() === "") {
         throw new BePackError("CONFIG_INVALID", "name is required.");
     }
     const name = raw.name;
     const version = raw.version ?? DEFAULT_CONFIG.version;
     const description = raw.description;
-    const bp = raw.packs.bp;
-    if (!bp.uuid || !bp.moduleUuid) {
-        throw new BePackError(
-            "CONFIG_INVALID",
-            "packs.bp.uuid and packs.bp.moduleUuid are required."
-        );
+
+    const packs = raw.packs!;
+    let compile = packs.bp?.compile;
+    const bp = packs.bp;
+    const rp = packs.rp;
+
+    if (bp) {
+        if (!bp.uuid) {
+            throw new BePackError("CONFIG_INVALID", "packs.bp.uuid is required.");
+        }
+        if (bp.compile && !bp.moduleUuid) {
+            throw new BePackError(
+                "CONFIG_INVALID",
+                "packs.bp.moduleUuid is required when packs.bp.compile is configured."
+            );
+        }
+        if (bp.root === undefined) {
+            throw new BePackError(
+                "CONFIG_INVALID",
+                "packs.bp.root is required. Set the behavior pack directory in bepack.config.ts."
+            );
+        }
     }
-    if (bp.root === undefined) {
-        throw new BePackError(
-            "CONFIG_INVALID",
-            "packs.bp.root is required. Set the behavior pack directory in bepack.config.ts."
-        );
+
+    if (rp) {
+        if (!rp.uuid || !rp.moduleUuid) {
+            throw new BePackError(
+                "CONFIG_INVALID",
+                "packs.rp.uuid and packs.rp.moduleUuid are required."
+            );
+        }
+        if (rp.root === undefined) {
+            throw new BePackError(
+                "CONFIG_INVALID",
+                "packs.rp.root is required when packs.rp is configured."
+            );
+        }
     }
-    const rp = raw.packs.rp;
-    if (rp && rp.root === undefined) {
-        throw new BePackError(
-            "CONFIG_INVALID",
-            "packs.rp.root is required when packs.rp is configured."
-        );
-    }
-    const bpDescription = bp.description ?? description;
+
+    const bpDescription = bp?.description ?? description;
     const rpDescription = rp?.description ?? description;
+
     return {
         root: raw.root ?? DEFAULT_CONFIG.root,
         configured: {
             root: raw.root !== undefined,
-            buildEntry: raw.build?.entry !== undefined,
-            bpRoot: bp.root !== undefined,
-            rpRoot: rp?.root !== undefined,
             packOutDir: raw.pack?.outDir !== undefined,
         },
         name,
@@ -100,25 +155,31 @@ export function normalizeConfig(
         target,
         ...(raw.manifestFormat !== undefined ? { manifestFormat: raw.manifestFormat } : {}),
         packs: {
-            bp: {
-                root: bp.root,
-                uuid: bp.uuid,
-                moduleUuid: bp.moduleUuid,
-                name: bp.name ?? name,
-                ...(bpDescription !== undefined ? { description: bpDescription } : {}),
-                dependencies: bp.dependencies ?? {},
-                ...(bp.achievement !== undefined ? { achievement: bp.achievement } : {}),
-                ...(bp.include !== undefined ? { include: bp.include } : {}),
-            },
+            ...(bp
+                ? {
+                      bp: {
+                          root: bp.root!,
+                          uuid: bp.uuid,
+                          ...(bp.moduleUuid !== undefined ? { moduleUuid: bp.moduleUuid } : {}),
+                          name: bp.name ?? name,
+                          ...(bpDescription !== undefined ? { description: bpDescription } : {}),
+                          ...(compile ? { compile: normalizeCompile(compile) } : {}),
+                          dependencies: bp.dependencies ?? {},
+                          ...(bp.achievement !== undefined ? { achievement: bp.achievement } : {}),
+                          include: bp.include ?? [],
+                      },
+                  }
+                : {}),
             ...(rp
                 ? {
                       rp: {
                           root: rp.root!,
                           uuid: rp.uuid,
-                          moduleUuid: rp.moduleUuid,
+                          moduleUuid: rp.moduleUuid!,
                           name: rp.name ?? name,
                           ...(rpDescription !== undefined ? { description: rpDescription } : {}),
                           ...(rp.pbr !== undefined ? { pbr: rp.pbr } : {}),
+                          include: rp.include ?? [],
                       },
                   }
                 : {}),
@@ -136,15 +197,7 @@ export function normalizeConfig(
             dependencyResolvers: raw.install?.dependencyResolvers ?? [],
         },
         build: {
-            entry: raw.build?.entry ?? DEFAULT_CONFIG.build.entry,
-            typecheck: raw.build?.typecheck ?? DEFAULT_CONFIG.build.typecheck,
             copy: raw.build?.copy ?? DEFAULT_CONFIG.build.copy,
-            preserveModules: raw.build?.preserveModules ?? DEFAULT_CONFIG.build.preserveModules,
-            external: raw.build?.external ?? DEFAULT_CONFIG.build.external,
-            externalDependencies:
-                raw.build?.externalDependencies ?? DEFAULT_CONFIG.build.externalDependencies,
-            useNpx: raw.build?.useNpx ?? DEFAULT_CONFIG.build.useNpx,
-            minify: raw.build?.minify ?? DEFAULT_CONFIG.build.minify,
             timing: raw.build?.timing ?? DEFAULT_CONFIG.build.timing,
         },
         dev: {

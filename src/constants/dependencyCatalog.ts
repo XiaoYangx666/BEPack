@@ -5,6 +5,10 @@ import { minecraftVanillaDataResolver } from "../install/resolvers/minecraftVani
 
 /** Built-in managed dependency catalog. Maps package names to resolver + manifest behavior. */
 export const BUILTIN_DEPENDENCY_CATALOG: Record<string, DependencyCatalogEntry> = {
+    "@minecraft/common": {
+        resolver: minecraftScriptApiResolver,
+        manifest: true,
+    },
     "@minecraft/server": {
         resolver: minecraftScriptApiResolver,
         manifest: true,
@@ -26,6 +30,18 @@ export const BUILTIN_DEPENDENCY_CATALOG: Record<string, DependencyCatalogEntry> 
         manifest: true,
     },
     "@minecraft/debug-utilities": {
+        resolver: minecraftScriptApiBpResolver,
+        manifest: true,
+    },
+    "@minecraft/diagnostics": {
+        resolver: minecraftScriptApiBpResolver,
+        manifest: true,
+    },
+    "@minecraft/server-graphics": {
+        resolver: minecraftScriptApiBpResolver,
+        manifest: true,
+    },
+    "@minecraft/server-editor": {
         resolver: minecraftScriptApiBpResolver,
         manifest: true,
     },

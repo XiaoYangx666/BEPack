@@ -1,5 +1,4 @@
 import path from "node:path";
-import { pathExists } from "../utils/fs.js";
 import { bpManifest, rpManifest, slash } from "../utils/path.js";
 import { createDependencyCatalog } from "../install/dependencyCatalog.js";
 import type { ResolvedConfig, LoggerLike } from "../config/configTypes.js";
@@ -16,12 +15,13 @@ export type PatchManifestOptions = {
 };
 
 /**
- * 修补 BP 和（可选的）RP manifest 文件。
+ * 修补 BP 和/或 RP manifest 文件。
  *
  * - 只负责任务编排：路径计算、文件读写、调用构建器和依赖管理器。
  * - 如果 manifest 已存在，保留用户手写字段并覆盖 BePack 管理字段。
  * - 如果 manifest 不存在，根据配置完整生成。
  * - dryRun 时返回结果但不写入文件。
+ * - 只修补已配置的 Pack（至少一个必须存在）。
  */
 export async function patchManifest(options: PatchManifestOptions) {
     const catalog = createDependencyCatalog(options.config);
@@ -31,50 +31,49 @@ export async function patchManifest(options: PatchManifestOptions) {
         options.resolvedDeps
     );
     const builder = new ManifestBuilder(options.config, depManager);
-    const bpPath = bpManifest(options.cwd, options.config);
-    const rpPath = rpManifest(options.cwd, options.config);
 
-    // BP
-    const bpExisting = await ManifestFile.read(bpPath);
-    const bpExisted = bpExisting !== undefined;
+    const result: Record<string, { path: string; updated: boolean; existed: boolean }> = {};
 
-    // Warn if config forces format_version 2 but existing manifest uses format 3
-    if (
-        options.config.manifestFormat === 2 &&
-        bpExisting?.format_version === 3
-    ) {
-        const warn = options.logger?.warn ?? console.warn;
-        warn(
-            "Warning: config manifestFormat is 2, but existing manifest uses format_version 3. " +
-            "format_version 2 does not support string versions; any string versions in the existing manifest will be preserved as-is."
-        );
-    }
+    // BP manifest
+    if (options.config.packs.bp) {
+        const bpPath = bpManifest(options.cwd, options.config)!;
+        const bpExisting = await ManifestFile.read(bpPath);
+        const bpExisted = bpExisting !== undefined;
 
-    const bpManifestObj = builder.buildBp(bpExisting);
-    if (!options.dryRun) await ManifestFile.write(bpPath, bpManifestObj, "bp");
+        // Warn if config forces format_version 2 but existing manifest uses format 3
+        if (
+            options.config.manifestFormat === 2 &&
+            bpExisting?.format_version === 3
+        ) {
+            const warn = options.logger?.warn ?? console.warn;
+            warn(
+                "Warning: config manifestFormat is 2, but existing manifest uses format_version 3. " +
+                "format_version 2 does not support string versions; any string versions in the existing manifest will be preserved as-is."
+            );
+        }
 
-    // RP
-    let rpExisted = false;
-    if (options.config.packs.rp) {
-        const rpExisting = await ManifestFile.read(rpPath);
-        rpExisted = rpExisting !== undefined;
-        const rpManifestObj = builder.buildRp(rpExisting);
-        if (!options.dryRun) await ManifestFile.write(rpPath, rpManifestObj, "rp");
-    }
-
-    return {
-        bpManifest: {
+        const bpManifestObj = builder.buildBp(bpExisting);
+        if (!options.dryRun) await ManifestFile.write(bpPath, bpManifestObj, "bp");
+        result.bpManifest = {
             path: slash(path.relative(options.cwd, bpPath)),
             updated: true,
             existed: bpExisted,
-        },
-        ...(options.config.packs.rp
-            ? {
-                  rpManifest: {
-                      path: slash(path.relative(options.cwd, rpPath)),
-                      updated: true,
-                  },
-              }
-            : {}),
-    };
+        };
+    }
+
+    // RP manifest
+    if (options.config.packs.rp) {
+        const rpPath = rpManifest(options.cwd, options.config)!;
+        const rpExisting = await ManifestFile.read(rpPath);
+        const rpExisted = rpExisting !== undefined;
+        const rpManifestObj = builder.buildRp(rpExisting);
+        if (!options.dryRun) await ManifestFile.write(rpPath, rpManifestObj, "rp");
+        result.rpManifest = {
+            path: slash(path.relative(options.cwd, rpPath)),
+            updated: true,
+            existed: rpExisted,
+        };
+    }
+
+    return result;
 }

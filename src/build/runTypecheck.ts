@@ -45,10 +45,10 @@ export async function runTypecheck(cwd: string, options: TypecheckOptions = {}):
                         diagnostics.includes("不是内部或外部命令");
                     const suggestions = commandMissing
                         ? options.useNpx
-                            ? ["Install npm/npx or set build.useNpx to false."]
+                            ? ["Install npm/npx or set packs.bp.compile.entry to skip typecheck."]
                             : [
                                   "Install TypeScript globally so `tsc` is available.",
-                                  "Set build.useNpx: true to use the project local TypeScript.",
+                                  "Set packs.bp.compile.useNpx: true to use the project local TypeScript.",
                               ]
                         : undefined;
                     reject(

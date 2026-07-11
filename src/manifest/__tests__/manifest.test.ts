@@ -17,9 +17,6 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
         root: ".",
         configured: {
             root: false,
-            buildEntry: false,
-            bpRoot: false,
-            rpRoot: false,
             packOutDir: false,
         },
         name: "test-addon",
@@ -35,6 +32,7 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
                 dependencies: {
                     "@minecraft/server": "2.6.0",
                 },
+                include: [],
             },
         },
         install: {
@@ -48,14 +46,7 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
             dependencyResolvers: [],
         },
         build: {
-            entry: "src/main.ts",
-            typecheck: true,
             copy: false,
-            preserveModules: true,
-            external: [],
-            externalDependencies: true,
-            useNpx: false,
-            minify: false,
             timing: false,
         },
         dev: { copy: false },
@@ -130,12 +121,14 @@ describe("ManifestBuilder buildRp", () => {
                     moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                     name: "Test BP",
                     dependencies: {},
+                    include: [],
                 },
                 rp: {
                     root: "rp",
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    include: [],
                 },
             },
         });
@@ -180,12 +173,14 @@ describe("同一 ManifestBuilder 构建 BP 和 RP", () => {
                     moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                     name: "Test BP",
                     dependencies: {},
+                    include: [],
                 },
                 rp: {
                     root: "rp",
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    include: [],
                 },
             },
         });
@@ -274,7 +269,7 @@ describe("保留用户字段", () => {
 
     it("config 未设置 description 时保留已有 description", () => {
         const config = baseConfig();
-        expect(config.packs.bp.description).toBeUndefined();
+        expect(config.packs.bp!.description).toBeUndefined();
         const existing: Manifest = { header: { description: "My custom" } };
         const manifest = createBuilder(config).buildBp(existing);
         expect(manifest.header!.description).toBe("My custom");
@@ -310,8 +305,8 @@ describe("Module 管理", () => {
     it("保留用户额外的 resources module", () => {
         const config = baseConfig({
             packs: {
-                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", dependencies: {} },
-                rp: { root: "rp", uuid: "c", moduleUuid: "d", name: "RP" },
+                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", dependencies: {}, include: [] },
+                rp: { root: "rp", uuid: "c", moduleUuid: "d", name: "RP", include: [] },
             },
         });
         const existing: Manifest = {
@@ -403,6 +398,7 @@ describe("Dependency 替换", () => {
                         "@minecraft/server": "2.6.0",
                         "@minecraft/vanilla-data": "2.6.0",
                     },
+                    include: [],
                 },
             },
         });
@@ -432,12 +428,13 @@ describe("PBR capability", () => {
     function rpConfig(pbr?: boolean): ResolvedConfig {
         return baseConfig({
             packs: {
-                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", dependencies: {} },
+                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", dependencies: {}, include: [] },
                 rp: {
                     root: "rp",
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    include: [],
                     ...(pbr !== undefined ? { pbr } : {}),
                 },
             },
@@ -486,6 +483,7 @@ describe("achievement", () => {
                         name: "Test BP",
                         dependencies: deps,
                         achievement: true,
+                        include: [],
                     },
                 },
             })
@@ -515,6 +513,7 @@ describe("achievement", () => {
                         name: "Test BP",
                         dependencies: { "@minecraft/server": "stable" },
                         achievement: true,
+                        include: [],
                     },
                 },
             }),
@@ -540,6 +539,7 @@ describe("achievement", () => {
                         name: "Test BP",
                         dependencies: { "@minecraft/server": "2.6.0" },
                         achievement: false,
+                        include: [],
                     },
                 },
             })
