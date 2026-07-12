@@ -27,15 +27,19 @@ function common(command: any) {
         .option("--verbose", "Verbose output");
 }
 
+function reportError(command: string, error: unknown, json: boolean) {
+    const formatted = formatError(error);
+    if (json) writeJson({ ok: false, command, error: formatted });
+    else console.error(`${colors.red(formatted.code)}: ${formatted.message}`);
+    process.exitCode = 1;
+}
+
 async function run(name: string, action: (options: any) => Promise<unknown>, options: any) {
     try {
         const result = await action(options);
         if (options.json) writeJson(result);
     } catch (error) {
-        const formatted = formatError(error);
-        if (options.json) writeJson({ ok: false, command: name, error: formatted });
-        else console.error(`${colors.red(formatted.code)}: ${formatted.message}`);
-        process.exitCode = 1;
+        reportError(name, error, Boolean(options.json));
     }
 }
 
@@ -88,10 +92,16 @@ common(cli.command("dev", "Watch project"))
     .option("--copy", "Copy on change")
     .option("--copy-target <target>", "Copy target")
     .option("--skip-copy", "Skip copy")
+    .option("--typecheck", "Run typecheck")
     .option("--skip-typecheck", "Skip typecheck")
     .option("--timing", "Show per-step timing")
     .action((options: any) => run("dev", commandDev, options));
 
 cli.help();
 cli.version("0.0.1");
-cli.parse();
+
+try {
+    cli.parse();
+} catch (error) {
+    reportError("cli", error, process.argv.includes("--json"));
+}

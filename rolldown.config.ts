@@ -1,4 +1,5 @@
 import { defineConfig } from "rolldown";
+import { dts } from "rolldown-plugin-dts";
 
 const external = ["chokidar", "rolldown"];
 
@@ -23,6 +24,20 @@ export default defineConfig([
             format: "esm",
             codeSplitting: false,
             minify: true,
+        },
+    },
+    {
+        input: "src/index.ts",
+        external,
+        plugins: [
+            dts({
+                emitDtsOnly: true,
+                tsconfig: "./tsconfig.json",
+            }),
+        ],
+        output: {
+            dir: "dist",
+            format: "esm",
         },
     },
 ]);

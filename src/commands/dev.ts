@@ -19,13 +19,21 @@ export async function commandDev(options: any) {
     logger.bepack("dev", `target ${config.target}`);
     logger.progress("dev", "initial build started");
 
-    // Typecheck override: CLI --skip-typecheck / --typecheck > config
+    // Resolve CLI overrides once and keep them for the entire dev session.
     const compile = config.packs.bp?.compile;
     const typecheck = options.skipTypecheck
         ? false
         : options.typecheck
           ? true
           : compile?.typecheck ?? false;
+    const copy =
+        !options.skipCopy && Boolean(options.copy || options.copyTarget || config.dev.copy);
+    const copyTarget =
+        options.copyTarget ??
+        (typeof config.dev.copy === "string" ? config.dev.copy : undefined);
+    const cache = compile?.cache.dev ?? true;
+    const dryRun = Boolean(options.dryRun);
+    const quiet = Boolean(options.json || options.silent);
 
     // Initial build: manifest for all packs + compile if configured
     await runBuild({
@@ -33,19 +41,24 @@ export async function commandDev(options: any) {
         config,
         logger,
         typecheck: Boolean(typecheck),
-        cache: compile?.cache.dev ?? true,
-        quiet: Boolean(options.json || options.silent),
+        cache,
+        dryRun,
+        quiet,
     });
 
     // Initial copy (if configured)
-    if (!options.skipCopy && (options.copy || options.copyTarget || config.dev.copy)) {
-        const target =
-            options.copyTarget ??
-            (typeof config.dev.copy === "string" ? config.dev.copy : undefined);
-        await copyPacks(cwd, config, target, false, logger);
+    if (copy) {
+        await copyPacks(cwd, config, copyTarget, dryRun, logger);
     }
 
     logger.done("dev", `initial build complete in ${logger.formatDuration(Date.now() - start)}`);
-    watchProject(cwd, config, logger, options.copyTarget);
+    watchProject(cwd, config, logger, {
+        copy,
+        ...(copyTarget ? { copyTarget } : {}),
+        typecheck: Boolean(typecheck),
+        cache,
+        dryRun,
+        quiet,
+    });
     return { ok: true, command: "dev", initialBuildDurationMs: Date.now() - start };
 }

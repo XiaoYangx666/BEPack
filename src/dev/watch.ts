@@ -12,9 +12,15 @@ import { copyPacks } from "../copy/copyPacks.js";
 import type { Logger } from "../logger/logger.js";
 import { distRoot, hasBpCompile, packRoot, projectRoot, slash, srcEntry } from "../utils/path.js";
 
-/**
- * Resolve the list of paths to watch for a pack directory.
- */
+export type DevWatchOptions = {
+    copy: boolean;
+    copyTarget?: string;
+    typecheck: boolean;
+    cache: boolean;
+    dryRun: boolean;
+    quiet?: boolean;
+};
+
 function resolveWatchPaths(
     packRootDir: string,
     defaults: string[],
@@ -28,7 +34,6 @@ function resolveWatchPaths(
     return [...new Set(items)].map((p) => slash(path.relative(cwd, p)));
 }
 
-/** Resolve watch paths for a specific pack type. */
 function getPackWatchPaths(
     config: ResolvedConfig,
     packType: PackType,
@@ -43,7 +48,6 @@ function getPackWatchPaths(
             cwd
         );
     }
-    // RP
     const rpIncludes = config.packs.rp?.include;
     if (rpIncludes && rpIncludes.length > 0) {
         return resolveWatchPaths(
@@ -53,7 +57,6 @@ function getPackWatchPaths(
             cwd
         );
     }
-    // No RP includes — watch the whole RP directory (backward compat)
     return [slash(path.relative(cwd, packRoot(root, config, "rp")!))];
 }
 
@@ -61,33 +64,44 @@ export function watchProject(
     cwd: string,
     config: ResolvedConfig,
     logger: Logger,
-    copyTarget?: string
+    options: DevWatchOptions
 ) {
     const relative = (value: string) => slash(path.relative(cwd, value));
     const root = projectRoot(cwd, config);
     const compile = hasBpCompile(config);
     const watchRoots: string[] = [];
+    const bpWatchPaths: string[] = [];
+    const rpWatchPaths: string[] = [];
 
-    // Source directory (only when BP has compile)
     if (compile) {
         const entry = srcEntry(cwd, config);
-        if (entry) {
-            watchRoots.push(relative(path.dirname(entry)));
+        if (entry) watchRoots.push(relative(path.dirname(entry)));
+    }
+
+    for (const pack of getConfiguredPacks(config)) {
+        const paths = getPackWatchPaths(config, pack.type, cwd, root);
+        watchRoots.push(...paths);
+        if (pack.type === "bp") bpWatchPaths.push(...paths);
+        else rpWatchPaths.push(...paths);
+    }
+
+    const extraWatchPaths = config.dev.watch?.include ?? [];
+    watchRoots.push(...extraWatchPaths);
+
+    const ignored = ["node_modules", ".git", relative(distRoot(cwd, config))];
+
+    for (const pack of getConfiguredPacks(config)) {
+        const rootDir = packRoot(root, config, pack.type);
+        if (!rootDir) continue;
+
+        // BePack 自己会修改 manifest，不能让它再次触发 dev
+        ignored.push(relative(path.join(rootDir, "manifest.json")));
+
+        // Rolldown 会向 BP scripts 写入编译结果
+        if (pack.type === "bp") {
+            ignored.push(relative(path.join(rootDir, "scripts")));
         }
     }
-
-    // Pack file watchers (for copy-on-change)
-    for (const p of getConfiguredPacks(config)) {
-        const paths = getPackWatchPaths(config, p.type, cwd, root);
-        watchRoots.push(...paths);
-    }
-
-    // User additions from dev.watch.include
-    if (config.dev.watch?.include) {
-        watchRoots.push(...config.dev.watch.include);
-    }
-
-    const ignored = ["node_modules", relative(distRoot(cwd, config)), ".git"];
 
     const watcher = chokidar.watch(watchRoots, {
         cwd,
@@ -95,18 +109,38 @@ export function watchProject(
         ignoreInitial: true,
     });
 
-    // Serialize builds: skip rapid changes while a build is in progress,
-    // then schedule one final rebuild if changes were queued.
     let building = false;
-    let pendingRebuild = false; // src change arrived during build → needs rebuild + copy
-    let pendingCopy = false; // non-src change arrived during build → needs copy only
+    let pendingRebuild = false;
+    let pendingCopy = false;
+
+    const copyIfEnabled = async () => {
+        if (options.copy) {
+            await copyPacks(cwd, config, options.copyTarget, options.dryRun, logger);
+        }
+    };
+
+    const rebuild = async () => {
+        if (compile) {
+            await runBuild({
+                cwd,
+                config,
+                logger,
+                typecheck: options.typecheck,
+                cache: options.cache,
+                dryRun: options.dryRun,
+                quiet: Boolean(options.quiet),
+            });
+        } else {
+            const { patchManifest } = await import("../manifest/patchManifest.js");
+            await patchManifest({ cwd, config, dryRun: options.dryRun, logger });
+        }
+        await copyIfEnabled();
+    };
 
     watcher.on("all", async (_event, file) => {
         const normalized = slash(file);
-        const srcEntryDir =
-            compile && srcEntry(cwd, config)
-                ? relative(path.dirname(srcEntry(cwd, config)!))
-                : undefined;
+        const entry = compile ? srcEntry(cwd, config) : undefined;
+        const srcEntryDir = entry ? relative(path.dirname(entry)) : undefined;
         const isSrc = srcEntryDir ? normalized.startsWith(`${srcEntryDir}/`) : false;
 
         if (building) {
@@ -121,24 +155,11 @@ export function watchProject(
             logger.clear();
             logger.bepack("dev", `changed ${path.normalize(file)}`);
             if (isSrc && compile) {
-                // Source change: full rebuild (manifest + compile)
-                await runBuild({
-                    cwd,
-                    config,
-                    logger,
-                    typecheck: config.packs.bp!.compile!.typecheck,
-                    cache: config.packs.bp!.compile!.cache.dev,
-                });
+                await rebuild();
             } else {
-                // Non-source change: just update manifest and copy
                 const { patchManifest } = await import("../manifest/patchManifest.js");
-                await patchManifest({ cwd, config, logger });
-            }
-            if (copyTarget || config.dev.copy) {
-                const target =
-                    copyTarget ??
-                    (typeof config.dev.copy === "string" ? config.dev.copy : undefined);
-                await copyPacks(cwd, config, target, false, logger);
+                await patchManifest({ cwd, config, dryRun: options.dryRun, logger });
+                await copyIfEnabled();
             }
             logger.done(
                 "dev",
@@ -148,7 +169,6 @@ export function watchProject(
             logger.error(error instanceof Error ? error.message : String(error));
         } finally {
             building = false;
-            // Drain pending changes that arrived during the build
             if (pendingRebuild) {
                 pendingRebuild = false;
                 pendingCopy = false;
@@ -157,24 +177,7 @@ export function watchProject(
                 try {
                     logger.clear();
                     logger.bepack("dev", "rebuilding (pending changes)");
-                    if (compile) {
-                        await runBuild({
-                            cwd,
-                            config,
-                            logger,
-                            typecheck: config.packs.bp!.compile!.typecheck,
-                            cache: config.packs.bp!.compile!.cache.dev,
-                        });
-                    } else {
-                        const { patchManifest } = await import("../manifest/patchManifest.js");
-                        await patchManifest({ cwd, config, logger });
-                    }
-                    if (copyTarget || config.dev.copy) {
-                        const target =
-                            copyTarget ??
-                            (typeof config.dev.copy === "string" ? config.dev.copy : undefined);
-                        await copyPacks(cwd, config, target, false, logger);
-                    }
+                    await rebuild();
                     logger.done(
                         "dev",
                         `rebuild done in ${logger.formatDuration(Date.now() - retryStart)}`
@@ -186,14 +189,8 @@ export function watchProject(
                 }
             } else if (pendingCopy) {
                 pendingCopy = false;
-                const retryStart = Date.now();
                 try {
-                    if (copyTarget || config.dev.copy) {
-                        const target =
-                            copyTarget ??
-                            (typeof config.dev.copy === "string" ? config.dev.copy : undefined);
-                        await copyPacks(cwd, config, target, false, logger);
-                    }
+                    await copyIfEnabled();
                 } catch (error) {
                     logger.error(error instanceof Error ? error.message : String(error));
                 }
@@ -201,6 +198,12 @@ export function watchProject(
         }
     });
 
-    logger.progress("dev", `watching ${watchRoots.join(", ")}`);
+    const summary = [
+        ...(compile ? ["src"] : []),
+        ...(config.packs.bp ? [`bp(${bpWatchPaths.length})`] : []),
+        ...(config.packs.rp ? [`rp(${rpWatchPaths.length})`] : []),
+    ];
+    logger.progress("dev", `watching ${summary.join(", ")}`);
+    logger.verbose(`watch paths: ${watchRoots.join(", ")}`);
     return watcher;
 }
