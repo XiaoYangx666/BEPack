@@ -1,6 +1,6 @@
 import { BePackError } from "../errors/BePackError.js";
 import { BUILTIN_DEPENDENCY_CATALOG } from "../constants/dependencyCatalog.js";
-import type { Manifest, ManifestModule } from "./types.js";
+import type { Manifest, ManifestModule, ManifestScriptModule, ManifestResourcesModule } from "./types.js";
 
 /**
  * ManifestReader 提供从已解析的 Manifest 对象中提取信息的纯方法。
@@ -49,6 +49,16 @@ export class ManifestReader {
         return undefined;
     }
 
+    /** 查找 BP manifest 中的 script 模块 entry 路径。 */
+    static findScriptModuleEntry(manifest: Manifest): string | undefined {
+        for (const mod of manifest.modules ?? []) {
+            if (mod && ManifestReader.isScriptModule(mod)) {
+                return mod.entry;
+            }
+        }
+        return undefined;
+    }
+
     /** 查找 RP manifest 中的 resources 模块 UUID。 */
     static findResourcesModuleUuid(manifest: Manifest): string | undefined {
         for (const mod of manifest.modules ?? []) {
@@ -86,12 +96,12 @@ export class ManifestReader {
     // -----------------------------------------------------------------------
 
     /** 判断 module 是否为 BP script 模块。 */
-    static isScriptModule(mod: ManifestModule): boolean {
+    static isScriptModule(mod: ManifestModule): mod is ManifestScriptModule {
         return mod?.type === "script" && mod?.language === "javascript";
     }
 
     /** 判断 module 是否为 RP resources 模块。 */
-    static isResourcesModule(mod: ManifestModule): boolean {
+    static isResourcesModule(mod: ManifestModule): mod is ManifestResourcesModule {
         return mod?.type === "resources";
     }
 }

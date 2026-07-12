@@ -102,6 +102,7 @@ bepack pack --name release
 - `manifestFormat: 2 | 3` controls manifest output format. `2` uses array versions `[1,0,0]`; `3` uses SemVer strings `"1.0.0"` (all version fields must be strings, arrays rejected). Not set = auto-preserve from existing manifest, default 2 for new ones.
 - `packs.bp.include` / `packs.rp.include` adds extra files/folders for copy and pack. BP is always selective; RP is selective when include items are configured, otherwise full directory.
 - `packs.bp.compile.cache` configures TypeScript incremental compilation caching. `cache.dev` (default `true`) enables cache in dev mode; `cache.build` (default `false`) enables cache in build mode. Use `bepack build --cache` / `--no-cache` to override per-run.
+- `packs.bp.compile.scriptOutputDir` sets the compiled script output directory (relative to BP root). Default: `"scripts"`. Manifest script module entry and `HookContext.paths.scriptOutDir` reflect this value.
 - `bepack dev --skip-typecheck` skips type checking on dev rebuilds.
 
 For the full configuration reference and implementation notes, see [README.reference.md](./README.reference.md).

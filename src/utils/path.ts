@@ -61,13 +61,19 @@ export function srcEntry(cwd: string, config: ResolvedConfig): string | undefine
 
 export function scriptOutDir(cwd: string, config: ResolvedConfig): string | undefined {
     if (!config.packs.bp) return undefined;
-    return path.join(bpRoot(cwd, config), "scripts");
+    const outputDir = config.packs.bp.compile?.scriptOutputDir ?? "scripts";
+    return path.join(bpRoot(cwd, config), outputDir);
 }
 
 export function scriptOutFile(cwd: string, config: ResolvedConfig): string | undefined {
     const dir = scriptOutDir(cwd, config);
     if (!dir) return undefined;
-    return path.join(dir, "main.js");
+    if (!config.packs.bp?.compile) return path.join(dir, "main.js");
+    const basename = path.basename(
+        config.packs.bp.compile.entry,
+        path.extname(config.packs.bp.compile.entry)
+    );
+    return path.join(dir, `${basename}.js`);
 }
 
 // ---------------------------------------------------------------------------

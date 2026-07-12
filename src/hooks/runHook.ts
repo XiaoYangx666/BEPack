@@ -8,6 +8,7 @@ import {
     hasBpCompile,
     rpManifest,
     rpRoot,
+    scriptOutDir,
     scriptOutFile,
     srcEntry,
 } from "../utils/path.js";
@@ -35,6 +36,8 @@ function resolvePaths(cwd: string, config: ResolvedConfig): HookContext["paths"]
             if (entry) paths.srcEntry = entry;
             const scriptFile = scriptOutFile(cwd, config);
             if (scriptFile) paths.scriptOutFile = scriptFile;
+            const scriptDir = scriptOutDir(cwd, config);
+            if (scriptDir) paths.scriptOutDir = scriptDir;
         }
     }
     if (config.packs.rp) {

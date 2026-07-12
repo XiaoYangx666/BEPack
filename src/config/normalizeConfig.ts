@@ -72,6 +72,7 @@ function normalizeCompile(
         useNpx: compile?.useNpx ?? defs.useNpx,
         minify: compile?.minify ?? defs.minify,
         cache: normalizeCache(compile?.cache),
+        scriptOutputDir: compile?.scriptOutputDir ?? defs.scriptOutputDir,
     };
 
 function normalizeCache(cache: CacheOptions | undefined): CacheResolved {

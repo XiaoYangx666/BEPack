@@ -61,6 +61,7 @@ export const BP_COMPILE_DEFAULTS: BpCompileResolved = {
     useNpx: false,
     minify: false,
     cache: CACHE_DEFAULTS,
+    scriptOutputDir: "scripts",
 };
 
 export function defineConfig(config: UserConfig): UserConfig;

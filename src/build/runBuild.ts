@@ -5,7 +5,7 @@ import { runTypecheck } from "./runTypecheck.js";
 import { runRolldown } from "./runRolldown.js";
 import { runHook } from "../hooks/runHook.js";
 import type { Logger } from "../logger/logger.js";
-import { projectRoot, slash, hasBpCompile } from "../utils/path.js";
+import { projectRoot, slash, hasBpCompile, scriptOutFile } from "../utils/path.js";
 
 export type RunBuildOptions = {
     cwd: string;
@@ -104,7 +104,7 @@ export async function runBuild(options: RunBuildOptions) {
     const durationMs = Date.now() - start;
     return {
         script: compile
-            ? slash(`${options.config.packs.bp!.root}/scripts/main.js`)
+            ? slash(scriptOutFile(options.cwd, options.config)!)
             : undefined,
         compiled: compile,
         typecheck: typecheckRan,

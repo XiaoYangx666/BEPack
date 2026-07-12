@@ -1,9 +1,9 @@
+import path from "node:path";
 import { BePackError } from "../errors/BePackError.js";
 import {
     MANIFEST_FORMAT_VERSION,
     MIN_ENGINE_VERSION,
     MODULE_VERSION,
-    SCRIPT_ENTRY,
 } from "../constants/manifest.js";
 import { parseVersionTuple } from "../utils/semver.js";
 import type { ResolvedConfig } from "../config/configTypes.js";
@@ -148,12 +148,22 @@ export class ManifestBuilder {
     // Module 管理
     // -----------------------------------------------------------------------
 
+    /** Compute the relative entry path for compiled scripts, e.g. "scripts/main.js". */
+    private getScriptEntry(): string {
+        const compile = this.config.packs.bp?.compile;
+        if (!compile) return "scripts/main.js";
+        const dir = compile.scriptOutputDir;
+        const basename = path.basename(compile.entry, path.extname(compile.entry));
+        return `${dir}/${basename}.js`;
+    }
+
     private isManagedBpModule(
         module: ManifestModule,
         bp: NonNullable<ResolvedConfig["packs"]["bp"]>
     ): boolean {
         if (module.type !== "script" || module.language !== "javascript") return false;
-        return module.uuid === bp.moduleUuid || module.entry === SCRIPT_ENTRY;
+        const scriptEntry = this.getScriptEntry();
+        return module.uuid === bp.moduleUuid || module.entry === scriptEntry;
     }
 
     private isManagedRpModule(
@@ -173,7 +183,7 @@ export class ManifestBuilder {
             language: "javascript",
             uuid: bp.moduleUuid!,
             version: this.getModuleVersion(formatVersion),
-            entry: SCRIPT_ENTRY,
+            entry: this.getScriptEntry(),
         };
     }
 

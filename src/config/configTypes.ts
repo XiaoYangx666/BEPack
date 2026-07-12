@@ -106,6 +106,8 @@ export type HookContext = {
         srcEntry?: string;
         /** Compiled script output. Only present when packs.bp?.compile is configured. */
         scriptOutFile?: string;
+        /** Compiled script output directory. Only present when packs.bp?.compile is configured. */
+        scriptOutDir?: string;
     };
     logger: LoggerLike;
 };
@@ -192,6 +194,9 @@ export type BpCompileOptions = {
      *  `file` defaults to "node_modules/.cache/bepack/tsconfig.tsbuildinfo".
      *  CLI `--cache` / `--no-cache` overrides build mode. */
     cache?: CacheOptions;
+
+    /** Output directory for compiled scripts, relative to BP root. Default: "scripts". */
+    scriptOutputDir?: string;
 };
 
 export type BpConfig = PackConfig & {
@@ -362,6 +367,7 @@ export type BpCompileResolved = {
     useNpx: boolean;
     minify: boolean;
     cache: CacheResolved;
+    scriptOutputDir: string;
 };
 
 export type ResolvedConfig = {

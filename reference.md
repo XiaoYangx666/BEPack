@@ -137,6 +137,8 @@ type UserConfig = {
                     build?: boolean;  // 默认 false
                     file?: string;    // 默认 "node_modules/.cache/bepack/tsconfig.tsbuildinfo"
                 };
+                /** 编译脚本输出目录，相对于 BP root。默认 "scripts"。 */
+                scriptOutputDir?: string;
             };
             /** 所有 BP 依赖都在此声明——包括清单依赖和纯代码依赖。 */
             dependencies?: Record<string, "stable" | "beta" | "preview" | string>;
@@ -452,6 +454,7 @@ Rolldown 行为：
 - 输出到 `<packs.bp.root>/scripts`。
 - 每次构建前会清空 `<packs.bp.root>/scripts` 目录。
 - `packs.bp.compile.entry` 控制输入文件。
+- `packs.bp.compile.scriptOutputDir` 控制编译脚本输出目录（相对于 BP root），默认 `"scripts"`。manifest 中的 script 模块 `entry` 路径也会随之更新为 `<scriptOutputDir>/<entry文件名>.js`。
 - 外部包来自 `packs.bp.compile.external`，默认情况下也来自受管理的依赖目录。
 - `packs.bp.compile.minify: true` 或 `--minify` 启用 Rolldown 代码压缩，输出更小的 JS 文件。
 - 构建完成后显示输出文件的大小统计（单文件显示路径和体积，多文件显示总文件数和总体积）。
@@ -711,7 +714,11 @@ type HookContext = {
         dist: string;
         bpRoot?: string;
         rpRoot?: string;
-        // ...
+        bpManifest?: string;
+        rpManifest?: string;
+        srcEntry?: string;
+        scriptOutFile?: string;   // 编译输出文件路径
+        scriptOutDir?: string;    // 编译输出目录路径
     };
     logger: LoggerLike;
 };
@@ -804,6 +811,7 @@ bepack init --from-bp ./bp/manifest.json --from-rp ./rp/manifest.json
 | UUID | 直接读取 manifest 中的值，不重新生成 |
 | 版本 | 从 manifest header 读取（支持数组 `[1,0,0]` 和字符串 `"1.0.0"`）。两个包版本不同时取最高者，并给出警告 |
 | 依赖 | manifest 中的 `module_name` 依赖如果在 BePack 内置 catalog 中，自动写入配置 |
+| 编译脚本 | manifest 中有 script 模块时自动开启 compile。根据模块 `entry` 推断源入口和输出目录：`"scripts/main.js"` → `entry: "src/main.ts"`；`"custom/app.js"` → `entry: "src/app.ts"`, `scriptOutputDir: "custom"` |
 | Windows | 自动添加 `copy: { defaultTarget: "win" }" |
 
 manifest 路径必须在当前目录内，否则报错。

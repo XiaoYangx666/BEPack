@@ -104,6 +104,7 @@ async function initFromManifests(
         moduleUuid?: string;
         version?: string;
         deps: Record<string, string>;
+        scriptEntry?: string;
     } | undefined;
 
     let rpInfo: {
@@ -154,6 +155,7 @@ async function initFromManifests(
         // Script module is optional — data-only BP may not have one.
         // If found, enable compile + moduleUuid.
         const scriptModuleUuid = ManifestReader.findScriptModuleUuid(manifest);
+        const scriptModuleEntry = ManifestReader.findScriptModuleEntry(manifest);
         const bpVersion = versionToString(manifest.header?.version);
         if (bpVersion) versions.push(bpVersion);
 
@@ -163,6 +165,7 @@ async function initFromManifests(
             ...(scriptModuleUuid ? { moduleUuid: scriptModuleUuid } : {}),
             ...(bpVersion ? { version: bpVersion } : {}),
             deps: ManifestReader.matchDependencies(manifest),
+            ...(scriptModuleEntry ? { scriptEntry: scriptModuleEntry } : {}),
         };
 
         // Always set top-level name from BP header (required by normalizeConfig)
@@ -273,7 +276,19 @@ async function initFromManifests(
         };
         if (bpInfo.moduleUuid) {
             bp.moduleUuid = bpInfo.moduleUuid;
-            bp.compile = { entry: "src/main.ts" };
+            // Derive source entry and output dir from manifest's script module entry.
+            // e.g. "scripts/main.js" → entry: "src/main.ts", scriptOutputDir: "scripts"
+            // e.g. "custom_out/index.js" → entry: "src/index.ts", scriptOutputDir: "custom_out"
+            if (bpInfo.scriptEntry) {
+                const outputDir = path.dirname(bpInfo.scriptEntry);
+                const outputBasename = path.basename(bpInfo.scriptEntry, ".js");
+                bp.compile = {
+                    entry: `src/${outputBasename}.ts`,
+                    ...(outputDir !== "." ? { scriptOutputDir: outputDir } : {}),
+                };
+            } else {
+                bp.compile = { entry: "src/main.ts" };
+            }
         }
         if (bpName) bp.name = bpName;
         if (bpDescription) bp.description = bpDescription;
