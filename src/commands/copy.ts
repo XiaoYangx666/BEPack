@@ -7,7 +7,6 @@ export async function commandCopy(options: any) {
     const start = Date.now();
     const logger = new Logger({ ...options, silent: options.silent || options.json });
     const { cwd, config } = await loadConfig({
-        command: "copy",
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
     });

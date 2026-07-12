@@ -1,5 +1,4 @@
 import type {
-    ConfigContext,
     ResolvedConfig,
     UserConfig,
     BpCompileResolved,
@@ -64,12 +63,6 @@ export const BP_COMPILE_DEFAULTS: BpCompileResolved = {
     scriptOutputDir: "scripts",
 };
 
-export function defineConfig(config: UserConfig): UserConfig;
-export function defineConfig<T extends (ctx: ConfigContext) => UserConfig | Promise<UserConfig>>(
-    config: T
-): T;
-export function defineConfig(
-    config: UserConfig | ((ctx: ConfigContext) => UserConfig | Promise<UserConfig>)
-): UserConfig | ((ctx: ConfigContext) => UserConfig | Promise<UserConfig>) {
+export function defineConfig(config: UserConfig): UserConfig {
     return config;
 }

@@ -27,10 +27,8 @@ export async function commandBuild(options: any) {
     assertNoConflicts(options);
     const logger = new Logger({ ...options, silent: options.silent || options.json });
     const { cwd, config } = await loadConfig({
-        command: "build",
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
-        mode: options.mode,
         overrides: {
             target: options.target,
             ...(options.timing !== undefined ? { build: { timing: options.timing } } : {}),

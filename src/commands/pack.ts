@@ -145,7 +145,6 @@ export async function runPack(
 export async function commandPack(options: any) {
     const logger = new Logger({ ...options, silent: options.silent || options.json });
     const loaded = await loadConfig({
-        command: "pack",
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
     });

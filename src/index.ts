@@ -21,7 +21,6 @@ export { BePackError } from "./errors/BePackError.js";
 export type {
     UserConfig,
     ResolvedConfig,
-    ConfigContext,
     HookContext,
     DependencyCatalogEntry,
     DependencyResolverContext,

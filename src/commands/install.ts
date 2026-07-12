@@ -27,7 +27,6 @@ export async function commandInstall(options: any) {
         };
     }
     const { cwd, config } = await loadConfig({
-        command: "install",
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
         overrides,

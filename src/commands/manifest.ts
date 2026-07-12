@@ -6,7 +6,6 @@ import { Logger } from "../logger/logger.js";
 export async function commandManifest(options: any) {
     const logger = new Logger({ ...options, silent: options.silent || options.json });
     const { cwd, config } = await loadConfig({
-        command: "manifest",
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
         overrides: { target: options.target },

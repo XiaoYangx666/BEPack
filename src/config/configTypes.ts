@@ -22,14 +22,6 @@ export type CopySetting = false | true | string;
 /** Rolldown external dependency matcher. */
 export type BuildExternal = string | RegExp;
 
-export type ConfigContext = {
-    command: CommandName;
-    cwd: string;
-    mode?: string;
-    platform: NodeJS.Platform;
-    env: NodeJS.ProcessEnv;
-};
-
 export type LoggerLike = {
     info(message: string): void;
     warn(message: string): void;
@@ -439,10 +431,8 @@ export type ResolvedConfig = {
 };
 
 export type LoadConfigOptions = {
-    command: CommandName;
     cwd: string;
     configPath?: string;
-    mode?: string;
     overrides?: Partial<UserConfig>;
 };
 

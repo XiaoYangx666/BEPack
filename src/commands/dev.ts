@@ -10,10 +10,8 @@ export async function commandDev(options: any) {
     const start = Date.now();
     const logger = new Logger({ ...options, silent: options.silent || options.json });
     const { cwd, config } = await loadConfig({
-        command: "dev",
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
-        mode: options.mode,
         overrides: {
             ...(options.timing !== undefined ? { build: { timing: options.timing } } : {}),
         },

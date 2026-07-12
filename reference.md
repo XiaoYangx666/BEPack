@@ -49,12 +49,6 @@ bepack.config.js
 export default {
     // config
 };
-
-export default (ctx) => {
-    return {
-        // config
-    };
-};
 ```
 
 `defineConfig` 已导出并带有类型定义，以支持编辑器自动补全：

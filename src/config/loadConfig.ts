@@ -3,7 +3,7 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import { CONFIG_FILES } from "../constants/paths.js";
 import { BePackError } from "../errors/BePackError.js";
-import type { ConfigContext, LoadConfigOptions, UserConfig } from "./configTypes.js";
+import type { LoadConfigOptions, UserConfig } from "./configTypes.js";
 import { normalizeConfig } from "./normalizeConfig.js";
 import { resolveFrom } from "../utils/path.js";
 
@@ -71,21 +71,11 @@ function stripConfigTypeSyntax(source: string): string {
 export async function loadConfig(options: LoadConfigOptions) {
     const cwd = path.resolve(options.cwd);
     const file = await findConfig(cwd, options.configPath);
-    const mod = (await importConfig(file)) as {
-        default?: UserConfig | ((ctx: ConfigContext) => UserConfig | Promise<UserConfig>);
-    };
+    const mod = (await importConfig(file)) as { default?: UserConfig };
     if (mod.default === undefined) {
         throw new BePackError("CONFIG_INVALID", "Config must use default export.", {
             details: { file },
         });
     }
-    const ctx: ConfigContext = {
-        command: options.command,
-        cwd,
-        platform: process.platform,
-        env: process.env,
-        ...(options.mode === undefined ? {} : { mode: options.mode }),
-    };
-    const raw = typeof mod.default === "function" ? await mod.default(ctx) : mod.default;
-    return { config: normalizeConfig(raw, options.overrides), path: file, cwd };
+    return { config: normalizeConfig(mod.default, options.overrides), path: file, cwd };
 }
