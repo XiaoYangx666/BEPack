@@ -72,6 +72,7 @@ bepack build
 bepack dev
 bepack copy
 bepack pack
+bepack config
 ```
 
 常用示例：

@@ -1,6 +1,6 @@
 import type { NpmRegistryClient } from "../utils/npmRegistry.js";
 
-export type CommandName = "init" | "install" | "manifest" | "build" | "dev" | "copy" | "pack";
+export type CommandName = "init" | "install" | "manifest" | "build" | "dev" | "copy" | "pack" | "config";
 /**
  * Script API dependency selector.
  *

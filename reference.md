@@ -18,6 +18,7 @@ bepack build
 bepack dev
 bepack copy
 bepack pack
+bepack config
 ```
 
 通用命令选项：

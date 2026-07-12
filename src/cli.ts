@@ -7,6 +7,7 @@ import { commandBuild } from "./commands/build.js";
 import { commandCopy } from "./commands/copy.js";
 import { commandPack } from "./commands/pack.js";
 import { commandDev } from "./commands/dev.js";
+import { commandConfig } from "./commands/config.js";
 import { formatError } from "./errors/formatError.js";
 import { writeJson } from "./logger/jsonOutput.js";
 import pc from "picocolors";
@@ -107,6 +108,8 @@ common(cli.command("dev", "Watch project"))
     .option("--skip-typecheck", "Skip typecheck")
     .option("--timing", "Show per-step timing")
     .action((options: any) => run("dev", commandDev, options));
+common(cli.command("config", "Show resolved config"))
+    .action((options: any) => run("config", commandConfig, options));
 
 cli.help();
 cli.version("0.0.1");
