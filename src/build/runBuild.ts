@@ -11,6 +11,8 @@ export type RunBuildOptions = {
     cwd: string;
     config: ResolvedConfig;
     logger: Logger;
+    /** Execution mode passed to hooks. */
+    mode?: string;
     /** Force typecheck (overrides config). Default: config.packs.bp.compile.typecheck */
     typecheck?: boolean;
     /** Enable TypeScript incremental compilation cache. */
@@ -60,7 +62,7 @@ export async function runBuild(options: RunBuildOptions) {
     );
 
     // Phase 2: Compilation (only when BP has compile config)
-    await runHook("beforeBuild", "build", options.cwd, options.config, options.logger);
+    await runHook("beforeBuild", "build", options.cwd, options.config, options.logger, options.mode);
 
     let typecheckRan = false;
     if (compile && !options.dryRun && options.typecheck !== false) {
@@ -98,7 +100,7 @@ export async function runBuild(options: RunBuildOptions) {
         );
     }
 
-    await runHook("afterBuild", "build", options.cwd, options.config, options.logger);
+    await runHook("afterBuild", "build", options.cwd, options.config, options.logger, options.mode);
     const durationMs = Date.now() - start;
     return {
         script: compile

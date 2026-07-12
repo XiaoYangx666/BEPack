@@ -19,6 +19,7 @@ export type DevWatchOptions = {
     cache: boolean;
     dryRun: boolean;
     quiet?: boolean;
+    mode?: string;
 };
 
 function resolveWatchPaths(
@@ -129,6 +130,7 @@ export function watchProject(
                 cache: options.cache,
                 dryRun: options.dryRun,
                 quiet: Boolean(options.quiet),
+                ...(options.mode === undefined ? {} : { mode: options.mode }),
             });
         } else {
             const { patchManifest } = await import("../manifest/patchManifest.js");

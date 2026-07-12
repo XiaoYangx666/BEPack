@@ -30,6 +30,7 @@ export async function commandBuild(options: any) {
         command: "build",
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
+        mode: options.mode,
         overrides: {
             target: options.target,
             ...(options.timing !== undefined ? { build: { timing: options.timing } } : {}),
@@ -66,6 +67,7 @@ export async function commandBuild(options: any) {
         cwd,
         config,
         logger,
+        mode: options.mode,
         typecheck: Boolean(typecheck),
         cache: Boolean(cache),
         dryRun: Boolean(options.dryRun),

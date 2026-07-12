@@ -80,7 +80,9 @@ Useful examples:
 bepack build --install
 bepack build --copy
 bepack build --pack
+bepack build --mode project
 bepack dev --copy
+bepack dev --mode project
 bepack copy --target win
 bepack pack --name release
 ```

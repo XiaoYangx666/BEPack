@@ -13,6 +13,7 @@ export async function commandDev(options: any) {
         command: "dev",
         cwd: options.cwd ?? process.cwd(),
         configPath: options.config,
+        mode: options.mode,
         overrides: {
             ...(options.timing !== undefined ? { build: { timing: options.timing } } : {}),
         },
@@ -47,6 +48,7 @@ export async function commandDev(options: any) {
         cwd,
         config,
         logger,
+        mode: options.mode,
         typecheck: Boolean(typecheck),
         cache,
         dryRun,
@@ -61,6 +63,7 @@ export async function commandDev(options: any) {
     logger.done("dev", `initial build complete in ${logger.formatDuration(Date.now() - start)}`);
     watchProject(cwd, config, logger, {
         copy,
+        mode: options.mode,
         ...(copyTarget ? { copyTarget } : {}),
         typecheck: Boolean(typecheck),
         cache,

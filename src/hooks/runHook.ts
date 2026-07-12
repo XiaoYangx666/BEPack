@@ -49,7 +49,8 @@ export async function runHook(
     command: CommandName,
     cwd: string,
     config: ResolvedConfig,
-    logger: Logger
+    logger: Logger,
+    mode?: string
 ): Promise<void> {
     const hook = config.hooks[name];
     if (!hook) return;
@@ -57,6 +58,7 @@ export async function runHook(
         const result = await hook({
             command,
             cwd,
+            ...(mode === undefined ? {} : { mode }),
             target: config.target,
             config,
             paths: resolvePaths(cwd, config),

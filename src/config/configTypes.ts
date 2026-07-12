@@ -88,6 +88,7 @@ export type DependencyResolverRule = {
 export type HookContext = {
     command: CommandName;
     cwd: string;
+    mode?: string;
     target: string;
     config: ResolvedConfig;
     /** Convenience resolved paths. Only includes paths for packs that are configured. */

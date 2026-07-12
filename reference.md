@@ -435,6 +435,10 @@ hooks.afterBuild
 可选打包
 ```
 
+CLI 选项：
+
+- `--mode <value>`：执行模式，透传给 Hook 上下文（`HookContext.mode`）。不设则为 `undefined`。Hook 内自行判断是否执行特定逻辑。
+
 类型检查行为：
 
 - 默认：系统 `tsc --noEmit`。
@@ -472,6 +476,7 @@ timing    rolldown        45 ms
 
 - 在监视前先执行一次初始构建（manifest + 若有 compile 则编译）。
 - 支持 `--skip-typecheck` 跳过类型检查（与 `build` 命令一致）。
+- 支持 `--mode <value>`，用法与 `build` 命令相同，透传给 Hook 上下文。初始构建和后续增量重建均会传入该值。
 - 默认监视的路径：
     - `packs.bp.compile.entry` 所在目录（仅在 BP 配置了 compile 时，TypeScript 源码变化 → 触发编译）
     - BP 的默认 include 列表 + `packs.bp.include` 中的文件/文件夹（不含 `scripts` 和 `manifest.json`）
@@ -693,7 +698,39 @@ hooks: {
 }
 ```
 
+钩子上下文类型：
+
+```ts
+type HookContext = {
+    command: CommandName;  // "build" | "dev" | "install" | ...
+    cwd: string;
+    mode?: string;         // 通过 --mode <value> 传入的执行模式
+    target: string;
+    config: ResolvedConfig;
+    paths: {
+        dist: string;
+        bpRoot?: string;
+        rpRoot?: string;
+        // ...
+    };
+    logger: LoggerLike;
+};
+```
+
 钩子可以是同步或异步的。在钩子中抛出异常会导致命令失败，返回 `HOOK_FAILED`。
+
+`mode` 来自 CLI `--mode <value>` 选项（目前 `build` 和 `dev` 命令支持），BEPack 不做语义判断，由用户在钩子内自行决定是否执行特定逻辑：
+
+```ts
+hooks: {
+    async afterBuild({ mode }) {
+        if (mode === "template") return;       // 模板构建跳过复制
+        await copyFilesToOutput();
+    },
+}
+```
+
+未传入 `--mode` 时，`mode` 为 `undefined`，保持完全向后兼容。
 
 ## 输出与错误
 
