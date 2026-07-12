@@ -39,9 +39,7 @@
     },
     "scripts": {
         "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
-        "build:js": "rolldown -c && node scripts/chmod.mjs",
-        "build:types": "dts-bundle-generator -o dist/index.d.ts src/index.ts",
-        "build": "npm run clean && npm run build:js && npm run build:types",
+        "build": "npm run clean && rolldown -c && node scripts/chmod.mjs",
         "check": "tsc --noEmit",
         "test": "vitest run",
         "test:watch": "vitest",

@@ -88,9 +88,24 @@ export function watchProject(
     const extraWatchPaths = config.dev.watch?.include ?? [];
     watchRoots.push(...extraWatchPaths);
 
+    const ignored = ["node_modules", ".git", relative(distRoot(cwd, config))];
+
+    for (const pack of getConfiguredPacks(config)) {
+        const rootDir = packRoot(root, config, pack.type);
+        if (!rootDir) continue;
+
+        // BePack 自己会修改 manifest，不能让它再次触发 dev
+        ignored.push(relative(path.join(rootDir, "manifest.json")));
+
+        // Rolldown 会向 BP scripts 写入编译结果
+        if (pack.type === "bp") {
+            ignored.push(relative(path.join(rootDir, "scripts")));
+        }
+    }
+
     const watcher = chokidar.watch(watchRoots, {
         cwd,
-        ignored: ["node_modules", relative(distRoot(cwd, config)), ".git"],
+        ignored,
         ignoreInitial: true,
     });
 
