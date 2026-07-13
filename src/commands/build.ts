@@ -56,10 +56,11 @@ export async function commandBuild(options: any) {
         ? false
         : options.typecheck
           ? true
-          : compile?.typecheck ?? false;
+          : (compile?.typecheck ?? false);
 
     // Cache override: CLI --cache/--no-cache > config.cache.build > false
-    const cache = options.cache ?? (compile?.cache.build ?? false);
+    // options.cache is true from --cache, false from --no-cache, undefined when not set
+    const cache = options.cache !== undefined ? options.cache : (compile?.cache.build ?? false);
 
     const build = await runBuild({
         cwd,
@@ -89,7 +90,17 @@ export async function commandBuild(options: any) {
         );
     let packResult = null;
     if (!options.skipPack && options.pack)
-        packResult = await runPack(cwd, config, logger, { name: options.name, dryRun: options.dryRun });
+        packResult = await runPack(cwd, config, logger, {
+            name: options.name,
+            dryRun: options.dryRun,
+        });
     logger.done("build", `complete in ${logger.formatDuration(build.durationMs)}`);
-    return { ok: true, command: "build", durationMs: build.durationMs, build, copy, pack: packResult };
+    return {
+        ok: true,
+        command: "build",
+        durationMs: build.durationMs,
+        build,
+        copy,
+        pack: packResult,
+    };
 }

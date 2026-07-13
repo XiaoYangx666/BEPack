@@ -5,10 +5,10 @@ import type { PackType } from "../config/configTypes.js";
 import { zipSelectedItems, zipAddonSelected, zipAddonHybrid } from "../pack/zip.js";
 import { runHook } from "../hooks/runHook.js";
 import { Logger } from "../logger/logger.js";
-import { packRoot, projectRoot, distRoot } from "../utils/path.js";
+import { packRoot, projectRoot, distRoot, getBpIncludeItems } from "../utils/path.js";
+import { DEFAULT_RP_INCLUDES } from "../constants/copyIncludes.js";
 import { pathExists } from "../utils/fs.js";
 import { BePackError } from "../errors/BePackError.js";
-import { DEFAULT_BP_INCLUDES, DEFAULT_RP_INCLUDES, getIncludes } from "../constants/copyIncludes.js";
 
 type LoadedConfig = Awaited<ReturnType<typeof loadConfig>>["config"];
 
@@ -17,14 +17,10 @@ function assertOutputOutsideDir(output: string, dir: string, label: string): voi
     const resolvedDir = path.resolve(dir);
     const relative = path.relative(resolvedDir, resolvedOutput);
     if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
-        throw new BePackError(
-            "PACK_FAILED",
-            `pack output must not be inside ${label} directory.`,
-            {
-                details: { output: resolvedOutput, dir: resolvedDir },
-                suggestions: [`Set pack.outDir to a path outside ${label}: ${resolvedDir}`],
-            }
-        );
+        throw new BePackError("PACK_FAILED", `pack output must not be inside ${label} directory.`, {
+            details: { output: resolvedOutput, dir: resolvedDir },
+            suggestions: [`Set pack.outDir to a path outside ${label}: ${resolvedDir}`],
+        });
     }
 }
 
@@ -34,19 +30,15 @@ function getPackItems(
     packType: PackType
 ): { items: string[]; selective: boolean } {
     if (packType === "bp") {
-        const items = getIncludes(DEFAULT_BP_INCLUDES, config.packs.bp?.include);
-        return { items, selective: true };
+        return { items: getBpIncludeItems(config), selective: true };
     }
 
     // RP
-    const rpIncludes = getIncludes(DEFAULT_RP_INCLUDES, config.packs.rp?.include);
-    if (rpIncludes.length > 0) {
-        return { items: rpIncludes, selective: true };
-    }
-    // Also check legacy copy.include.rp
-    const legacyRpIncludes = getIncludes(DEFAULT_RP_INCLUDES, config.copy.include?.rp);
-    if (legacyRpIncludes.length > 0) {
-        return { items: legacyRpIncludes, selective: true };
+    const rpIncludes = config.packs.rp?.include ?? [];
+    const legacyRpIncludes = config.copy.include?.rp ?? [];
+    const effectiveUser = rpIncludes.length > 0 ? rpIncludes : legacyRpIncludes;
+    if (effectiveUser.length > 0) {
+        return { items: [...DEFAULT_RP_INCLUDES, ...effectiveUser], selective: true };
     }
     return { items: [], selective: false };
 }
@@ -67,8 +59,12 @@ export async function packProject(
         throw new BePackError("PACK_FAILED", "No packs configured. At least one pack is required.");
     }
 
-    const bp = config.packs.bp ? { root: packRoot(root, config, "bp")!, config: config } : undefined;
-    const rp = config.packs.rp ? { root: packRoot(root, config, "rp")!, config: config } : undefined;
+    const bp = config.packs.bp
+        ? { root: packRoot(root, config, "bp")!, config: config }
+        : undefined;
+    const rp = config.packs.rp
+        ? { root: packRoot(root, config, "rp")!, config: config }
+        : undefined;
 
     if (bp && rp) {
         // BP + RP → .mcaddon
