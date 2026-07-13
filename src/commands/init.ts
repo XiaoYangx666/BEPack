@@ -8,19 +8,68 @@ import { ManifestFile } from "../manifest/ManifestFile.js";
 import { ManifestReader } from "../manifest/ManifestReader.js";
 
 /**
+ * Validate a manifest script entry path.
+ * It must be a relative path ending in .js, must not contain "..",
+ * must not be absolute, and must not be empty.
+ * Returns the normalized (forward-slash) entry path.
+ */
+export function validateScriptEntry(entry: unknown, label: string): string {
+    if (typeof entry !== "string" || !entry) {
+        throw new BePackError(
+            "MANIFEST_INVALID",
+            `${label} script module entry must be a non-empty string.`
+        );
+    }
+
+    // Normalize backslashes to forward slashes for validation
+    const normalized = entry.replace(/\\/g, "/");
+
+    if (path.posix.isAbsolute(normalized) || path.win32.isAbsolute(normalized)) {
+        throw new BePackError(
+            "MANIFEST_INVALID",
+            `${label} script module entry must be a relative path, got absolute: "${entry}".`
+        );
+    }
+
+    if (!normalized.endsWith(".js")) {
+        throw new BePackError(
+            "MANIFEST_INVALID",
+            `${label} script module entry must end with .js, got: "${entry}".`
+        );
+    }
+
+    const parts = normalized.split("/");
+    if (parts.includes("..")) {
+        throw new BePackError(
+            "MANIFEST_INVALID",
+            `${label} script module entry must not contain "..": "${entry}".`
+        );
+    }
+
+    if (parts.includes("")) {
+        throw new BePackError(
+            "MANIFEST_INVALID",
+            `${label} script module entry must not contain empty segments: "${entry}".`
+        );
+    }
+
+    return normalized;
+}
+
+/**
  * 从 manifest 文件路径推导 pack root 目录（相对 cwd）。
  * 如果路径在 cwd 之外则抛出。
  */
 function derivePackRoot(cwd: string, manifestPath: string): string {
     const abs = path.resolve(cwd, manifestPath);
     const dir = path.dirname(abs);
-    if (!dir.startsWith(cwd)) {
+    const rel = path.relative(cwd, dir);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) {
         throw new BePackError(
             "CONFIG_INVALID",
             `Manifest path is outside the project directory: ${manifestPath}`
         );
     }
-    const rel = path.relative(cwd, dir);
     return rel || ".";
 }
 
@@ -57,10 +106,7 @@ export function versionToString(v: unknown): string | undefined {
 }
 
 /** Compare two version tuples. Returns positive if a > b, negative if a < b, 0 if equal. */
-function compareVersionTuple(
-    a: [number, number, number],
-    b: [number, number, number]
-): number {
+function compareVersionTuple(a: [number, number, number], b: [number, number, number]): number {
     if (a[0] !== b[0]) return a[0] - b[0];
     if (a[1] !== b[1]) return a[1] - b[1];
     return a[2] - b[2];
@@ -98,21 +144,25 @@ async function initFromManifests(
     const hasRp = Boolean(options.fromRp);
 
     // Read manifests and extract data
-    let bpInfo: {
-        root: string;
-        uuid: string;
-        moduleUuid?: string;
-        version?: string;
-        deps: Record<string, string>;
-        scriptEntry?: string;
-    } | undefined;
+    let bpInfo:
+        | {
+              root: string;
+              uuid: string;
+              moduleUuid?: string;
+              version?: string;
+              deps: Record<string, string>;
+              scriptEntry?: string;
+          }
+        | undefined;
 
-    let rpInfo: {
-        root: string;
-        uuid: string;
-        moduleUuid: string;
-        version?: string;
-    } | undefined;
+    let rpInfo:
+        | {
+              root: string;
+              uuid: string;
+              moduleUuid: string;
+              version?: string;
+          }
+        | undefined;
 
     // Detect format_version from the first available manifest
     let detectedFormatVersion: number | undefined;
@@ -136,10 +186,7 @@ async function initFromManifests(
     if (hasBp) {
         const manifest = await ManifestFile.read(options.fromBp);
         if (!manifest) {
-            throw new BePackError(
-                "CONFIG_NOT_FOUND",
-                `BP manifest not found: ${options.fromBp}`
-            );
+            throw new BePackError("CONFIG_NOT_FOUND", `BP manifest not found: ${options.fromBp}`);
         }
         detectedFormatVersion ??= manifest.format_version;
         // Check format_version vs actual header.version format
@@ -178,10 +225,7 @@ async function initFromManifests(
     if (hasRp) {
         const manifest = await ManifestFile.read(options.fromRp);
         if (!manifest) {
-            throw new BePackError(
-                "CONFIG_NOT_FOUND",
-                `RP manifest not found: ${options.fromRp}`
-            );
+            throw new BePackError("CONFIG_NOT_FOUND", `RP manifest not found: ${options.fromRp}`);
         }
         detectedFormatVersion ??= manifest.format_version;
         // Check format_version vs actual header.version format
@@ -248,7 +292,7 @@ async function initFromManifests(
     if (versionFormatMismatch) {
         logger.warn(
             `Detected format_version ${detectedFormatVersion} doesn't match the actual version format ` +
-            `used in manifest. Falling back to format_version 2.`
+                `used in manifest. Falling back to format_version 2.`
         );
         detectedFormatVersion = 2;
     }
@@ -278,13 +322,26 @@ async function initFromManifests(
             bp.moduleUuid = bpInfo.moduleUuid;
             // Derive source entry and output dir from manifest's script module entry.
             // e.g. "scripts/main.js" → entry: "src/main.ts", scriptOutputDir: "scripts"
-            // e.g. "custom_out/index.js" → entry: "src/index.ts", scriptOutputDir: "custom_out"
+            // e.g. "custom_out/index.js" → entry: "src/index.ts", scriptOutputDir: "custom"
+            // e.g. "nested/output/index.js" → entry: "src/index.ts", scriptOutputDir: "nested/output"
             if (bpInfo.scriptEntry) {
-                const outputDir = path.dirname(bpInfo.scriptEntry);
-                const outputBasename = path.basename(bpInfo.scriptEntry, ".js");
+                const validatedEntry = validateScriptEntry(bpInfo.scriptEntry, "BP");
+                const outputDir = path.posix.dirname(validatedEntry);
+                const outputBasename = path.posix.basename(validatedEntry, ".js");
+                if (outputDir === ".") {
+                    // Root-level entry: cannot safely use emptyDir() on BP root.
+                    throw new BePackError(
+                        "MANIFEST_INVALID",
+                        `BP manifest script entry "${bpInfo.scriptEntry}" is at the BP root. ` +
+                            `BePack cannot safely manage root-level script output because the output ` +
+                            `directory would need to be emptied on each build, which would delete ` +
+                            `the entire BP root. Please add a subdirectory prefix to the script module ` +
+                            `entry in your manifest.json (e.g. "scripts/main.js"), then rerun init.`
+                    );
+                }
                 bp.compile = {
                     entry: `src/${outputBasename}.ts`,
-                    ...(outputDir !== "." ? { scriptOutputDir: outputDir } : {}),
+                    scriptOutputDir: outputDir,
                 };
             } else {
                 bp.compile = { entry: "src/main.ts" };

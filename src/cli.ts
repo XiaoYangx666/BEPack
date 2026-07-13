@@ -10,21 +10,12 @@ import { commandDev } from "./commands/dev.js";
 import { commandConfig } from "./commands/config.js";
 import { formatError } from "./errors/formatError.js";
 import { writeJson } from "./logger/jsonOutput.js";
+import { BePackError } from "./errors/BePackError.js";
 import pc from "picocolors";
 
 const colors = pc.createColors(
     process.env.NO_COLOR === undefined && process.env.FORCE_COLOR !== "0"
 );
-
-process.on("uncaughtException", (error) => {
-    console.error(`${colors.red("✖")} ${error.message ?? error}`);
-    process.exit(1);
-});
-
-process.on("unhandledRejection", (reason) => {
-    console.error(`${colors.red("✖")} ${(reason as any)?.message ?? reason}`);
-    process.exit(1);
-});
 
 const cli = cac("bepack");
 
@@ -38,14 +29,33 @@ function common(command: any) {
         .option("--verbose", "Verbose output");
 }
 
+let _verbose = false;
+
 function reportError(command: string, error: unknown, json: boolean) {
     const formatted = formatError(error);
-    if (json) writeJson({ ok: false, command, error: formatted });
-    else console.error(`${colors.red(formatted.code)}: ${formatted.message}`);
+    if (json) {
+        writeJson({ ok: false, command, error: formatted });
+    } else if (error instanceof BePackError) {
+        console.error(`${colors.red(formatted.code)}: ${formatted.message}`);
+        if (formatted.suggestions?.length) {
+            for (const s of formatted.suggestions) console.error(`  ${colors.dim("→")} ${s}`);
+        }
+        if (_verbose && formatted.stack) {
+            console.error(`${colors.dim(formatted.stack)}`);
+        }
+    } else if (error instanceof Error) {
+        console.error(`${colors.red("ERROR")}: ${error.message}`);
+        if (_verbose && formatted.stack) {
+            console.error(`${colors.dim(formatted.stack)}`);
+        }
+    } else {
+        console.error(`${colors.red("ERROR")}: ${String(error)}`);
+    }
     process.exitCode = 1;
 }
 
 async function run(name: string, action: (options: any) => Promise<unknown>, options: any) {
+    _verbose = Boolean(options.verbose);
     try {
         const result = await action(options);
         if (options.json) writeJson(result);
@@ -89,7 +99,7 @@ common(cli.command("build", "Build project"))
     .option("--preserve-modules", "Preserve module output")
     .option("--use-npx", "Use npx tsc for typecheck")
     .option("--minify", "Minify output")
-    .option("--cache", "Enable incremental compilation cache")
+    .option("--cache", "Enable incremental compilation cache (--no-cache to disable)")
     .option("--timing", "Show per-step timing")
     .action((options: any) => run("build", commandBuild, options));
 common(cli.command("copy", "Copy packs"))
@@ -109,6 +119,7 @@ common(cli.command("dev", "Watch project"))
     .option("--timing", "Show per-step timing")
     .action((options: any) => run("dev", commandDev, options));
 common(cli.command("config", "Show resolved config"))
+    .option("--summary", "Show brief summary instead of full config")
     .action((options: any) => run("config", commandConfig, options));
 
 cli.help();

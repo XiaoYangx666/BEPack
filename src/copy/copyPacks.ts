@@ -4,9 +4,9 @@ import type { PackType, ResolvedConfig } from "../config/configTypes.js";
 import { getConfiguredPacks } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { copyDir, pathExists } from "../utils/fs.js";
-import { packRoot, projectRoot } from "../utils/path.js";
+import { packRoot, projectRoot, getBpIncludeItems } from "../utils/path.js";
+import { DEFAULT_RP_INCLUDES } from "../constants/copyIncludes.js";
 import { resolveCopyTarget } from "./resolveCopyTarget.js";
-import { DEFAULT_BP_INCLUDES, DEFAULT_RP_INCLUDES, getIncludes } from "../constants/copyIncludes.js";
 import type { Logger } from "../logger/logger.js";
 import pc from "picocolors";
 
@@ -19,11 +19,7 @@ const colors = pc.createColors(
  * Target is removed first, then recreated, then each item is copied.
  * Missing source items are silently skipped.
  */
-async function copySelectedItems(
-    source: string,
-    target: string,
-    items: string[]
-): Promise<void> {
+async function copySelectedItems(source: string, target: string, items: string[]): Promise<void> {
     await fs.rm(target, { recursive: true, force: true });
     await fs.mkdir(target, { recursive: true });
 
@@ -51,22 +47,15 @@ async function validateTargetDir(dir: string, label: string): Promise<void> {
 }
 
 /** Resolve include items for a given pack type. */
-function getPackIncludeItems(
-    config: ResolvedConfig,
-    packType: PackType
-): { defaults: string[]; userAdditions: string[] | undefined } {
+function getPackIncludeItems(config: ResolvedConfig, packType: PackType): string[] {
     if (packType === "bp") {
-        return {
-            defaults: DEFAULT_BP_INCLUDES,
-            userAdditions: config.packs.bp?.include,
-        };
+        return getBpIncludeItems(config);
     }
     // RP: check packs.rp.include first, then legacy copy.include.rp
-    const userAdditions = config.packs.rp?.include;
-    return {
-        defaults: DEFAULT_RP_INCLUDES,
-        userAdditions: userAdditions?.length ? userAdditions : config.copy.include?.rp,
-    };
+    const userItems = config.packs.rp?.include ?? [];
+    const legacyItems = config.copy.include?.rp ?? [];
+    const effectiveUser = userItems.length > 0 ? userItems : legacyItems;
+    return effectiveUser.length > 0 ? [...DEFAULT_RP_INCLUDES, ...effectiveUser] : [];
 }
 
 async function copyOnePack(
@@ -78,20 +67,16 @@ async function copyOnePack(
     dryRun: boolean,
     logger?: Logger
 ): Promise<string> {
-    const { defaults, userAdditions } = getPackIncludeItems(config, packType);
-    const includes = getIncludes(defaults, userAdditions);
+    const includes = getPackIncludeItems(config, packType);
     const to = path.join(targetDir, folderName);
 
     if (!dryRun) {
-        if (includes.length > 0 && userAdditions?.length) {
-            // Selective copy when user explicitly configured include items
+        if (packType === "bp" || includes.length > 0) {
+            // BP is always selective; RP is selective only when includes are configured
             await copySelectedItems(source, to, includes);
-        } else if (packType === "rp" && includes.length === 0) {
-            // RP with no includes: full directory copy for backward compatibility
-            await copyDir(source, to);
         } else {
-            // BP always selective; RP with defaults only also selective
-            await copySelectedItems(source, to, includes);
+            // RP with no configured includes: full directory copy
+            await copyDir(source, to);
         }
     }
 

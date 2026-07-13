@@ -1,3 +1,4 @@
+import path from "node:path";
 import { DEFAULT_CONFIG, BP_COMPILE_DEFAULTS, CACHE_DEFAULTS } from "./defaultConfig.js";
 import type {
     BpCompileResolved,
@@ -9,6 +10,7 @@ import type {
     RpConfig,
 } from "./configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
+import { validateScriptOutputDir, slash } from "../utils/path.js";
 
 function stripUndefined<T extends Record<string, unknown>>(value: T | undefined): Partial<T> {
     if (!value) return {};
@@ -60,9 +62,16 @@ function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): Us
  * Falls back to BP_COMPILE_DEFAULTS for any missing field.
  */
 function normalizeCompile(
-    compile: NonNullable<NonNullable<UserConfig["packs"]>["bp"]>["compile"]
+    compile: NonNullable<NonNullable<UserConfig["packs"]>["bp"]>["compile"],
+    bpRootDir: string,
+    projectRootDir: string
 ): BpCompileResolved {
     const defs = BP_COMPILE_DEFAULTS;
+    const rawDir = compile?.scriptOutputDir ?? defs.scriptOutputDir;
+    // Resolve source entry dir relative to project root (where entry lives), NOT bp root
+    const resolvedEntry = path.resolve(projectRootDir, compile?.entry ?? defs.entry);
+    const resolvedSrcDir = path.dirname(resolvedEntry);
+    const normalizedDir = validateScriptOutputDir(bpRootDir, rawDir, resolvedSrcDir);
     return {
         entry: compile?.entry ?? defs.entry,
         tsconfig: compile?.tsconfig ?? defs.tsconfig,
@@ -72,22 +81,23 @@ function normalizeCompile(
         useNpx: compile?.useNpx ?? defs.useNpx,
         minify: compile?.minify ?? defs.minify,
         cache: normalizeCache(compile?.cache),
-        scriptOutputDir: compile?.scriptOutputDir ?? defs.scriptOutputDir,
+        scriptOutputDir: normalizedDir,
     };
 
-function normalizeCache(cache: CacheOptions | undefined): CacheResolved {
-    const defs = CACHE_DEFAULTS;
-    return {
-        dev: cache?.dev ?? defs.dev,
-        build: cache?.build ?? defs.build,
-        file: cache?.file ?? defs.file,
-    };
-}
+    function normalizeCache(cache: CacheOptions | undefined): CacheResolved {
+        const defs = CACHE_DEFAULTS;
+        return {
+            dev: cache?.dev ?? defs.dev,
+            build: cache?.build ?? defs.build,
+            file: cache?.file ?? defs.file,
+        };
+    }
 }
 
 export function normalizeConfig(
     config: UserConfig,
-    overrides: Partial<UserConfig> = {}
+    overrides: Partial<UserConfig> = {},
+    cwd: string = process.cwd()
 ): ResolvedConfig {
     const raw = mergeUserConfig(config, overrides);
     const target = raw.target ?? DEFAULT_CONFIG.target;
@@ -138,6 +148,10 @@ export function normalizeConfig(
         }
     }
 
+    // Compute bpRootDir and projectRootDir for compile normalization
+    const projectRootDir = path.resolve(cwd, raw.root ?? ".");
+    const bpRootDir = bp ? path.resolve(projectRootDir, bp.root!) : undefined;
+
     if (rp) {
         if (!rp.uuid || !rp.moduleUuid) {
             throw new BePackError(
@@ -176,7 +190,9 @@ export function normalizeConfig(
                           ...(bp.moduleUuid !== undefined ? { moduleUuid: bp.moduleUuid } : {}),
                           name: bp.name ?? name,
                           ...(bpDescription !== undefined ? { description: bpDescription } : {}),
-                          ...(compile ? { compile: normalizeCompile(compile) } : {}),
+                          ...(compile && bpRootDir
+                              ? { compile: normalizeCompile(compile, bpRootDir, projectRootDir) }
+                              : {}),
                           dependencies: bp.dependencies ?? {},
                           ...(bp.achievement !== undefined ? { achievement: bp.achievement } : {}),
                           include: bp.include ?? [],
