@@ -252,7 +252,6 @@ describe("normalizeConfig scriptOutputDir", () => {
         }
     });
 
-
     it("rejects source overlap when BP root equals project root", () => {
         expect(() =>
             normalizeConfig({

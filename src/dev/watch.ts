@@ -94,12 +94,18 @@ export function watchProject(
 
     let building = false;
     let pendingRebuild = false;
-    let pendingCopy = false;
+    let pendingRefresh = false;
 
     const copyIfEnabled = async () => {
         if (options.copy) {
             await copyPacks(cwd, config, options.copyTarget, options.dryRun, logger);
         }
+    };
+
+    const refreshPacks = async () => {
+        const { patchManifest } = await import("../manifest/patchManifest.js");
+        await patchManifest({ cwd, config, dryRun: options.dryRun, logger });
+        await copyIfEnabled();
     };
 
     const rebuild = async () => {
@@ -127,10 +133,10 @@ export function watchProject(
      * a rebuild, we re-enter the loop after it finishes.
      */
     const drainPending = async (): Promise<void> => {
-        while (pendingRebuild || pendingCopy) {
+        while (pendingRebuild || pendingRefresh) {
             const hasRebuild = pendingRebuild;
             pendingRebuild = false;
-            pendingCopy = false;
+            pendingRefresh = false;
             const start = Date.now();
             try {
                 logger.clear();
@@ -142,7 +148,7 @@ export function watchProject(
                         `rebuild done in ${logger.formatDuration(Date.now() - start)}`
                     );
                 } else {
-                    await copyIfEnabled();
+                    await refreshPacks();
                 }
             } catch (error) {
                 logger.error(error instanceof Error ? error.message : String(error));
@@ -164,7 +170,7 @@ export function watchProject(
 
         if (building) {
             if (isSrc) pendingRebuild = true;
-            else if (options.copy) pendingCopy = true;
+            else pendingRefresh = true;
             return;
         }
 
@@ -175,10 +181,8 @@ export function watchProject(
             logger.bepack("dev", `changed ${path.normalize(file)}`);
             if (isSrc && compile) {
                 await rebuild();
-            } else if (options.copy) {
-                const { patchManifest } = await import("../manifest/patchManifest.js");
-                await patchManifest({ cwd, config, dryRun: options.dryRun, logger });
-                await copyIfEnabled();
+            } else {
+                await refreshPacks();
             }
             logger.done(
                 "dev",

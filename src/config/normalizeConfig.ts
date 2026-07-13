@@ -96,7 +96,8 @@ function normalizeCompile(
 
 export function normalizeConfig(
     config: UserConfig,
-    overrides: Partial<UserConfig> = {}
+    overrides: Partial<UserConfig> = {},
+    cwd: string = process.cwd()
 ): ResolvedConfig {
     const raw = mergeUserConfig(config, overrides);
     const target = raw.target ?? DEFAULT_CONFIG.target;
@@ -148,7 +149,7 @@ export function normalizeConfig(
     }
 
     // Compute bpRootDir and projectRootDir for compile normalization
-    const projectRootDir = path.resolve(raw.root ?? ".");
+    const projectRootDir = path.resolve(cwd, raw.root ?? ".");
     const bpRootDir = bp ? path.resolve(projectRootDir, bp.root!) : undefined;
 
     if (rp) {

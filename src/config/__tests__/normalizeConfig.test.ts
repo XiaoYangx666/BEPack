@@ -312,6 +312,28 @@ describe("scriptOutputDir validation", () => {
         expect(config.packs.bp!.compile!.scriptOutputDir).toBe("build_scripts");
     });
 
+    it("使用传入的 cwd 解析相对项目路径", () => {
+        const cwd = "/tmp/bepack-project";
+        const absoluteBpRoot = "/tmp/bepack-output";
+        const config = normalizeConfig(
+            {
+                name: "test",
+                packs: {
+                    bp: {
+                        root: absoluteBpRoot,
+                        uuid: "a",
+                        moduleUuid: "b",
+                        compile: { entry: "src/main.ts", scriptOutputDir: "src" },
+                    },
+                },
+            },
+            {},
+            cwd
+        );
+
+        expect(config.packs.bp!.compile!.scriptOutputDir).toBe("src");
+    });
+
     it('绝对路径 ".." 抛出', () => {
         expect(() =>
             normalizeConfig({

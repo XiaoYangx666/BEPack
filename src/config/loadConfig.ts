@@ -77,5 +77,5 @@ export async function loadConfig(options: LoadConfigOptions) {
             details: { file },
         });
     }
-    return { config: normalizeConfig(mod.default, options.overrides), path: file, cwd };
+    return { config: normalizeConfig(mod.default, options.overrides, cwd), path: file, cwd };
 }
