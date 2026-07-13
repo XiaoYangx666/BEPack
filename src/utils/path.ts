@@ -112,7 +112,7 @@ export function validateScriptOutputDir(
     scriptOutputDir: string,
     srcEntryDir?: string
 ): string {
-    if (!scriptOutputDir || scriptOutputDir === "." || scriptOutputDir === "") {
+    if (!scriptOutputDir || scriptOutputDir === ".") {
         throw new BePackError(
             "CONFIG_INVALID",
             `compile.scriptOutputDir must be a non-empty relative path strictly inside the BP root. ` +
@@ -137,16 +137,13 @@ export function validateScriptOutputDir(
     const normalized = path.posix.normalize(portable);
 
     // Reject path escape via ".."
-    const parts = normalized.split("/");
-    for (const part of parts) {
-        if (part === "..") {
-            throw new BePackError(
-                "CONFIG_INVALID",
-                `compile.scriptOutputDir must not contain ".." (path escape). ` +
-                    `Got: "${scriptOutputDir}" resolves outside the BP root. ` +
-                    `This directory will be emptied during build.`
-            );
-        }
+    if (normalized.split("/").includes("..")) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            `compile.scriptOutputDir must not contain ".." (path escape). ` +
+                `Got: "${scriptOutputDir}" resolves outside the BP root. ` +
+                `This directory will be emptied during build.`
+        );
     }
 
     // Use OS-native resolve for the final path
@@ -164,17 +161,13 @@ export function validateScriptOutputDir(
     }
 
     // Check overlap with source entry directory (srcEntryDir is already absolute)
-    if (srcEntryDir) {
-        const absOutputDir = resolved;
-        // If source entry is inside or equal to output dir → containsPath(absOutputDir, srcEntryDir)
-        if (containsPath(absOutputDir, srcEntryDir)) {
-            throw new BePackError(
-                "CONFIG_INVALID",
-                `compile.scriptOutputDir "${scriptOutputDir}" dangerously overlaps with ` +
-                    `the source entry directory. ` +
-                    `The output directory will be emptied during build and would delete source files.`
-            );
-        }
+    if (srcEntryDir && containsPath(resolved, srcEntryDir)) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            `compile.scriptOutputDir "${scriptOutputDir}" dangerously overlaps with ` +
+                `the source entry directory. ` +
+                `The output directory will be emptied during build and would delete source files.`
+        );
     }
 
     // Return normalized relative POSIX path (forward slashes)
@@ -251,12 +244,8 @@ export function ensureSafeEmptyDir(
 // Unified BP include items
 // ---------------------------------------------------------------------------
 
-export function getGeneratedScriptDirRelative(config: ResolvedConfig): string {
-    return config.packs.bp?.compile?.scriptOutputDir ?? "scripts";
-}
-
 export function getBpIncludeItems(config: ResolvedConfig): string[] {
-    const scriptDir = getGeneratedScriptDirRelative(config);
+    const scriptDir = config.packs.bp?.compile?.scriptOutputDir ?? "scripts";
     const defaults = [scriptDir, ...DEFAULT_BP_INCLUDES.filter((item) => item !== "scripts")];
     const userItems = config.packs.bp?.include ?? [];
     const all = [...defaults, ...userItems];

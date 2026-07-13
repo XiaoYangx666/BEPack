@@ -7,42 +7,25 @@ import { Logger } from "../logger/logger.js";
  * a depth-first traversal branch — that's a genuine cycle.
  * Shared references (same object via different branches) are not cycles.
  */
-function safeSerialize(value: unknown): unknown {
-    const seen = new WeakSet<object>();
-    const stack: object[] = [];
+export function safeSerialize(value: unknown): unknown {
+    const active = new WeakSet<object>();
 
     function recurse(v: unknown): unknown {
         if (typeof v === "function") return "[function]";
         if (v instanceof RegExp) return v.toString();
         if (v === null || v === undefined || typeof v !== "object") return v;
+        if (active.has(v)) return "[circular]";
 
-        // Check if this exact object is currently in our recursion stack
-        if (stack.includes(v)) return "[circular]";
-
-        // Check if we've seen this object before (shared reference, not a cycle)
-        if (seen.has(v)) return "[shared]";
-
-        seen.add(v);
-
-        if (Array.isArray(v)) {
-            stack.push(v);
-            const result = v.map((item) => {
-                const val = recurse(item);
-                return val;
-            });
-            stack.pop();
-            return result;
-        }
-
-        // Plain object
-        const obj = v as Record<string, unknown>;
-        const keys = Object.keys(obj);
-        stack.push(v);
-        const result: Record<string, unknown> = {};
-        for (const key of keys) {
-            result[key] = recurse(obj[key]);
-        }
-        stack.pop();
+        active.add(v);
+        const result = Array.isArray(v)
+            ? v.map(recurse)
+            : Object.fromEntries(
+                  Object.entries(v as Record<string, unknown>).map(([key, item]) => [
+                      key,
+                      recurse(item),
+                  ])
+              );
+        active.delete(v);
         return result;
     }
 

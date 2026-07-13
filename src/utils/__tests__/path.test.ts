@@ -5,10 +5,8 @@ import {
     ensureSafeEmptyDir,
     containsPath,
     getBpIncludeItems,
-    getGeneratedScriptDirRelative,
     deduplicatePaths,
 } from "../path.js";
-import type { ResolvedConfig } from "../../config/configTypes.js";
 import { normalizeConfig } from "../../config/normalizeConfig.js";
 
 // ---------------------------------------------------------------------------
@@ -18,67 +16,27 @@ import { normalizeConfig } from "../../config/normalizeConfig.js";
 describe("validateScriptOutputDir", () => {
     const bpRoot = "/project/bp";
 
-    it('rejects "."', () => {
-        expect(() => validateScriptOutputDir(bpRoot, ".")).toThrow(
-            "must be a non-empty relative path"
-        );
+    it.each([
+        [".", "must be a non-empty relative path"],
+        ["", "must be a non-empty relative path"],
+        ["..", 'must not contain ".."'],
+        ["../outside", 'must not contain ".."'],
+        ["a/b/../../../../escape", 'must not contain ".."'],
+        ["/etc", "must be a relative path"],
+        ["C:\\Windows", "must be a relative path"],
+    ])("rejects %j", (value, message) => {
+        expect(() => validateScriptOutputDir(bpRoot, value)).toThrow(message);
     });
 
-    it('rejects ".."', () => {
-        expect(() => validateScriptOutputDir(bpRoot, "..")).toThrow('must not contain ".."');
-    });
-
-    it('rejects "../outside"', () => {
-        expect(() => validateScriptOutputDir(bpRoot, "../outside")).toThrow(
-            'must not contain ".."'
-        );
-    });
-
-    it("rejects absolute POSIX paths", () => {
-        expect(() => validateScriptOutputDir(bpRoot, "/etc")).toThrow("must be a relative path");
-    });
-
-    it("rejects absolute Windows paths", () => {
-        expect(() => validateScriptOutputDir(bpRoot, "C:\\Windows")).toThrow(
-            "must be a relative path"
-        );
-    });
-
-    it("rejects empty string", () => {
-        expect(() => validateScriptOutputDir(bpRoot, "")).toThrow(
-            "must be a non-empty relative path"
-        );
-    });
-
-    it('accepts "scripts"', () => {
-        expect(validateScriptOutputDir(bpRoot, "scripts")).toBe("scripts");
-    });
-
-    it('accepts "custom/scripts"', () => {
-        expect(validateScriptOutputDir(bpRoot, "custom/scripts")).toBe("custom/scripts");
-    });
-
-    it('normalizes "./scripts" to "scripts"', () => {
-        expect(validateScriptOutputDir(bpRoot, "./scripts")).toBe("scripts");
-    });
-
-    it('normalizes "foo/../scripts" to "scripts"', () => {
-        expect(validateScriptOutputDir(bpRoot, "foo/../scripts")).toBe("scripts");
-    });
-
-    it('normalizes "foo\\\\..\\\\scripts" (backslash) to "scripts"', () => {
-        // Backslash is normalized to forward slash BEFORE validation
-        expect(validateScriptOutputDir(bpRoot, "foo\\..\\scripts")).toBe("scripts");
-    });
-
-    it('normalizes "foo\\\\bar" to "foo/bar"', () => {
-        expect(validateScriptOutputDir(bpRoot, "foo\\bar")).toBe("foo/bar");
-    });
-
-    it("rejects deeply nested escape", () => {
-        expect(() => validateScriptOutputDir(bpRoot, "a/b/../../../../escape")).toThrow(
-            'must not contain ".."'
-        );
+    it.each([
+        ["scripts", "scripts"],
+        ["custom/scripts", "custom/scripts"],
+        ["./scripts", "scripts"],
+        ["foo/../scripts", "scripts"],
+        ["foo\\..\\scripts", "scripts"],
+        ["foo\\bar", "foo/bar"],
+    ])("normalizes %j to %j", (value, expected) => {
+        expect(validateScriptOutputDir(bpRoot, value)).toBe(expected);
     });
 
     it("rejects output dir equal to source dir (containsPath match)", () => {
@@ -155,117 +113,26 @@ describe("ensureSafeEmptyDir", () => {
 });
 
 // ---------------------------------------------------------------------------
-// getGeneratedScriptDirRelative
-// ---------------------------------------------------------------------------
-
-describe("getGeneratedScriptDirRelative", () => {
-    function makeConfig(scriptOutputDir?: string): ResolvedConfig {
-        const bp: ResolvedConfig["packs"]["bp"] = {
-            root: "bp",
-            uuid: "a",
-            moduleUuid: "b",
-            name: "Test",
-            dependencies: {},
-            include: [],
-        };
-        if (scriptOutputDir) {
-            bp.compile = {
-                entry: "src/main.ts",
-                tsconfig: "tsconfig.json",
-                typecheck: true,
-                preserveModules: true,
-                external: [],
-                useNpx: false,
-                minify: false,
-                cache: { dev: true, build: false, file: "cache.json" },
-                scriptOutputDir,
-            };
-        }
-        return {
-            root: ".",
-            configured: { root: false, packOutDir: false },
-            name: "test",
-            version: "1.0.0",
-            target: "latest",
-            hooks: {},
-            packs: { bp },
-            install: {
-                registry: "",
-                saveTo: "dependencies" as const,
-                packageManager: "auto" as const,
-                runPackageManager: true,
-                updatePackageJson: true,
-                updateManifest: true,
-                dependencyCatalog: {},
-                dependencyResolvers: [],
-            },
-            build: { copy: false, timing: false },
-            dev: { copy: false },
-            copy: { defaultTarget: "", targets: {} },
-            pack: { name: "{name}-{version}", outDir: "dist" },
-        } as ResolvedConfig;
-    }
-
-    it("defaults to scripts", () => {
-        expect(getGeneratedScriptDirRelative(makeConfig())).toBe("scripts");
-    });
-    it("custom dir", () => {
-        expect(getGeneratedScriptDirRelative(makeConfig("generated/scripts"))).toBe(
-            "generated/scripts"
-        );
-    });
-});
-
-// ---------------------------------------------------------------------------
 // getBpIncludeItems
 // ---------------------------------------------------------------------------
 
 describe("getBpIncludeItems", () => {
-    function makeConfig(
-        opts: { scriptOutputDir?: string; include?: string[] } = {}
-    ): ResolvedConfig {
-        return {
-            root: ".",
-            configured: { root: false, packOutDir: false },
+    function makeConfig(opts: { scriptOutputDir?: string; include?: string[] } = {}) {
+        return normalizeConfig({
             name: "test",
-            version: "1.0.0",
-            target: "latest",
-            hooks: {},
             packs: {
                 bp: {
                     root: "bp",
                     uuid: "a",
-                    name: "Test",
-                    dependencies: {},
+                    moduleUuid: "b",
                     include: opts.include ?? [],
                     compile: {
                         entry: "src/main.ts",
-                        tsconfig: "tsconfig.json",
-                        typecheck: true,
-                        preserveModules: true,
-                        external: [],
-                        useNpx: false,
-                        minify: false,
-                        cache: { dev: true, build: false, file: "cache.json" },
                         scriptOutputDir: opts.scriptOutputDir ?? "scripts",
                     },
-                } as ResolvedConfig["packs"]["bp"],
+                },
             },
-            install: {
-                registry: "",
-                saveTo: "dependencies" as const,
-                packageManager: "auto" as const,
-                runPackageManager: true,
-                updatePackageJson: true,
-                updateManifest: true,
-                dependencyCatalog: {},
-                dependencyResolvers: [],
-            },
-            build: { copy: false, timing: false },
-            dev: { copy: false },
-            copy: { defaultTarget: "", targets: {} },
-            pack: { name: "{name}-{version}", outDir: "dist" },
-        } as ResolvedConfig;
+        });
     }
 
     it("default items contain scripts", () => {
@@ -292,67 +159,5 @@ describe("deduplicatePaths", () => {
     });
     it("handles empty", () => {
         expect(deduplicatePaths([])).toEqual([]);
-    });
-});
-
-// ---------------------------------------------------------------------------
-// normalizeConfig integration
-// ---------------------------------------------------------------------------
-
-describe("normalizeConfig scriptOutputDir integration", () => {
-    it("default survives", () => {
-        const cfg = normalizeConfig({
-            name: "test",
-            packs: {
-                bp: { root: "bp", uuid: "a", moduleUuid: "b", compile: { entry: "src/main.ts" } },
-            },
-        });
-        expect(cfg.packs.bp!.compile!.scriptOutputDir).toBe("scripts");
-    });
-
-    it('normalizes "./scripts"', () => {
-        const cfg = normalizeConfig({
-            name: "test",
-            packs: {
-                bp: {
-                    root: "bp",
-                    uuid: "a",
-                    moduleUuid: "b",
-                    compile: { entry: "src/main.ts", scriptOutputDir: "./scripts" },
-                },
-            },
-        });
-        expect(cfg.packs.bp!.compile!.scriptOutputDir).toBe("scripts");
-    });
-
-    it("rejects overlapping source dir (bp root = project root)", () => {
-        expect(() =>
-            normalizeConfig({
-                name: "test",
-                packs: {
-                    bp: {
-                        root: ".",
-                        uuid: "a",
-                        moduleUuid: "b",
-                        compile: { entry: "src/main.ts", scriptOutputDir: "src" },
-                    },
-                },
-            })
-        ).toThrow("dangerously overlaps");
-    });
-
-    it("allows non-overlapping config with custom dir", () => {
-        const cfg = normalizeConfig({
-            name: "test",
-            packs: {
-                bp: {
-                    root: "bp",
-                    uuid: "a",
-                    moduleUuid: "b",
-                    compile: { entry: "src/main.ts", scriptOutputDir: "generated/scripts" },
-                },
-            },
-        });
-        expect(cfg.packs.bp!.compile!.scriptOutputDir).toBe("generated/scripts");
     });
 });

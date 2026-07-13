@@ -6,17 +6,13 @@ import { versionToString, parseVersionToTuple, validateScriptEntry } from "../in
 // ---------------------------------------------------------------------------
 
 describe("versionToString", () => {
-    it("converts array [1,0,0] to string", () => {
-        expect(versionToString([1, 0, 0])).toBe("1.0.0");
-    });
-    it("passes through string", () => {
-        expect(versionToString("1.0.0")).toBe("1.0.0");
-    });
-    it("returns undefined for null", () => {
-        expect(versionToString(null)).toBeUndefined();
-    });
-    it("returns undefined for undefined", () => {
-        expect(versionToString(undefined)).toBeUndefined();
+    it.each([
+        [[1, 0, 0], "1.0.0"],
+        ["1.0.0", "1.0.0"],
+        [null, undefined],
+        [undefined, undefined],
+    ])("converts %j", (value, expected) => {
+        expect(versionToString(value)).toBe(expected);
     });
 });
 
@@ -25,14 +21,15 @@ describe("versionToString", () => {
 // ---------------------------------------------------------------------------
 
 describe("parseVersionToTuple", () => {
-    it("parses array [1,2,3]", () => {
-        expect(parseVersionToTuple([1, 2, 3])).toEqual([1, 2, 3]);
-    });
-    it("parses string 1.2.3", () => {
-        expect(parseVersionToTuple("1.2.3")).toEqual([1, 2, 3]);
-    });
-    it("returns undefined for invalid string", () => {
-        expect(parseVersionToTuple("abc")).toBeUndefined();
+    it.each([
+        [
+            [1, 2, 3],
+            [1, 2, 3],
+        ],
+        ["1.2.3", [1, 2, 3]],
+        ["abc", undefined],
+    ])("parses %j", (value, expected) => {
+        expect(parseVersionToTuple(value)).toEqual(expected);
     });
 });
 
@@ -41,55 +38,24 @@ describe("parseVersionToTuple", () => {
 // ---------------------------------------------------------------------------
 
 describe("validateScriptEntry", () => {
-    it('handles "scripts/main.js"', () => {
-        expect(validateScriptEntry("scripts/main.js", "BP")).toBe("scripts/main.js");
+    it.each([
+        ["scripts/main.js", "scripts/main.js"],
+        ["custom/app.js", "custom/app.js"],
+        ["nested/output/index.js", "nested/output/index.js"],
+        ["main.js", "main.js"],
+        ["scripts\\main.js", "scripts/main.js"],
+    ])("normalizes %j", (entry, expected) => {
+        expect(validateScriptEntry(entry, "BP")).toBe(expected);
     });
 
-    it('handles "custom/app.js"', () => {
-        expect(validateScriptEntry("custom/app.js", "BP")).toBe("custom/app.js");
-    });
-
-    it('handles "nested/output/index.js"', () => {
-        expect(validateScriptEntry("nested/output/index.js", "BP")).toBe("nested/output/index.js");
-    });
-
-    it('handles root-level "main.js"', () => {
-        // root-level is valid syntax-wise, init handles it separately
-        expect(validateScriptEntry("main.js", "BP")).toBe("main.js");
-    });
-
-    it('rejects entry with ".."', () => {
-        expect(() => validateScriptEntry("../outside/main.js", "BP")).toThrow(
-            'must not contain ".."'
-        );
-    });
-
-    it("rejects absolute entry", () => {
-        expect(() => validateScriptEntry("/absolute/path/main.js", "BP")).toThrow(
-            "must be a relative path"
-        );
-    });
-
-    it("rejects non-.js entry", () => {
-        expect(() => validateScriptEntry("scripts/main.ts", "BP")).toThrow("must end with .js");
-    });
-
-    it("rejects empty string", () => {
-        expect(() => validateScriptEntry("", "BP")).toThrow("must be a non-empty string");
-    });
-
-    it("rejects non-string entry", () => {
-        expect(() => validateScriptEntry(123 as any, "BP")).toThrow("must be a non-empty string");
-    });
-
-    it("normalizes Windows backslashes", () => {
-        const result = validateScriptEntry("scripts\\main.js", "BP");
-        expect(result).toBe("scripts/main.js");
-    });
-
-    it("rejects empty path segments (double slash)", () => {
-        expect(() => validateScriptEntry("scripts//main.js", "BP")).toThrow(
-            "must not contain empty segments"
-        );
+    it.each([
+        ["../outside/main.js", 'must not contain ".."'],
+        ["/absolute/path/main.js", "must be a relative path"],
+        ["scripts/main.ts", "must end with .js"],
+        ["", "must be a non-empty string"],
+        [123, "must be a non-empty string"],
+        ["scripts//main.js", "must not contain empty segments"],
+    ])("rejects %j", (entry, message) => {
+        expect(() => validateScriptEntry(entry, "BP")).toThrow(message);
     });
 });

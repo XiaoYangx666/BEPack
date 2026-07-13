@@ -3,65 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { normalizeConfig } from "../../config/normalizeConfig.js";
-import { ensureSafeEmptyDir, containsPath, validateScriptOutputDir } from "../../utils/path.js";
 import { assertSafeScriptOutputPath } from "../../build/runRolldown.js";
-
-describe("containsPath", () => {
-    it("returns true when parent equals child", () => {
-        expect(containsPath("/a/b", "/a/b")).toBe(true);
-    });
-
-    it("returns true when parent is ancestor of child", () => {
-        expect(containsPath("/a/b", "/a/b/c")).toBe(true);
-    });
-
-    it("returns false when child is ancestor of parent", () => {
-        expect(containsPath("/a/b/c", "/a/b")).toBe(false);
-    });
-
-    it("returns false for unrelated paths", () => {
-        expect(containsPath("/a/b", "/c/d")).toBe(false);
-    });
-});
-
-describe("ensureSafeEmptyDir", () => {
-    const bpRoot = "/project/bp";
-
-    it("allows a valid subdirectory", () => {
-        expect(() => ensureSafeEmptyDir("/project/bp/scripts", bpRoot, "test")).not.toThrow();
-    });
-
-    it("rejects the BP root", () => {
-        expect(() => ensureSafeEmptyDir("/project/bp", bpRoot, "test")).toThrow("protected path");
-    });
-
-    it("rejects output that contains a protected path", () => {
-        expect(() =>
-            ensureSafeEmptyDir("/project/bp/generated", bpRoot, "test", [
-                "/project/bp/generated/src",
-            ])
-        ).toThrow("protected path");
-    });
-
-    it("rejects paths outside the BP root", () => {
-        expect(() => ensureSafeEmptyDir("/tmp/evil", bpRoot, "test")).toThrow("not inside");
-    });
-});
-
-describe("validateScriptOutputDir", () => {
-    const bpRoot = "/project/bp";
-
-    it("normalizes backslashes before validation", () => {
-        expect(validateScriptOutputDir(bpRoot, "foo\\..\\generated")).toBe("generated");
-        expect(validateScriptOutputDir(bpRoot, "foo\\bar")).toBe("foo/bar");
-    });
-
-    it("rejects output containing the source directory", () => {
-        expect(() =>
-            validateScriptOutputDir(bpRoot, "generated", path.join(bpRoot, "generated", "src"))
-        ).toThrow("dangerously overlaps");
-    });
-});
 
 describe("assertSafeScriptOutputPath", () => {
     it("protects .git relative to the actual BP root", () => {
@@ -224,7 +166,7 @@ describe("assertSafeScriptOutputPath", () => {
     });
 });
 
-describe("normalizeConfig scriptOutputDir", () => {
+describe("runtime script output validation", () => {
     it("does not throw when BP root does not exist yet", () => {
         const temp = mkdtempSync(path.join(os.tmpdir(), "bepack-no-bp-root-"));
         try {
@@ -250,24 +192,5 @@ describe("normalizeConfig scriptOutputDir", () => {
         } finally {
             rmSync(temp, { recursive: true, force: true });
         }
-    });
-
-    it("rejects source overlap when BP root equals project root", () => {
-        expect(() =>
-            normalizeConfig({
-                name: "test",
-                packs: {
-                    bp: {
-                        root: ".",
-                        uuid: "a",
-                        moduleUuid: "b",
-                        compile: {
-                            entry: "src/main.ts",
-                            scriptOutputDir: "src",
-                        },
-                    },
-                },
-            })
-        ).toThrow("dangerously overlaps");
     });
 });

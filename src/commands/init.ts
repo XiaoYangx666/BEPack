@@ -24,12 +24,7 @@ export function validateScriptEntry(entry: unknown, label: string): string {
     // Normalize backslashes to forward slashes for validation
     const normalized = entry.replace(/\\/g, "/");
 
-    if (
-        path.isAbsolute(normalized) ||
-        normalized.startsWith("/") ||
-        path.win32.isAbsolute(normalized) ||
-        normalized.startsWith("\\\\")
-    ) {
+    if (path.posix.isAbsolute(normalized) || path.win32.isAbsolute(normalized)) {
         throw new BePackError(
             "MANIFEST_INVALID",
             `${label} script module entry must be a relative path, got absolute: "${entry}".`
@@ -43,25 +38,19 @@ export function validateScriptEntry(entry: unknown, label: string): string {
         );
     }
 
-    // Check for ".." escape
     const parts = normalized.split("/");
-    for (const part of parts) {
-        if (part === "..") {
-            throw new BePackError(
-                "MANIFEST_INVALID",
-                `${label} script module entry must not contain "..": "${entry}".`
-            );
-        }
+    if (parts.includes("..")) {
+        throw new BePackError(
+            "MANIFEST_INVALID",
+            `${label} script module entry must not contain "..": "${entry}".`
+        );
     }
 
-    // Check for empty path segments (double slash)
-    for (const part of parts) {
-        if (part === "") {
-            throw new BePackError(
-                "MANIFEST_INVALID",
-                `${label} script module entry must not contain empty segments: "${entry}".`
-            );
-        }
+    if (parts.includes("")) {
+        throw new BePackError(
+            "MANIFEST_INVALID",
+            `${label} script module entry must not contain empty segments: "${entry}".`
+        );
     }
 
     return normalized;
