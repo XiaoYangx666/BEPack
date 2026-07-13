@@ -1,11 +1,22 @@
 import { rolldown } from "rolldown";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { lstatSync } from "node:fs";
 import type { ResolvedConfig } from "../config/configTypes.js";
 import type { Logger } from "../logger/logger.js";
 import { BePackError } from "../errors/BePackError.js";
 import { emptyDir } from "../utils/fs.js";
-import { scriptOutDir, scriptOutFile, srcEntry, hasBpCompile } from "../utils/path.js";
+import {
+    scriptOutDir,
+    scriptOutFile,
+    srcEntry,
+    hasBpCompile,
+    ensureSafeEmptyDir,
+    bpRoot,
+    packRoot,
+    projectRoot,
+    containsPath,
+} from "../utils/path.js";
 import { createDependencyCatalog } from "../install/dependencyCatalog.js";
 
 function buildExternal(config: ResolvedConfig): (string | RegExp)[] {
@@ -27,6 +38,97 @@ function formatSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function assertNoSymlinkInOutputPath(bpRootDir: string, outDir: string): void {
+    const resolvedRoot = path.resolve(bpRootDir);
+    const resolvedOut = path.resolve(outDir);
+    const relative = path.relative(resolvedRoot, resolvedOut);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return;
+
+    // Check BP root itself is not a symlink or junction. A symlink at the
+    // root means emptyDir() would delete through it to the real target.
+    try {
+        if (lstatSync(resolvedRoot).isSymbolicLink()) {
+            throw new BePackError(
+                "BUILD_FAILED",
+                `Safety check failed: BP root is a symbolic link or junction: "${resolvedRoot}". ` +
+                    "Refusing to recursively delete through a symbolic link."
+            );
+        }
+    } catch (error: unknown) {
+        if (error instanceof BePackError) throw error;
+        const code = (error as NodeJS.ErrnoException)?.code;
+        if (code === "ENOENT") return; // BP root not yet created — nothing to traverse
+        throw error;
+    }
+
+    let current = resolvedRoot;
+    for (const segment of relative.split(path.sep)) {
+        current = path.join(current, segment);
+        try {
+            if (lstatSync(current).isSymbolicLink()) {
+                throw new BePackError(
+                    "BUILD_FAILED",
+                    `Safety check failed: script output path contains a symbolic link: "${current}". ` +
+                        "Refusing to recursively delete through a symbolic link."
+                );
+            }
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+            throw error;
+        }
+    }
+}
+
+function assertNoStrictPathOverlap(outDir: string, protectedPath: string, label: string): void {
+    const resolvedOut = path.resolve(outDir);
+    const resolvedProtected = path.resolve(protectedPath);
+    if (
+        containsPath(resolvedOut, resolvedProtected) ||
+        containsPath(resolvedProtected, resolvedOut)
+    ) {
+        throw new BePackError(
+            "BUILD_FAILED",
+            `Safety check failed: script output directory "${outDir}" overlaps ${label} ` +
+                `"${protectedPath}". Refusing to empty this directory.`
+        );
+    }
+}
+
+export function assertSafeScriptOutputPath(
+    cwd: string,
+    config: ResolvedConfig,
+    entry: string,
+    outDir: string
+): void {
+    const root = projectRoot(cwd, config);
+    const bpRootDir = bpRoot(cwd, config);
+    const manifestPath = path.join(bpRootDir, "manifest.json");
+    const gitPaths = [path.join(root, ".git"), path.join(bpRootDir, ".git")];
+
+    for (const gitPath of gitPaths) {
+        assertNoStrictPathOverlap(outDir, gitPath, ".git metadata");
+    }
+
+    if (config.packs.rp) {
+        const rpRootDir = packRoot(root, config, "rp")!;
+        if (path.resolve(rpRootDir) !== path.resolve(bpRootDir)) {
+            assertNoStrictPathOverlap(outDir, rpRootDir, "RP root");
+        }
+    }
+
+    assertNoStrictPathOverlap(outDir, manifestPath, "BP manifest");
+
+    const sourceDir = path.dirname(entry);
+    const sourceRelative = path.relative(bpRootDir, sourceDir);
+    const protectedPaths =
+        sourceRelative && !sourceRelative.startsWith("..") && !path.isAbsolute(sourceRelative)
+            ? [sourceDir]
+            : [];
+
+    ensureSafeEmptyDir(outDir, bpRootDir, "script output directory", protectedPaths);
+    assertNoSymlinkInOutputPath(bpRootDir, outDir);
 }
 
 export async function runRolldown(
@@ -52,6 +154,7 @@ export async function runRolldown(
     }
 
     try {
+        assertSafeScriptOutputPath(cwd, config, entry, outDir);
         await emptyDir(outDir);
         const bundle = await rolldown({
             input: entry,
