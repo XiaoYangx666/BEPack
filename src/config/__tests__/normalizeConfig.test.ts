@@ -283,6 +283,85 @@ describe("compile 配置", () => {
 });
 
 // ---------------------------------------------------------------------------
+// scriptOutputDir 安全校验
+// ---------------------------------------------------------------------------
+
+describe("scriptOutputDir validation", () => {
+    it('默认值为 "scripts"', () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: { root: "bp", uuid: "a", moduleUuid: "b", compile: { entry: "src/main.ts" } },
+            },
+        });
+        expect(config.packs.bp!.compile!.scriptOutputDir).toBe("scripts");
+    });
+
+    it('自定义值 "build_scripts" 通过', () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    compile: { entry: "src/main.ts", scriptOutputDir: "build_scripts" },
+                },
+            },
+        });
+        expect(config.packs.bp!.compile!.scriptOutputDir).toBe("build_scripts");
+    });
+
+    it('绝对路径 ".." 抛出', () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    bp: {
+                        root: "bp",
+                        uuid: "a",
+                        moduleUuid: "b",
+                        compile: { entry: "src/main.ts", scriptOutputDir: ".." },
+                    },
+                },
+            })
+        ).toThrow("must not contain");
+    });
+
+    it('绝对路径 "/tmp/x" 抛出', () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    bp: {
+                        root: "bp",
+                        uuid: "a",
+                        moduleUuid: "b",
+                        compile: { entry: "src/main.ts", scriptOutputDir: "/tmp/x" },
+                    },
+                },
+            })
+        ).toThrow("must be a relative path");
+    });
+
+    it('"." 抛出', () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    bp: {
+                        root: "bp",
+                        uuid: "a",
+                        moduleUuid: "b",
+                        compile: { entry: "src/main.ts", scriptOutputDir: "." },
+                    },
+                },
+            })
+        ).toThrow("must be a non-empty relative path");
+    });
+});
+
+// ---------------------------------------------------------------------------
 // 顶层 build 只保留命令行为配置
 // ---------------------------------------------------------------------------
 
