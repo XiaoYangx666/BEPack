@@ -1,5 +1,7 @@
-#!/usr/bin/env node
 import { cac } from "cac";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { commandInit } from "./commands/init.js";
 import { commandInstall } from "./commands/install.js";
 import { commandManifest } from "./commands/manifest.js";
@@ -16,6 +18,24 @@ import pc from "picocolors";
 const colors = pc.createColors(
     process.env.NO_COLOR === undefined && process.env.FORCE_COLOR !== "0"
 );
+
+// Read version from package.json (single source of truth)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const pkgPath = join(__dirname, "../package.json");
+
+let pkgVersion: string;
+try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    if (typeof pkg.version !== "string" || !pkg.version) {
+        console.error("ERROR: package.json missing valid 'version' field");
+        process.exit(1);
+    }
+    pkgVersion = pkg.version;
+} catch (err) {
+    console.error(`ERROR: Failed to read package version: ${(err as Error).message}`);
+    process.exit(1);
+}
 
 const cli = cac("bepack");
 
@@ -123,10 +143,60 @@ common(cli.command("config", "Show resolved config"))
     .action((options: any) => run("config", commandConfig, options));
 
 cli.help();
-cli.version("0.0.1");
+cli.version(pkgVersion);
 
-try {
-    cli.parse();
-} catch (error) {
-    reportError("cli", error, process.argv.includes("--json"));
+export async function runCLI(argv: string[]): Promise<void> {
+    // Reset parse state so stale matchedCommand from a prior call doesn't leak.
+    // cli.parse() only sets matchedCommand when a command matches; without a
+    // reset, running tests sequentially inherits the previous match.
+    cli.unsetMatchedCommand();
+    cli.parse(argv, { run: false });
+
+    // `--help` / `-h` — already output by CAC during parse
+    if (cli.options.help) {
+        return;
+    }
+
+    // `--version` / `-v` — already output by CAC during parse
+    if (cli.options.version) {
+        return;
+    }
+
+    // No command matched at all
+    if (!cli.matchedCommand) {
+        // User typed a positional arg that isn't a registered command.
+        // When an option like --json is unknown at the global level, mri
+        // consumes the next token as its value, so cli.args may be empty.
+        // Fall back to raw argv to find non-option tokens.
+        const unknown =
+            cli.args[0] ??
+            cli.rawArgs.slice(2).find((a) => a !== "--" && !a.startsWith("-"));
+        if (unknown) {
+            reportError(
+                "cli",
+                new BePackError(
+                    "UNKNOWN_COMMAND",
+                    `Unknown command: ${unknown}`,
+                    {
+                        suggestions: [
+                            "Run `bepack --help` to see available commands.",
+                        ],
+                    }
+                ),
+                Boolean(cli.options.json)
+            );
+            return;
+        }
+        // No args — show help
+        cli.outputHelp();
+        return;
+    }
+
+    // Run the matched command's action (errors are caught by `run()` internally,
+    // but CAC's own validation — unknown options, missing args — throws here).
+    try {
+        await cli.runMatchedCommand();
+    } catch (error) {
+        reportError("cli", error, Boolean(cli.options.json));
+    }
 }

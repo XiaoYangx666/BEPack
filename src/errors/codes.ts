@@ -22,6 +22,7 @@ export const ERROR_CODES = [
     "PACK_FAILED",
     "HOOK_FAILED",
     "CLI_ARGUMENT_CONFLICT",
+    "UNKNOWN_COMMAND",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

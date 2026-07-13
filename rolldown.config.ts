@@ -16,7 +16,7 @@ export default defineConfig([
         },
     },
     {
-        input: "src/cli.ts",
+        input: "src/bin.ts",
         platform: "node",
         external,
         output: {
