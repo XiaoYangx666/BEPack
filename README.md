@@ -106,6 +106,60 @@ bepack pack --name release
 - `packs.bp.compile.scriptOutputDir` sets the compiled script output directory (relative to BP root). Default: `"scripts"`. Manifest script module entry and `HookContext.paths.scriptOutDir` reflect this value.
 - `bepack dev --skip-typecheck` skips type checking on dev rebuilds.
 
+### Plugins
+
+Use `plugins: [plugin()]` to add third-party package resolution and lifecycle hooks. Plugins run by descending `priority` (ties preserve array order); resolvers are tried before BePack built-ins, while plugin lifecycle hooks run before the project hook. A plugin must have a unique `name` and may declare metadata (`version`, `description`, `apiVersion: 1`).
+
+```ts
+import { defineConfig, type BePackPlugin } from "bepack";
+
+function addonApi(): BePackPlugin {
+    return {
+        name: "addon-api",
+        version: "1.0.0",
+        apiVersion: 1,
+        priority: 10,
+        configResolved: ({ config }) => {
+            // Inspect the complete normalized configuration here.
+            if (!config.packs.bp) throw new Error("addon-api requires a behavior pack");
+        },
+        install: {
+            dependencyCatalog: {
+                "@example/addon-api": { resolver: "addon-api" },
+            },
+            dependencyResolvers: [
+                {
+                    name: "addon-api-by-minecraft-version",
+                    resolver: "addon-api",
+                    match: (ctx) => ctx.specifier === "stable",
+                    resolve: (ctx) => ({
+                        packageVersion: ctx.target === "1.21.0" ? "3.4.0" : "4.0.0",
+                    }),
+                },
+            ],
+            hooks: {
+                beforeResolveDependency: ({ packageName, target }) => {
+                    console.log(`Resolving ${packageName} for Minecraft ${target}`);
+                },
+                afterResolveDependency: ({ packageName, result }) => {
+                    console.log(`${packageName} resolved to ${result.packageVersion}`);
+                },
+            },
+        },
+        hooks: {
+            afterBuild: (ctx) => ctx.logger.info(`Built ${ctx.config.name}`),
+        },
+    };
+}
+
+export default defineConfig({
+    plugins: [addonApi()],
+    // ...
+});
+```
+
+Run `bepack config --summary` to see the resolved plugin order and catalog conflicts. Plugin callback and resolver failures include the plugin name in the resulting error.
+
 For the full configuration reference and implementation notes, see [README.reference.md](./README.reference.md).
 
 ## Package Output

@@ -8,6 +8,10 @@ import type {
     UserConfig,
     BpConfig,
     RpConfig,
+    BePackPlugin,
+    DependencyCatalogEntry,
+    HookResult,
+    Hooks,
 } from "./configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { validateScriptOutputDir, slash } from "../utils/path.js";
@@ -43,6 +47,9 @@ function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): Us
     return {
         ...config,
         ...cleanOverrides,
+        ...(overrides.plugins !== undefined || config.plugins !== undefined
+            ? { plugins: overrides.plugins ?? config.plugins }
+            : {}),
         packs,
         install: { ...config.install, ...stripUndefined(overrides.install) },
         build: { ...config.build, ...stripUndefined(overrides.build) },
@@ -55,6 +62,113 @@ function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): Us
         pack: { ...config.pack, ...stripUndefined(overrides.pack) },
         hooks: { ...config.hooks, ...stripUndefined(overrides.hooks) },
     };
+}
+
+function normalizePlugins(plugins: BePackPlugin[] | undefined): BePackPlugin[] {
+    const resolved = [...(plugins ?? [])];
+    const names = new Set<string>();
+    for (const plugin of resolved) {
+        if (!plugin?.name || plugin.name.trim() === "") {
+            throw new BePackError("CONFIG_INVALID", "Every plugin must have a non-empty name.");
+        }
+        if (names.has(plugin.name)) {
+            throw new BePackError("CONFIG_INVALID", `Plugin name is duplicated: ${plugin.name}.`);
+        }
+        if (plugin.apiVersion !== undefined && plugin.apiVersion !== 1) {
+            throw new BePackError(
+                "CONFIG_INVALID",
+                `Plugin ${plugin.name} requires unsupported BePack plugin API version ${plugin.apiVersion}.`
+            );
+        }
+        if (plugin.priority !== undefined && !Number.isFinite(plugin.priority)) {
+            throw new BePackError(
+                "CONFIG_INVALID",
+                `Plugin ${plugin.name} priority must be a finite number.`
+            );
+        }
+        names.add(plugin.name);
+    }
+    return resolved.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+}
+
+/** Combine hooks without changing the context passed to plugin or user callbacks. */
+function mergeHooks(plugins: BePackPlugin[], projectHooks: Hooks | undefined): Hooks {
+    const names = new Set<keyof Hooks>();
+    for (const hooks of [...plugins.map((plugin) => plugin.hooks), projectHooks]) {
+        for (const name of Object.keys(hooks ?? {}) as Array<keyof Hooks>) names.add(name);
+    }
+
+    return Object.fromEntries(
+        [...names].map((name) => {
+            const callbacks = [
+                ...plugins
+                    .map((plugin) => ({ plugin, hook: plugin.hooks?.[name] }))
+                    .filter(
+                        (
+                            item
+                        ): item is {
+                            plugin: BePackPlugin;
+                            hook: NonNullable<Hooks[typeof name]>;
+                        } => item.hook !== undefined
+                    ),
+                ...(projectHooks?.[name] ? [{ hook: projectHooks[name] }] : []),
+            ];
+            return [
+                name,
+                async (
+                    ...args: Parameters<NonNullable<Hooks[typeof name]>>
+                ): Promise<HookResult> => {
+                    let result: HookResult;
+                    for (const callback of callbacks) {
+                        try {
+                            result = await callback.hook(...args);
+                        } catch (cause) {
+                            const plugin = "plugin" in callback ? callback.plugin : undefined;
+                            if (!plugin) throw cause;
+                            throw new BePackError(
+                                "PLUGIN_FAILED",
+                                `Plugin ${plugin.name} ${String(name)} hook failed: ${cause instanceof Error ? cause.message : String(cause)}`
+                            );
+                        }
+                    }
+                    return result;
+                },
+            ];
+        })
+    ) as Hooks;
+}
+
+function resolvePluginCatalog(
+    plugins: BePackPlugin[],
+    projectCatalog: Record<string, DependencyCatalogEntry>
+) {
+    const catalog: Record<string, DependencyCatalogEntry> = {};
+    const owners = new Map<string, string>();
+    const diagnostics: string[] = [];
+    for (const plugin of plugins) {
+        for (const [packageName, entry] of Object.entries(
+            plugin.install?.dependencyCatalog ?? {}
+        )) {
+            const previous = owners.get(packageName);
+            if (previous) {
+                diagnostics.push(
+                    `dependency catalog ${packageName}: plugin ${plugin.name} overrides plugin ${previous}`
+                );
+            }
+            catalog[packageName] = entry;
+            owners.set(packageName, plugin.name);
+        }
+    }
+    for (const [packageName, entry] of Object.entries(projectCatalog)) {
+        const previous = owners.get(packageName);
+        if (previous) {
+            diagnostics.push(
+                `dependency catalog ${packageName}: project config overrides plugin ${previous}`
+            );
+        }
+        catalog[packageName] = entry;
+    }
+    return { catalog, diagnostics };
 }
 
 /**
@@ -100,6 +214,7 @@ export function normalizeConfig(
     cwd: string = process.cwd()
 ): ResolvedConfig {
     const raw = mergeUserConfig(config, overrides);
+    const plugins = normalizePlugins(raw.plugins);
     const target = raw.target ?? DEFAULT_CONFIG.target;
     if (target === "stable" || target === "beta") {
         throw new BePackError(
@@ -169,6 +284,11 @@ export function normalizeConfig(
 
     const bpDescription = bp?.description ?? description;
     const rpDescription = rp?.description ?? description;
+    const { catalog: pluginCatalog, diagnostics: pluginDiagnostics } = resolvePluginCatalog(
+        plugins,
+        raw.install?.dependencyCatalog ?? {}
+    );
+    const pluginResolvers = plugins.flatMap((plugin) => plugin.install?.dependencyResolvers ?? []);
 
     return {
         root: raw.root ?? DEFAULT_CONFIG.root,
@@ -180,6 +300,8 @@ export function normalizeConfig(
         version,
         ...(description !== undefined ? { description } : {}),
         target,
+        plugins,
+        ...(pluginDiagnostics.length > 0 ? { pluginDiagnostics } : {}),
         ...(raw.manifestFormat !== undefined ? { manifestFormat: raw.manifestFormat } : {}),
         packs: {
             ...(bp
@@ -222,8 +344,8 @@ export function normalizeConfig(
             updatePackageJson:
                 raw.install?.updatePackageJson ?? DEFAULT_CONFIG.install.updatePackageJson,
             updateManifest: raw.install?.updateManifest ?? DEFAULT_CONFIG.install.updateManifest,
-            dependencyCatalog: raw.install?.dependencyCatalog ?? {},
-            dependencyResolvers: raw.install?.dependencyResolvers ?? [],
+            dependencyCatalog: pluginCatalog,
+            dependencyResolvers: [...pluginResolvers, ...(raw.install?.dependencyResolvers ?? [])],
         },
         build: {
             copy: raw.build?.copy ?? DEFAULT_CONFIG.build.copy,
@@ -243,6 +365,6 @@ export function normalizeConfig(
             name: raw.pack?.name ?? DEFAULT_CONFIG.pack.name,
             outDir: raw.pack?.outDir ?? DEFAULT_CONFIG.pack.outDir,
         },
-        hooks: raw.hooks ?? {},
+        hooks: mergeHooks(plugins, raw.hooks),
     };
 }

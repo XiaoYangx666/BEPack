@@ -33,5 +33,10 @@ export type {
     RpConfig,
     BpCompileOptions,
     BpCompileResolved,
+    BePackPlugin,
+    ConfigResolvedHookContext,
+    DependencyResolveHookContext,
+    DependencyResolvedHookContext,
+    PluginDependencyHooks,
 } from "./config/configTypes.js";
 export { getConfiguredPacks } from "./config/configTypes.js";

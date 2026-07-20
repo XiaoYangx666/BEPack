@@ -3,7 +3,7 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import { CONFIG_FILES } from "../constants/paths.js";
 import { BePackError } from "../errors/BePackError.js";
-import type { LoadConfigOptions, UserConfig } from "./configTypes.js";
+import type { LoadConfigOptions, ResolvedConfig, UserConfig } from "./configTypes.js";
 import { normalizeConfig } from "./normalizeConfig.js";
 import { resolveFrom } from "../utils/path.js";
 
@@ -68,6 +68,20 @@ function stripConfigTypeSyntax(source: string): string {
         .replace(/\((\s*[A-Za-z_$][\w$]*)\s*:\s*[^)=]+?\)\s*=>/g, "($1) =>");
 }
 
+async function runConfigResolvedHooks(config: ResolvedConfig, cwd: string): Promise<void> {
+    for (const plugin of config.plugins ?? []) {
+        if (!plugin.configResolved) continue;
+        try {
+            await plugin.configResolved({ cwd, config });
+        } catch (cause) {
+            throw new BePackError(
+                "PLUGIN_FAILED",
+                `Plugin ${plugin.name} configResolved hook failed: ${cause instanceof Error ? cause.message : String(cause)}`
+            );
+        }
+    }
+}
+
 export async function loadConfig(options: LoadConfigOptions) {
     const cwd = path.resolve(options.cwd);
     const file = await findConfig(cwd, options.configPath);
@@ -77,5 +91,7 @@ export async function loadConfig(options: LoadConfigOptions) {
             details: { file },
         });
     }
-    return { config: normalizeConfig(mod.default, options.overrides, cwd), path: file, cwd };
+    const config = normalizeConfig(mod.default, options.overrides, cwd);
+    await runConfigResolvedHooks(config, cwd);
+    return { config, path: file, cwd };
 }

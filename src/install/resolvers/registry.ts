@@ -3,6 +3,7 @@ import type {
     DependencyResolverContext,
     DependencyResolverResult,
     DependencyResolverRule,
+    BePackPlugin,
 } from "../../config/configTypes.js";
 import { exactVersionResolver } from "./exact.js";
 import { minecraftScriptApiResolver } from "./minecraftScriptApi.js";
@@ -17,13 +18,27 @@ export const BUILTIN_DEPENDENCY_RESOLVERS: DependencyResolverRule[] = [
 ];
 
 export class DependencyResolverRegistry {
-    constructor(private readonly resolvers: DependencyResolverRule[]) {}
+    private readonly pluginNames = new Map<DependencyResolverRule, string>();
 
-    static fromConfig(customResolvers: DependencyResolverRule[]): DependencyResolverRegistry {
-        return new DependencyResolverRegistry([
-            ...customResolvers,
-            ...BUILTIN_DEPENDENCY_RESOLVERS,
-        ]);
+    constructor(
+        private readonly resolvers: DependencyResolverRule[],
+        plugins: BePackPlugin[] = []
+    ) {
+        for (const plugin of plugins) {
+            for (const resolver of plugin.install?.dependencyResolvers ?? []) {
+                this.pluginNames.set(resolver, plugin.name);
+            }
+        }
+    }
+
+    static fromConfig(
+        customResolvers: DependencyResolverRule[],
+        plugins: BePackPlugin[] = []
+    ): DependencyResolverRegistry {
+        return new DependencyResolverRegistry(
+            [...customResolvers, ...BUILTIN_DEPENDENCY_RESOLVERS],
+            plugins
+        );
     }
 
     private resolverMatchesCatalog(
@@ -40,9 +55,23 @@ export class DependencyResolverRegistry {
     }
 
     find(ctx: DependencyResolverContext): DependencyResolverRule {
-        const rule = this.resolvers.find(
-            (candidate) => this.resolverMatchesCatalog(ctx, candidate) && candidate.match(ctx)
-        );
+        let rule: DependencyResolverRule | undefined;
+        for (const candidate of this.resolvers) {
+            if (!this.resolverMatchesCatalog(ctx, candidate)) continue;
+            try {
+                if (candidate.match(ctx)) {
+                    rule = candidate;
+                    break;
+                }
+            } catch (cause) {
+                const pluginName = this.pluginNames.get(candidate);
+                if (!pluginName) throw cause;
+                throw new BePackError(
+                    "PLUGIN_FAILED",
+                    `Plugin ${pluginName} resolver ${candidate.name} match failed: ${cause instanceof Error ? cause.message : String(cause)}`
+                );
+            }
+        }
         if (!rule) {
             throw new BePackError(
                 "DEPENDENCY_VERSION_INVALID",
@@ -61,6 +90,16 @@ export class DependencyResolverRegistry {
     }
 
     async resolve(ctx: DependencyResolverContext): Promise<DependencyResolverResult> {
-        return await this.find(ctx).resolve(ctx);
+        const rule = this.find(ctx);
+        try {
+            return await rule.resolve(ctx);
+        } catch (cause) {
+            const pluginName = this.pluginNames.get(rule);
+            if (!pluginName) throw cause;
+            throw new BePackError(
+                "PLUGIN_FAILED",
+                `Plugin ${pluginName} resolver ${rule.name} failed: ${cause instanceof Error ? cause.message : String(cause)}`
+            );
+        }
     }
 }
