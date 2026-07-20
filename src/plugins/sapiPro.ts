@@ -5,6 +5,7 @@ import { compareLooseSemver, satisfiesSemver } from "../utils/semver.js";
 import type {
     BePackPlugin,
     DependencyResolverContext,
+    DependencyResolverResult,
     DependencyResolverRule,
     NpmPackageVersionMetadata,
 } from "../config/configTypes.js";
@@ -20,6 +21,11 @@ function dependencyChannel(version: string): "stable" | "beta" {
     return isChannelVersion(version) ? "beta" : "stable";
 }
 
+function isSupportedAutomaticVersion(version: string): boolean {
+    const match = /^(\d+)\.(\d+)\./.exec(version);
+    return !!match && (Number(match[1]) > 0 || Number(match[2]) >= 4);
+}
+
 function minecraftRequirements(manifest: NpmPackageVersionMetadata): Record<string, string> {
     return {
         ...(manifest.dependencies ?? {}),
@@ -29,7 +35,9 @@ function minecraftRequirements(manifest: NpmPackageVersionMetadata): Record<stri
 
 async function satisfiesMinecraftRequirements(
     ctx: DependencyResolverContext,
-    requirements: Record<string, string>
+    requirements: Record<string, string>,
+    resolvedPeers: Map<string, DependencyResolverResult | undefined>,
+    missingPackages: Set<string>
 ): Promise<boolean> {
     const declared = ctx.config.packs.bp?.dependencies ?? {};
     const registry = DependencyResolverRegistry.fromConfig([]);
@@ -37,16 +45,26 @@ async function satisfiesMinecraftRequirements(
         if (!packageName.startsWith("@minecraft/")) continue;
         const specifier = declared[packageName];
         const entry = BUILTIN_DEPENDENCY_CATALOG[packageName];
-        if (!specifier || !entry) return false;
-        const actual = await registry.resolve({
-            packageName,
-            specifier,
-            target: ctx.target,
-            entry,
-            config: ctx.config,
-            npm: ctx.npm,
-            ...(ctx.logger ? { logger: ctx.logger } : {}),
-        });
+        if (!specifier || !entry) {
+            missingPackages.add(packageName);
+            return false;
+        }
+        let actual: DependencyResolverResult | undefined;
+        if (resolvedPeers.has(packageName)) {
+            actual = resolvedPeers.get(packageName);
+        } else {
+            actual = await registry.resolve({
+                packageName,
+                specifier,
+                target: ctx.target,
+                entry,
+                config: ctx.config,
+                npm: ctx.npm,
+                ...(ctx.logger ? { logger: ctx.logger } : {}),
+            });
+            resolvedPeers.set(packageName, actual);
+        }
+        if (!actual) return false;
         if (
             REQUIRED_SCRIPT_API_PACKAGES.includes(packageName) &&
             isChannelVersion(requiredVersion) !== isChannelVersion(actual.packageVersion)
@@ -68,6 +86,7 @@ function candidateVersions(
     }
     return Object.entries(versions)
         .filter(([version, manifest]) => {
+            if (!isSupportedAutomaticVersion(version)) return false;
             const requirements = minecraftRequirements(manifest);
             if (Object.keys(requirements).length === 0) return false;
             return specifier === "stable"
@@ -87,11 +106,20 @@ const sapiProResolver: DependencyResolverRule = {
         /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(ctx.specifier),
     async resolve(ctx) {
         const metadata = await ctx.npm.metadata(SAPI_PRO);
+        const resolvedPeers = new Map<string, DependencyResolverResult | undefined>();
+        const missingPackages = new Set<string>();
         for (const [version, manifest] of candidateVersions(
             metadata.versions ?? {},
             ctx.specifier
         )) {
-            if (!(await satisfiesMinecraftRequirements(ctx, minecraftRequirements(manifest)))) {
+            if (
+                !(await satisfiesMinecraftRequirements(
+                    ctx,
+                    minecraftRequirements(manifest),
+                    resolvedPeers,
+                    missingPackages
+                ))
+            ) {
                 continue;
             }
             if (/^0\.3\./.test(version)) {
@@ -103,7 +131,7 @@ const sapiProResolver: DependencyResolverRule = {
         }
         throw new BePackError(
             "SAPI_VERSION_NOT_FOUND",
-            `Cannot find a compatible ${SAPI_PRO}@${ctx.specifier} for target ${ctx.target}.`,
+            `Cannot find a compatible ${SAPI_PRO}@${ctx.specifier} for target ${ctx.target}.${missingPackages.size > 0 ? ` Missing explicit dependencies: ${[...missingPackages].join(", ")}.` : ""}`,
             {
                 details: { package: SAPI_PRO, specifier: ctx.specifier, target: ctx.target },
                 suggestions: [
