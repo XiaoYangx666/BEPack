@@ -160,6 +160,31 @@ export default defineConfig({
 
 Run `bepack config --summary` to see the resolved plugin order and catalog conflicts. Plugin callback and resolver failures include the plugin name in the resulting error.
 
+### SAPI Pro
+
+BePack includes an experimental `sapiPro()` plugin. It resolves `sapi-pro` as a package-only dependency while checking it against the Minecraft packages you explicitly manage. It never adds dependencies to the manifest for you.
+
+```ts
+import { defineConfig, sapiPro } from "bepack";
+
+export default defineConfig({
+    target: "latest",
+    plugins: [sapiPro()],
+    packs: {
+        bp: {
+            // ...
+            dependencies: {
+                "sapi-pro": "stable",
+                "@minecraft/server": "stable",
+                "@minecraft/server-ui": "stable",
+            },
+        },
+    },
+});
+```
+
+`sapi-pro: "stable"` requires both `@minecraft/server` and `@minecraft/server-ui` to be stable; `sapi-pro: "beta"` requires both to be beta/preview. When the selected SAPI Pro release requires it, declare `@minecraft/vanilla-data` explicitly as well. Releases from `0.4` onward are supported; older SAPI Pro metadata is resolved on a best-effort basis.
+
 For the full configuration reference and implementation notes, see [README.reference.md](./README.reference.md).
 
 ## Package Output
