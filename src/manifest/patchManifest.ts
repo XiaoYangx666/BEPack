@@ -5,6 +5,7 @@ import type { ResolvedConfig, LoggerLike } from "../config/configTypes.js";
 import { ManifestFile } from "./ManifestFile.js";
 import { ManifestBuilder } from "./ManifestBuilder.js";
 import { ManifestDepManager } from "./ManifestDepManager.js";
+import type { Manifest } from "./types.js";
 
 export type PatchManifestOptions = {
     cwd: string;
@@ -25,10 +26,19 @@ export type PatchManifestOptions = {
  */
 export async function patchManifest(options: PatchManifestOptions) {
     const catalog = createDependencyCatalog(options.config);
+
+    // Reuse concrete versions already written by a previous `bepack install`.
+    // Without this, a later standalone `bepack build` sees `stable` in config
+    // again and incorrectly asks the user to run install a second time.
+    const bpPath = options.config.packs.bp ? bpManifest(options.cwd, options.config)! : undefined;
+    const bpExisting = bpPath ? await ManifestFile.read(bpPath) : undefined;
+    const existingResolvedDeps = extractResolvedDependencies(bpExisting, catalog);
     const depManager = new ManifestDepManager(
         options.config,
         catalog,
         options.resolvedDeps
+            ? { ...existingResolvedDeps, ...options.resolvedDeps }
+            : existingResolvedDeps
     );
     const builder = new ManifestBuilder(options.config, depManager);
 
@@ -36,26 +46,21 @@ export async function patchManifest(options: PatchManifestOptions) {
 
     // BP manifest
     if (options.config.packs.bp) {
-        const bpPath = bpManifest(options.cwd, options.config)!;
-        const bpExisting = await ManifestFile.read(bpPath);
         const bpExisted = bpExisting !== undefined;
 
         // Warn if config forces format_version 2 but existing manifest uses format 3
-        if (
-            options.config.manifestFormat === 2 &&
-            bpExisting?.format_version === 3
-        ) {
+        if (options.config.manifestFormat === 2 && bpExisting?.format_version === 3) {
             const warn = options.logger?.warn ?? console.warn;
             warn(
                 "Warning: config manifestFormat is 2, but existing manifest uses format_version 3. " +
-                "format_version 2 does not support string versions; any string versions in the existing manifest will be preserved as-is."
+                    "format_version 2 does not support string versions; any string versions in the existing manifest will be preserved as-is."
             );
         }
 
         const bpManifestObj = builder.buildBp(bpExisting);
-        if (!options.dryRun) await ManifestFile.write(bpPath, bpManifestObj, "bp");
+        if (!options.dryRun) await ManifestFile.write(bpPath!, bpManifestObj, "bp");
         result.bpManifest = {
-            path: slash(path.relative(options.cwd, bpPath)),
+            path: slash(path.relative(options.cwd, bpPath!)),
             updated: true,
             existed: bpExisted,
         };
@@ -76,4 +81,23 @@ export async function patchManifest(options: PatchManifestOptions) {
     }
 
     return result;
+}
+
+function extractResolvedDependencies(
+    manifest: Manifest | undefined,
+    catalog: ReturnType<typeof createDependencyCatalog>
+): Record<string, string> {
+    const resolved: Record<string, string> = {};
+    for (const dependency of manifest?.dependencies ?? []) {
+        if (
+            "module_name" in dependency &&
+            typeof dependency.module_name === "string" &&
+            typeof dependency.version === "string" &&
+            catalog[dependency.module_name]?.manifest &&
+            dependency.version !== "stable"
+        ) {
+            resolved[dependency.module_name] = dependency.version;
+        }
+    }
+    return resolved;
 }
