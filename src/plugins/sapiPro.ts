@@ -40,11 +40,17 @@ async function satisfiesMinecraftRequirements(
     missingPackages: Set<string>
 ): Promise<boolean> {
     const declared = ctx.config.packs.bp?.dependencies ?? {};
-    const registry = DependencyResolverRegistry.fromConfig([]);
+    const catalog = { ...BUILTIN_DEPENDENCY_CATALOG, ...ctx.config.install.dependencyCatalog };
+    // Use the same custom resolver chain as installation. Excluding this rule
+    // prevents sapi-pro candidate evaluation from recursively resolving itself.
+    const registry = DependencyResolverRegistry.fromConfig(
+        ctx.config.install.dependencyResolvers.filter((rule) => rule !== sapiProResolver),
+        ctx.config.plugins
+    );
     for (const [packageName, requiredVersion] of Object.entries(requirements)) {
         if (!packageName.startsWith("@minecraft/")) continue;
         const specifier = declared[packageName];
-        const entry = BUILTIN_DEPENDENCY_CATALOG[packageName];
+        const entry = catalog[packageName];
         if (!specifier || !entry) {
             missingPackages.add(packageName);
             return false;

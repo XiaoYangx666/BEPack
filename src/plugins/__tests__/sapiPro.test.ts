@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { normalizeConfig } from "../../config/normalizeConfig.js";
-import type { LoggerLike, NpmPackageMetadata, ResolvedConfig } from "../../config/configTypes.js";
+import type {
+    DependencyResolverRule,
+    LoggerLike,
+    NpmPackageMetadata,
+    ResolvedConfig,
+    UserConfig,
+} from "../../config/configTypes.js";
 import type { NpmRegistryClient } from "../../utils/npmRegistry.js";
 import { sapiPro } from "../sapiPro.js";
 
@@ -12,14 +18,30 @@ function mockNpm(packages: Record<string, NpmPackageMetadata>): NpmRegistryClien
     } as unknown as NpmRegistryClient;
 }
 
-function config(dependencies: Record<string, string>, target = "latest"): ResolvedConfig {
+function config(
+    dependencies: Record<string, string>,
+    target = "latest",
+    install?: UserConfig["install"]
+): ResolvedConfig {
     return normalizeConfig({
         name: "test",
         target,
         plugins: [sapiPro()],
+        ...(install ? { install } : {}),
         packs: { bp: { root: "bp", uuid: "a", moduleUuid: "b", dependencies } },
     });
 }
+
+const customMinecraftResolver: DependencyResolverRule = {
+    name: "custom-minecraft",
+    resolver: "custom-minecraft",
+    match: (ctx) =>
+        ctx.packageName === "@minecraft/server" || ctx.packageName === "@minecraft/server-ui",
+    async resolve(ctx) {
+        const version = ctx.packageName === "@minecraft/server" ? "2.8.0" : "2.1.0";
+        return { packageVersion: version, manifestVersion: version };
+    },
+};
 
 async function resolve(
     resolved: ResolvedConfig,
@@ -117,6 +139,41 @@ describe("sapiPro", () => {
 
         await expect(resolve(resolved, npm)).resolves.toEqual({
             packageVersion: "0.4.1",
+            manifestVersion: null,
+        });
+    });
+
+    it("uses the project's catalog and resolver chain for peer compatibility", async () => {
+        const npm = mockNpm({
+            "sapi-pro": {
+                versions: {
+                    "0.4.1-stable": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.8.0",
+                            "@minecraft/server-ui": "^2.1.0",
+                        },
+                    },
+                },
+            },
+        });
+        const resolved = config(
+            {
+                "sapi-pro": "stable",
+                "@minecraft/server": "stable",
+                "@minecraft/server-ui": "stable",
+            },
+            "latest",
+            {
+                dependencyCatalog: {
+                    "@minecraft/server": { resolver: "custom-minecraft" },
+                    "@minecraft/server-ui": { resolver: "custom-minecraft" },
+                },
+                dependencyResolvers: [customMinecraftResolver],
+            }
+        );
+
+        await expect(resolve(resolved, npm)).resolves.toEqual({
+            packageVersion: "0.4.1-stable",
             manifestVersion: null,
         });
     });

@@ -179,9 +179,9 @@ describe("plugins", () => {
         });
 
         expect(config.plugins?.map((plugin) => plugin.name)).toEqual(["high", "low"]);
-        expect(config.install.dependencyCatalog["@example/api"]?.resolver).toBe("low");
+        expect(config.install.dependencyCatalog["@example/api"]?.resolver).toBe("high");
         expect(config.pluginDiagnostics).toEqual([
-            "dependency catalog @example/api: plugin low overrides plugin high",
+            "dependency catalog @example/api: plugin high takes precedence over plugin low",
         ]);
     });
 

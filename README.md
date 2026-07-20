@@ -108,7 +108,7 @@ bepack pack --name release
 
 ### Plugins
 
-Use `plugins: [plugin()]` to add third-party package resolution and lifecycle hooks. Plugins run by descending `priority` (ties preserve array order); resolvers are tried before BePack built-ins, while plugin lifecycle hooks run before the project hook. A plugin must have a unique `name` and may declare metadata (`version`, `description`, `apiVersion: 1`).
+Use `plugins: [plugin()]` to add third-party package resolution and lifecycle hooks. Plugins run by descending `priority` (ties preserve array order); the highest-priority plugin owns a conflicting catalog entry, resolvers are tried before BePack built-ins, and plugin lifecycle hooks run before the project hook. Project-level catalog entries still override plugin entries. A plugin must have a unique `name` and may declare metadata (`version`, `description`, `apiVersion: 1`).
 
 ```ts
 import { defineConfig, type BePackPlugin } from "bepack";

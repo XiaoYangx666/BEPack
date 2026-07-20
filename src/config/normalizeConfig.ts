@@ -152,8 +152,9 @@ function resolvePluginCatalog(
             const previous = owners.get(packageName);
             if (previous) {
                 diagnostics.push(
-                    `dependency catalog ${packageName}: plugin ${plugin.name} overrides plugin ${previous}`
+                    `dependency catalog ${packageName}: plugin ${previous} takes precedence over plugin ${plugin.name}`
                 );
+                continue;
             }
             catalog[packageName] = entry;
             owners.set(packageName, plugin.name);
