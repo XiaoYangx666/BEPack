@@ -9,6 +9,7 @@ export {
 export { createDependencyCatalog } from "./install/dependencyCatalog.js";
 export { BUILTIN_DEPENDENCY_CATALOG } from "./constants/dependencyCatalog.js";
 export { NpmRegistryClient } from "./utils/npmRegistry.js";
+export { satisfiesSemver, satisfiesSemverRange } from "./utils/semver.js";
 export {
     DependencyResolverRegistry,
     BUILTIN_DEPENDENCY_RESOLVERS,
@@ -17,6 +18,7 @@ export { minecraftScriptApiResolver } from "./install/resolvers/minecraftScriptA
 export { minecraftScriptApiBpResolver } from "./install/resolvers/minecraftScriptApiBp.js";
 export { minecraftVanillaDataResolver } from "./install/resolvers/minecraftVanillaData.js";
 export { exactVersionResolver } from "./install/resolvers/exact.js";
+export { sapiPro } from "./plugins/sapiPro.js";
 export { BePackError } from "./errors/BePackError.js";
 export type {
     UserConfig,
@@ -27,11 +29,17 @@ export type {
     DependencyResolverRule,
     DependencyResolverResult,
     NpmPackageMetadata,
+    NpmPackageVersionMetadata,
     PackType,
     PackInfo,
     BpConfig,
     RpConfig,
     BpCompileOptions,
     BpCompileResolved,
+    BePackPlugin,
+    ConfigResolvedHookContext,
+    DependencyResolveHookContext,
+    DependencyResolvedHookContext,
+    PluginDependencyHooks,
 } from "./config/configTypes.js";
 export { getConfiguredPacks } from "./config/configTypes.js";

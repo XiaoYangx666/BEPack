@@ -15,6 +15,7 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
     version: "1.0.0",
     description: "",
     target: "latest",
+    plugins: [],
     install: {
         registry: "https://registry.npmjs.org/",
         saveTo: "dependencies",

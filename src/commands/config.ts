@@ -78,6 +78,18 @@ export async function commandConfig(options: any) {
         if (hookNames.length > 0) logger.info(`hooks: ${hookNames.join(", ")}`);
         else logger.info("hooks: (none)");
 
+        const plugins = config.plugins ?? [];
+        if (plugins.length > 0) {
+            logger.info(
+                `plugins: ${plugins.map((plugin) => `${plugin.name} (priority ${plugin.priority ?? 0})`).join(", ")}`
+            );
+            for (const diagnostic of config.pluginDiagnostics ?? []) {
+                logger.warn(`plugin conflict: ${diagnostic}`);
+            }
+        } else {
+            logger.info("plugins: (none)");
+        }
+
         logger.info(`install.registry: ${config.install.registry}`);
         logger.info(`pack.outDir: ${config.pack.outDir}`);
 

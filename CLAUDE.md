@@ -1,154 +1,66 @@
-# CLAUDE.md
+# BePack contributor guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This is the single source of truth for AI coding-agent guidance in this repository. `AGENTS.md` points here.
 
 ## Commands
 
 ```bash
-# Build (rolldown + dts-bundle-generator)
-npm run build          # clean + build:js + build:types
-npm run build:js       # rolldown -c (bundles src/ to dist/)
-npm run build:types    # dts-bundle-generator for dist/index.d.ts
-npm run clean          # rm -rf dist
-
-# Type check (tsc --noEmit)
-npm run check
-
-# Test (vitest) — 15s timeout configured in vitest.config.ts
+npm run build          # bundle JavaScript and declarations into dist/
+npm run check          # tsc --noEmit
 npm run test           # vitest run
-npm run test:watch     # vitest (watch mode)
+npm run test:watch     # Vitest watch mode
+npm run format         # format src/ with Prettier
 
-# Format
-npm run format         # npx prettier ./src --write
-
-# Run the CLI directly during development
-node dist/cli.js <command>
-
-# Or use tsx for quick runs without building
+# Development CLI
 npx tsx src/cli.ts <command>
+node dist/cli.js <command>
 ```
 
-## Project Overview
+Run `npm run check` and `npm run test` for every code change. Run `npm run build` when public exports, bundling, or package output changes.
 
-**BePack** is a build tool for **Minecraft Bedrock Edition Script API addons**. It streamlines the dev loop: TypeScript build via rolldown, manifest patching, dependency resolution (npm registry), Minecraft dev-folder copying, and .mcpack/.mcaddon packaging.
+## Project
 
-- **Language:** TypeScript, ESM (`"type": "module"`)
-- **Runtime:** Node.js >= 20
-- **Package manager:** npm
-- **Entry points:** `src/cli.ts` (binary), `src/index.ts` (library API)
+BePack builds Minecraft Bedrock Script API add-ons. It loads configuration, resolves npm and Script API dependencies, patches manifests, builds TypeScript with Rolldown, copies packs to development folders, and packages `.mcpack` / `.mcaddon` files.
 
-## Code Architecture
+- TypeScript, Node.js >= 20, native ESM (`"type": "module"`).
+- Public library entry: `src/index.ts`; CLI entry: `src/cli.ts`.
+- Use `.js` file extensions in TypeScript imports.
+- Prefer async filesystem APIs and preserve `ResolvedConfig` as read-only after normalization.
 
-### CLI Layer
+## Architecture
 
-`src/cli.ts` — uses the `cac` library for argument parsing. Seven commands share common options (`--cwd`, `--config`, `--json`, `--dry-run`, `--silent`, `--verbose`). Each delegates to a command handler in `src/commands/`. Global error handling wraps every command action.
+### Configuration and CLI
 
-### Config Pipeline
+`UserConfig` is loaded by `loadConfig()` and normalized by `normalizeConfig()` into `ResolvedConfig`. Commands in `src/commands/` are wired by `src/cli.ts`.
 
-Config files (`bepack.config.ts` / `.mjs` / `.js`) export a default function or object.
+Packs are configured in `packs.bp` / `packs.rp`; BP compilation options belong in `packs.bp.compile`, not top-level `build`.
 
-```
-UserConfig → loadConfig() → normalizeConfig() → ResolvedConfig
-```
+### Dependencies
 
-- **`src/config/configTypes.ts`** — all TypeScript types: `UserConfig`, `ResolvedConfig`, `DependencyResolverRule`, `HookContext`, `CacheOptions`/`CacheResolved`, etc. `BpCompileResolved` includes: `entry`, `tsconfig`, `typecheck`, `preserveModules`, `external`, `useNpx`, `minify`, `cache`
-- **`src/config/defaultConfig.ts`** — defaults (entry: `src/main.ts`, preserveModules: true, etc.)
-- **`src/config/loadConfig.ts`** — finds config file, imports it (strips TS syntax with regex fallback), calls normalizer
-- **`src/config/normalizeConfig.ts`** — merges user config with defaults and CLI overrides
+`DependencyService` uses `DependencyResolverRegistry`, then built-in resolvers, to convert configured specifiers into concrete npm versions. Catalog entries decide whether a package is written into `manifest.json` and externalized during build.
 
-### Commands
+The built-in Minecraft packages are declared explicitly under `packs.bp.dependencies`. Do not introduce implicit manifest dependencies.
 
-Each file in `src/commands/` exports a `command<Name>` async function:
+### Plugins
 
-| Command | File | Description |
-|---------|------|-------------|
-| `init` | `init.ts` | Scaffold `bepack.config.ts`（支持 `--from-bp` / `--from-rp` 从现有 manifest 反推）。反推时自动检测 `format_version`，若与实际版本格式不符则降级为 format 2 并警告 |
-| `install` | `install.ts` | Resolve deps, patch package.json, run package manager |
-| `manifest` | `manifest.ts` | Patch BP/RP `manifest.json` |
-| `build` | `build.ts` | Manifest → typecheck → rolldown → (optional install/copy/pack) |
-| `dev` | `dev.ts` | Watch sources via chokidar, rebuild + copy on change |
-| `copy` | `copy.ts` | Copy pack dirs to Minecraft dev folders (or custom targets) |
-| `pack` | `pack.ts` | Package BP (+ RP) as `.mcpack` / `.mcaddon` |
+Plugins are configured with `plugins: [plugin()]` and can supply:
 
-### Build Pipeline (`src/build/`)
+- `install.dependencyCatalog` and `install.dependencyResolvers`;
+- lifecycle hooks and `configResolved`;
+- dependency-resolution hooks;
+- metadata and priority.
 
-```
-patchManifest() → runHook("beforeBuild") → runTypecheck() → runRolldown() → runHook("afterBuild")
-```
+Plugin resolvers must not silently mutate user dependency declarations. `sapiPro()` is an experimental built-in example: it resolves `sapi-pro` as package-only while requiring explicit, channel-matched `@minecraft/server` and `@minecraft/server-ui` entries.
 
-- **`runBuild.ts`** — orchestrates the full build, supports `--timing` for per-step timing
-- **`runTypecheck.ts`** — runs `tsc --noEmit`, optionally via `npx tsc`. Supports incremental cache: passes `--incremental --tsBuildInfoFile` to tsc, caching build info to `node_modules/.cache/bepack/` for faster rebuilds
-- **`runRolldown.ts`** — clears `bp/scripts/`, bundles with rolldown (preserveModules or single file), computes file stats. Externalizes `@minecraft/*` packages that are in the manifest dependency catalog
+`satisfiesSemver()` is intentionally Minecraft Script API compatibility logic, not npm's standard semver-range implementation: matching majors accept newer API and beta MC targets.
 
-### Dependency Resolution (`src/install/`)
+### Build and manifests
 
-Pluggable resolver architecture:
-
-```
-DependencyService
-  → DependencyResolverRegistry (custom resolvers tried first, then built-in)
-    → Individual DependencyResolverRules (match + resolve)
-      → MinecraftPackageResolver (npm registry queries)
-```
-
-**Built-in resolvers:**
-- `minecraft-script-api` — `@minecraft/server`, `@minecraft/server-ui` (stable/beta/preview)
-- `minecraft-script-api-bp` — `@minecraft/server-net`, `@minecraft/server-admin`, `@minecraft/server-gametest` (beta/preview only, no stable)
-- `minecraft-vanilla-data` — `@minecraft/vanilla-data`, `@minecraft/debug-utilities` (stable/preview only)
-- `exact-version` — catches any valid semver as-is
-
-**Key types:** `DependencySpecifier` = `"stable"` | `"beta"` | `"preview"` | exact semver. The `target` config controls which Minecraft game version to resolve against.
-
-**Catalog:** `src/install/dependencyCatalog.ts` — built-in catalog maps package names to resolvers. Users can override/extend via `install.dependencyCatalog`.
-
-### Manifest Patching (`src/manifest/`)
-
-- **`ManifestFile.ts`** — manifest 文件 I/O + JSON 正规化。`read()` 读文件 → normalize → 返回 `Manifest`，`write()` validate → 写出。同时提供 `normalizeManifest`、`asArray` 等 coercion 工具函数。
-- **`ManifestReader.ts`** — 从已解析的 `Manifest` 对象中提取信息的纯方法（找 script/resources 模块 UUID、校验 header、提取依赖）。提供 `isScriptModule` / `isResourcesModule` 类型守卫供 Builder 共用。
-- **`ManifestDepManager.ts`** — 依赖校验（语法 + 政策）、识别（哪些 dep 是 BePack 管理的）、构建（specifier → manifest 版本）、替换（合并用户手写与管理依赖）。纯函数方法（`resolveVersion` / `isAllowedSpecifier` / `isAchievementCompatible`）为静态，测试可直接调用。
-- **`ManifestBuilder.ts`** — 构建 manifest 的 header、modules、metadata 部分。依赖管理委托给 `ManifestDepManager`。构造时预计算 `version` tuple/string，同一实例可复用构建 BP 和 RP。根据 `manifestFormat`（2 或 3）自动适配版本格式：format 2 输出数组 `[1,0,0]`，format 3 输出字符串 `"1.0.0"`。
-- **`types.ts`** — typed Manifest interfaces (replaces old `Record<string, any>`). `ManifestVersion = [number, number, number] | string` — format 2 用数组，format 3 用字符串。
-- **`validate.ts`** — `validateManifest()` checks required fields, module types, dependency formats. **format_version-aware**: format 2 严格数组，format 3 严格字符串（不接受数组）。
-- **`patchManifest.ts`** — IO orchestrator (reads via `ManifestFile`, calls `ManifestBuilder` + `ManifestDepManager`, writes via `ManifestFile`). Creates one builder instance and reuses it for both BP and RP.
-
-### Copy (`src/copy/`)
-
-- **`copyPacks.ts`** — copies BP/RP directories to target paths
-- **`resolveCopyTarget.ts`** — resolves target name (built-in `win`/`winold` or custom targets)
-- **`winTarget.ts`** — detects Minecraft Bedrock dev folder path on Windows
-
-### Pack (`src/pack/`)
-
-- Zips BP (and optional RP) as `.mcpack` or `.mcaddon` using `fflate`
-- Validates that all pack inputs exist and output is not inside pack roots
-- Output: `dist/{name}-{version}.mcpack` or `.mcaddon`
-
-### Hooks (`src/hooks/`)
-
-Lifecycle hooks: `beforeInstall`, `afterInstall`, `beforeManifest`, `afterManifest`, `beforeBuild`, `afterBuild`, `beforeCopy`, `afterCopy`, `beforePack`, `afterPack`. Each receives a `HookContext` with command, cwd, config, paths, logger.
-
-### Logger (`src/logger/`)
-
-Structured step logger with labeled sections (`bepack`, `manifest`, `TS`, `rolldown`, `install`, `copy`, `pack`, `hook`, `timing`). Supports `--silent`, `--verbose`, `--json` modes.
-
-### Error Handling (`src/errors/`)
-
-Typed error codes in `codes.ts` (24 codes). `BePackError` carries code, message, details, and suggestions. `formatError` formats for CLI output.
-
-### Utilities (`src/utils/`)
-
-- **`path.ts`** — path resolution helpers (projectRoot, bpRoot, rpRoot, etc.)
-- **`fs.ts`** — async file I/O (read/write JSON, copy/empty dirs)
-- **`npmRegistry.ts`** — npm registry fetch with in-memory cache
-- **`semver.ts`** — loose semver comparison, channel support detection
-- **`packageManager.ts`** — auto-detect npm/pnpm/yarn/bun, run install
-- **`atomicWrite.ts`** — atomic file writes via temp file + rename
+The build pipeline is manifest patching, `beforeBuild`, typecheck, Rolldown, then `afterBuild`. Manifest code lives in `src/manifest/`; it must preserve user-owned fields and respect format-version-specific version formats.
 
 ## Conventions
 
-- All imports use `.js` extensions (ESM, `verbatimModuleSyntax`)
-- Config is read-only after normalization; resolved as `ResolvedConfig`
-- Async always, no sync I/O
-- Error codes are exported from `src/errors/codes.ts`
-- Tests use vitest with `describe`/`it`/`expect`; no test runners other than vitest
-- The project exports `.mjs` (tsx), `.cjs`, and `.js`/`.mjs` files — the same
+- Use typed `BePackError` codes from `src/errors/codes.ts` for user-facing failures.
+- Add focused Vitest coverage beside the relevant subsystem.
+- Keep configuration merging and dependency resolution deterministic.
+- Do not stage unrelated working-tree changes. In particular, treat untracked files as user-owned unless the task explicitly includes them.

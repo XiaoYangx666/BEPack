@@ -21,6 +21,7 @@ export const ERROR_CODES = [
     "COPY_FAILED",
     "PACK_FAILED",
     "HOOK_FAILED",
+    "PLUGIN_FAILED",
     "CLI_ARGUMENT_CONFLICT",
     "UNKNOWN_COMMAND",
 ] as const;

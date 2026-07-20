@@ -1,6 +1,7 @@
 import type { NpmRegistryClient } from "../utils/npmRegistry.js";
 
-export type CommandName = "init" | "install" | "manifest" | "build" | "dev" | "copy" | "pack" | "config";
+export type CommandName =
+    "init" | "install" | "manifest" | "build" | "dev" | "copy" | "pack" | "config";
 /**
  * Script API dependency selector.
  *
@@ -31,9 +32,16 @@ export type LoggerLike = {
     install?(message: string): void;
 };
 
+/** Manifest fields for one concrete version in an npm package document. */
+export type NpmPackageVersionMetadata = {
+    dependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+};
+
+/** npm registry package document fields exposed to dependency resolver plugins. */
 export type NpmPackageMetadata = {
     "dist-tags"?: Record<string, string>;
-    versions?: Record<string, unknown>;
+    versions?: Record<string, NpmPackageVersionMetadata>;
 };
 
 export type DependencyCatalogEntry = {
@@ -49,6 +57,18 @@ export type DependencyResolverResult = {
 
     /** Version written to manifest.json. Use null for package-only dependencies. */
     manifestVersion?: string | null;
+};
+
+export type DependencyResolveHookContext = {
+    packageName: string;
+    specifier: string;
+    target: string;
+    entry: DependencyCatalogEntry;
+    config: ResolvedConfig;
+};
+
+export type DependencyResolvedHookContext = DependencyResolveHookContext & {
+    result: DependencyResolverResult;
 };
 
 export type DependencyResolverContext = {
@@ -122,6 +142,53 @@ export type Hooks = Partial<
     >
 >;
 
+export type ConfigResolvedHookContext = {
+    cwd: string;
+    config: ResolvedConfig;
+};
+
+export type PluginDependencyHooks = {
+    beforeResolveDependency?: (
+        ctx: DependencyResolveHookContext
+    ) => HookResult | Promise<HookResult>;
+    afterResolveDependency?: (
+        ctx: DependencyResolvedHookContext
+    ) => HookResult | Promise<HookResult>;
+};
+
+/**
+ * Extends BePack through `plugins: [plugin()]` in the project config.
+ *
+ * Plugin dependency resolvers are registered before BePack's built-in resolvers.
+ * Add a matching `dependencyCatalog` entry when the plugin manages a package that
+ * is not already in BePack's built-in catalog.
+ */
+export type BePackPlugin = {
+    /** Unique, human-readable plugin name used in diagnostics. */
+    name: string;
+
+    /** Optional plugin metadata for discovery and compatibility checks. */
+    version?: string;
+    description?: string;
+    apiVersion?: 1;
+
+    /** Higher priorities run/register first; ties preserve the plugins array order. */
+    priority?: number;
+
+    /** Runs after configuration has been normalized. */
+    configResolved?: (ctx: ConfigResolvedHookContext) => void | Promise<void>;
+
+    /** Dependency resolution additions supplied by the plugin. */
+    install?: {
+        dependencyCatalog?: Record<string, DependencyCatalogEntry>;
+        dependencyResolvers?: DependencyResolverRule[];
+        hooks?: PluginDependencyHooks;
+    };
+
+    /** Lifecycle hooks run with the same context as project-level hooks. */
+    hooks?: Hooks;
+};
+
 export type PackConfig = {
     /** Pack root directory, relative to `root` unless absolute. Example: `bp` or `packs/bp`. */
     root?: string;
@@ -173,7 +240,6 @@ export type BpCompileOptions = {
 
     /** Additional packages/modules that Rolldown should not bundle. */
     external?: BuildExternal[];
-
 
     /** Use `npx tsc --noEmit` instead of system `tsc --noEmit`. Default: false. */
     useNpx?: boolean;
@@ -259,6 +325,9 @@ export type UserConfig = {
      * Default: 2 for new manifests. */
     manifestFormat?: 2 | 3;
     target?: string;
+
+    /** Plugins that add dependency resolution rules and/or lifecycle hooks. */
+    plugins?: BePackPlugin[];
 
     /** Behavior/resource pack configuration. At least one pack must be configured. */
     packs?: {
@@ -372,6 +441,10 @@ export type ResolvedConfig = {
     version: string;
     description?: string;
     target: string;
+    /** Plugins applied while resolving this config. */
+    plugins?: BePackPlugin[];
+    /** Plugin ordering and catalog override diagnostics. */
+    pluginDiagnostics?: string[];
     manifestFormat?: 2 | 3;
     hooks: Hooks;
     packs: {

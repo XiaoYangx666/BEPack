@@ -1,4 +1,12 @@
-import type { DependencyCatalogEntry, DependencySpecifier, LoggerLike, ResolvedConfig } from "../config/configTypes.js";
+import type {
+    DependencyCatalogEntry,
+    DependencySpecifier,
+    DependencyResolveHookContext,
+    DependencyResolvedHookContext,
+    LoggerLike,
+    ResolvedConfig,
+} from "../config/configTypes.js";
+import { BePackError } from "../errors/BePackError.js";
 import { createDependencyCatalog, getDependencyCatalogEntry } from "./dependencyCatalog.js";
 import { NpmRegistryClient } from "../utils/npmRegistry.js";
 import { DependencyResolverRegistry } from "./resolvers/registry.js";
@@ -65,10 +73,7 @@ export class DependencyService {
                     : null,
                 manifest,
                 external: manifest,
-                resolver:
-                    typeof entry.resolver === "string"
-                        ? entry.resolver
-                        : entry.resolver.name,
+                resolver: typeof entry.resolver === "string" ? entry.resolver : entry.resolver.name,
             };
             this.log(
                 `${name}: ${specifier} -> package ${result[name].packageVersion}, manifest ${result[name].manifestVersion}`
@@ -87,10 +92,19 @@ export class DependencyService {
         specifier: DependencySpecifier,
         entry: DependencyCatalogEntry
     ): Promise<{ packageVersion: string; manifestVersion?: string | null }> {
+        const hookContext: DependencyResolveHookContext = {
+            packageName,
+            specifier,
+            target: this.config.target,
+            entry,
+            config: this.config,
+        };
+        await this.runDependencyHooks("beforeResolveDependency", hookContext);
         const registry = DependencyResolverRegistry.fromConfig(
-            this.config.install.dependencyResolvers
+            this.config.install.dependencyResolvers,
+            this.config.plugins ?? []
         );
-        return await registry.resolve({
+        const result = await registry.resolve({
             packageName,
             specifier,
             target: this.config.target,
@@ -99,6 +113,34 @@ export class DependencyService {
             npm: this.npm,
             ...(this.logger ? { logger: this.logger } : {}),
         });
+        await this.runDependencyHooks("afterResolveDependency", { ...hookContext, result });
+        return result;
+    }
+
+    private async runDependencyHooks(
+        name: "beforeResolveDependency",
+        context: DependencyResolveHookContext
+    ): Promise<void>;
+    private async runDependencyHooks(
+        name: "afterResolveDependency",
+        context: DependencyResolvedHookContext
+    ): Promise<void>;
+    private async runDependencyHooks(
+        name: "beforeResolveDependency" | "afterResolveDependency",
+        context: DependencyResolveHookContext | DependencyResolvedHookContext
+    ): Promise<void> {
+        for (const plugin of this.config.plugins ?? []) {
+            const hook = plugin.install?.hooks?.[name];
+            if (!hook) continue;
+            try {
+                await hook(context as never);
+            } catch (cause) {
+                throw new BePackError(
+                    "PLUGIN_FAILED",
+                    `Plugin ${plugin.name} ${name} hook failed: ${cause instanceof Error ? cause.message : String(cause)}`
+                );
+            }
+        }
     }
 }
 

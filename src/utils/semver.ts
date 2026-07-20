@@ -40,3 +40,75 @@ export function isStableApiSpecifier(value: string): boolean {
         (isSpecificVersion(value) && !/(?:^|[-.])(beta|alpha|preview|rc)(?:[-.]|$)/i.test(value))
     );
 }
+
+type ParsedCompatibilityVersion = {
+    major: number;
+    minor: number;
+    patch: number;
+    minecraftTarget?: [number, number, number];
+};
+
+function parseCompatibilityVersion(version: string): ParsedCompatibilityVersion | undefined {
+    const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+        version.trim()
+    );
+    if (!match) return undefined;
+    const target = /(?:^|[.-])(\d+)\.(\d+)\.(\d+)(?:[.-]|$)/.exec(match[4] ?? "");
+    return {
+        major: Number(match[1]),
+        minor: Number(match[2]),
+        patch: Number(match[3]),
+        ...(target
+            ? {
+                  minecraftTarget: [
+                      Number(target[1]),
+                      Number(target[2]),
+                      Number(target[3]),
+                  ] as const,
+              }
+            : {}),
+    };
+}
+
+function compareApiCore(a: ParsedCompatibilityVersion, b: ParsedCompatibilityVersion): number {
+    for (const key of ["major", "minor", "patch"] as const) {
+        if (a[key] !== b[key]) return a[key] - b[key];
+    }
+    return 0;
+}
+
+/**
+ * Checks Minecraft Script API compatibility, intentionally differing from
+ * standard npm semver. The actual version must have the same major and an API
+ * core version no lower than the requirement. When the requirement contains a
+ * Minecraft target inside a beta/preview suffix, the actual target must be no
+ * lower as well (for example, `1.26.33-beta` satisfies `1.26.30-beta`).
+ *
+ * `requirement` may have a common npm range prefix such as `^` or `>=`; the
+ * prefix is accepted for peer-dependency ergonomics but does not impose npm's
+ * usual upper bound.
+ */
+export function satisfiesSemver(version: string, requirement: string): boolean {
+    const actual = parseCompatibilityVersion(version);
+    if (!actual) return false;
+    return requirement.split("||").some((alternative) => {
+        const match = /(?:\^|~|>=|<=|>|<|=)?\s*(v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/.exec(
+            alternative.trim()
+        );
+        const required = match ? parseCompatibilityVersion(match[1]!) : undefined;
+        if (!required || actual.major !== required.major || compareApiCore(actual, required) < 0) {
+            return false;
+        }
+        if (!required.minecraftTarget) return true;
+        if (!actual.minecraftTarget) return false;
+        return (
+            compareLooseSemver(
+                actual.minecraftTarget.join("."),
+                required.minecraftTarget.join(".")
+            ) >= 0
+        );
+    });
+}
+
+/** @deprecated Use satisfiesSemver; retained for plugins using the earlier name. */
+export const satisfiesSemverRange = satisfiesSemver;

@@ -106,6 +106,85 @@ bepack pack --name release
 - `packs.bp.compile.scriptOutputDir` sets the compiled script output directory (relative to BP root). Default: `"scripts"`. Manifest script module entry and `HookContext.paths.scriptOutDir` reflect this value.
 - `bepack dev --skip-typecheck` skips type checking on dev rebuilds.
 
+### Plugins
+
+Use `plugins: [plugin()]` to add third-party package resolution and lifecycle hooks. Plugins run by descending `priority` (ties preserve array order); the highest-priority plugin owns a conflicting catalog entry, resolvers are tried before BePack built-ins, and plugin lifecycle hooks run before the project hook. Project-level catalog entries still override plugin entries. A plugin must have a unique `name` and may declare metadata (`version`, `description`, `apiVersion: 1`).
+
+```ts
+import { defineConfig, type BePackPlugin } from "bepack";
+
+function addonApi(): BePackPlugin {
+    return {
+        name: "addon-api",
+        version: "1.0.0",
+        apiVersion: 1,
+        priority: 10,
+        configResolved: ({ config }) => {
+            // Inspect the complete normalized configuration here.
+            if (!config.packs.bp) throw new Error("addon-api requires a behavior pack");
+        },
+        install: {
+            dependencyCatalog: {
+                "@example/addon-api": { resolver: "addon-api" },
+            },
+            dependencyResolvers: [
+                {
+                    name: "addon-api-by-minecraft-version",
+                    resolver: "addon-api",
+                    match: (ctx) => ctx.specifier === "stable",
+                    resolve: (ctx) => ({
+                        packageVersion: ctx.target === "1.21.0" ? "3.4.0" : "4.0.0",
+                    }),
+                },
+            ],
+            hooks: {
+                beforeResolveDependency: ({ packageName, target }) => {
+                    console.log(`Resolving ${packageName} for Minecraft ${target}`);
+                },
+                afterResolveDependency: ({ packageName, result }) => {
+                    console.log(`${packageName} resolved to ${result.packageVersion}`);
+                },
+            },
+        },
+        hooks: {
+            afterBuild: (ctx) => ctx.logger.info(`Built ${ctx.config.name}`),
+        },
+    };
+}
+
+export default defineConfig({
+    plugins: [addonApi()],
+    // ...
+});
+```
+
+Run `bepack config --summary` to see the resolved plugin order and catalog conflicts. Plugin callback and resolver failures include the plugin name in the resulting error.
+
+### SAPI Pro
+
+BePack includes an experimental `sapiPro()` plugin. It resolves `sapi-pro` as a package-only dependency while checking it against the Minecraft packages you explicitly manage. It never adds dependencies to the manifest for you.
+
+```ts
+import { defineConfig, sapiPro } from "bepack";
+
+export default defineConfig({
+    target: "latest",
+    plugins: [sapiPro()],
+    packs: {
+        bp: {
+            // ...
+            dependencies: {
+                "sapi-pro": "stable",
+                "@minecraft/server": "stable",
+                "@minecraft/server-ui": "stable",
+            },
+        },
+    },
+});
+```
+
+`sapi-pro: "stable"` requires both `@minecraft/server` and `@minecraft/server-ui` to be stable; `sapi-pro: "beta"` requires both to be beta/preview. When the selected SAPI Pro release requires it, declare `@minecraft/vanilla-data` explicitly as well. Releases from `0.4` onward are supported; older SAPI Pro metadata is resolved on a best-effort basis.
+
 For the full configuration reference and implementation notes, see [README.reference.md](./README.reference.md).
 
 ## Package Output

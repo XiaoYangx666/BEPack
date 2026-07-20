@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { normalizeConfig } from "../normalizeConfig.js";
 import { getConfiguredPacks } from "../configTypes.js";
+import { runHook } from "../../hooks/runHook.js";
+import { Logger } from "../../logger/logger.js";
+import { DependencyResolverRegistry } from "../../install/resolvers/registry.js";
+import { DependencyService } from "../../install/DependencyService.js";
+import { loadConfig } from "../loadConfig.js";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 // ---------------------------------------------------------------------------
 // BP/RP 对等 — 不同项目结构
@@ -91,6 +99,184 @@ describe("BP/RP 对等", () => {
                 name: "test",
             })
         ).toThrow("At least one pack");
+    });
+});
+
+describe("plugins", () => {
+    const bp = { root: "bp", uuid: "a", moduleUuid: "b" };
+
+    it("resolves a plugin-managed package from the Minecraft target", async () => {
+        const pluginResolver = {
+            name: "third-party-for-target",
+            resolver: "third-party",
+            match: () => true,
+            resolve: ({ target }: { target: string }) => ({ packageVersion: `3.0.0-mc.${target}` }),
+        };
+        const config = normalizeConfig({
+            name: "test",
+            target: "1.21.0",
+            plugins: [
+                {
+                    name: "third-party",
+                    install: {
+                        dependencyCatalog: { "@example/addon-api": { resolver: "third-party" } },
+                        dependencyResolvers: [pluginResolver],
+                    },
+                },
+            ],
+            packs: { bp },
+        });
+
+        expect(config.plugins?.map((plugin) => plugin.name)).toEqual(["third-party"]);
+        expect(config.install.dependencyCatalog["@example/addon-api"]).toEqual({
+            resolver: "third-party",
+        });
+        expect(config.install.dependencyResolvers[0]).toBe(pluginResolver);
+        const result = await DependencyResolverRegistry.fromConfig(
+            config.install.dependencyResolvers
+        ).resolve({
+            packageName: "@example/addon-api",
+            specifier: "stable",
+            target: config.target,
+            entry: config.install.dependencyCatalog["@example/addon-api"]!,
+            config,
+            npm: {} as never,
+        });
+        expect(result.packageVersion).toBe("3.0.0-mc.1.21.0");
+    });
+
+    it("runs plugin hooks in plugin order before the project hook", async () => {
+        const calls: string[] = [];
+        const config = normalizeConfig({
+            name: "test",
+            plugins: [
+                { name: "first", hooks: { beforeBuild: () => void calls.push("first") } },
+                { name: "second", hooks: { beforeBuild: () => void calls.push("second") } },
+            ],
+            hooks: { beforeBuild: () => void calls.push("project") },
+            packs: { bp },
+        });
+
+        await runHook("beforeBuild", "build", process.cwd(), config, new Logger({ silent: true }));
+        expect(calls).toEqual(["first", "second", "project"]);
+    });
+
+    it("orders plugins by priority and reports catalog overrides", () => {
+        const config = normalizeConfig({
+            name: "test",
+            plugins: [
+                {
+                    name: "low",
+                    install: { dependencyCatalog: { "@example/api": { resolver: "low" } } },
+                },
+                {
+                    name: "high",
+                    priority: 10,
+                    install: { dependencyCatalog: { "@example/api": { resolver: "high" } } },
+                },
+            ],
+            packs: { bp },
+        });
+
+        expect(config.plugins?.map((plugin) => plugin.name)).toEqual(["high", "low"]);
+        expect(config.install.dependencyCatalog["@example/api"]?.resolver).toBe("high");
+        expect(config.pluginDiagnostics).toEqual([
+            "dependency catalog @example/api: plugin high takes precedence over plugin low",
+        ]);
+    });
+
+    it("runs dependency hooks around plugin resolution", async () => {
+        const calls: string[] = [];
+        const config = normalizeConfig({
+            name: "test",
+            target: "1.21.0",
+            plugins: [
+                {
+                    name: "api",
+                    install: {
+                        dependencyCatalog: { "@example/api": { resolver: "api" } },
+                        dependencyResolvers: [
+                            {
+                                name: "api-version",
+                                resolver: "api",
+                                match: () => true,
+                                resolve: () => ({ packageVersion: "1.0.0" }),
+                            },
+                        ],
+                        hooks: {
+                            beforeResolveDependency: ({ packageName }) =>
+                                calls.push(`before:${packageName}`),
+                            afterResolveDependency: ({ result }) =>
+                                calls.push(`after:${result.packageVersion}`),
+                        },
+                    },
+                },
+            ],
+            packs: { bp: { ...bp, dependencies: { "@example/api": "stable" } } },
+        });
+
+        await new DependencyService(config).resolveAll();
+        expect(calls).toEqual(["before:@example/api", "after:1.0.0"]);
+    });
+
+    it("identifies the plugin when a lifecycle hook fails", async () => {
+        const config = normalizeConfig({
+            name: "test",
+            plugins: [
+                {
+                    name: "broken",
+                    hooks: {
+                        beforeBuild: () => {
+                            throw new Error("boom");
+                        },
+                    },
+                },
+            ],
+            packs: { bp },
+        });
+
+        await expect(
+            runHook("beforeBuild", "build", process.cwd(), config, new Logger({ silent: true }))
+        ).rejects.toThrow("Plugin broken beforeBuild hook failed: boom");
+    });
+
+    it("runs configResolved after loading the normalized config", async () => {
+        const cwd = await mkdtemp(path.join(tmpdir(), "bepack-plugin-"));
+        try {
+            await writeFile(
+                path.join(cwd, "bepack.config.mjs"),
+                `export default {
+                    name: "original",
+                    plugins: [{
+                        name: "configure",
+                        configResolved: ({ config }) => {
+                            globalThis.__bepackPluginConfigResolved = config.name;
+                        }
+                    }],
+                    packs: { bp: { root: "bp", uuid: "a", moduleUuid: "b" } }
+                };`
+            );
+            const loaded = await loadConfig({ cwd });
+            expect(loaded.config.name).toBe("original");
+            expect(
+                (globalThis as { __bepackPluginConfigResolved?: string })
+                    .__bepackPluginConfigResolved
+            ).toBe("original");
+        } finally {
+            delete (globalThis as { __bepackPluginConfigResolved?: string })
+                .__bepackPluginConfigResolved;
+            await rm(cwd, { recursive: true, force: true });
+        }
+    });
+
+    it("rejects plugins without unique names", () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                plugins: [{ name: "duplicate" }, { name: "duplicate" }],
+                packs: { bp },
+            })
+        ).toThrow("Plugin name is duplicated");
     });
 });
 
