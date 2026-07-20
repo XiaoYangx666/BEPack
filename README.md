@@ -95,6 +95,7 @@ bepack pack --name release
 - At least one pack (`packs.bp` or `packs.rp`) is required. BP-only, RP-only, and BP+RP projects are all supported.
 - BP compilation config (entry, typecheck, bundler options) goes in `packs.bp.compile`. Without it, `build` and `dev` skip TypeScript compilation.
 - Rolldown string replacement is configured with `replace.values`; values may be literals or functions receiving the resolved config. Built-in tokens such as `**VERSION**`, `**NAME**`, `**UUID**`, and `**DESCRIPTION**` can be enabled with `replace.builtins`.
+- Replacement is disabled when `replace` is omitted or empty, so it adds no replacement-plugin overhead in that case. Replacement functions run once per build. For `**DESCRIPTION**`, `packs.bp.description` takes precedence over the root `description`, then falls back to an empty string.
 - `packs.bp.moduleUuid` is optional — only needed when `compile` is configured (to manage the script module). Data-only BPs can omit it.
 - `packs.rp.moduleUuid` is required (always needs a resources module).
 - `build` clears `<packs.bp.root>/scripts` before writing new output (only when compile is configured).

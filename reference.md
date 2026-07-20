@@ -128,9 +128,9 @@ type UserConfig = {
                 useNpx?: boolean;
                 minify?: boolean;
                 cache?: {
-                    dev?: boolean;    // 默认 true
-                    build?: boolean;  // 默认 false
-                    file?: string;    // 默认 "node_modules/.cache/bepack/tsconfig.tsbuildinfo"
+                    dev?: boolean; // 默认 true
+                    build?: boolean; // 默认 false
+                    file?: string; // 默认 "node_modules/.cache/bepack/tsconfig.tsbuildinfo"
                 };
                 /** 编译脚本输出目录，相对于 BP root。默认 "scripts"。 */
                 scriptOutputDir?: string;
@@ -168,7 +168,12 @@ type UserConfig = {
         name?: string | { bp?: string; rp?: string };
         /** RP 额外文件（BP 的额外文件请用 packs.bp.include）。 */
         include?: { rp?: string[] };
-        targets?: Record<string, ({ type: "custom"; bp?: string; rp?: string } | { type: "gameRoot"; path: string }) & { name?: string | { bp?: string; rp?: string } }>;
+        targets?: Record<
+            string,
+            ({ type: "custom"; bp?: string; rp?: string } | { type: "gameRoot"; path: string }) & {
+                name?: string | { bp?: string; rp?: string };
+            }
+        >;
     };
 
     dev?: {
@@ -219,14 +224,14 @@ pack.outDir
 
 所有 BP 依赖在 `packs.bp.dependencies` 中声明。依赖目录控制每个包的行为：
 
-| 包                              | 解析器                    | package.json | manifest.json | 打包方式 |
-| ------------------------------- | ------------------------- | ------------ | ------------- | -------- |
-| `@minecraft/server`             | `minecraft-script-api`    | ✅           | ✅            | 外部     |
-| `@minecraft/server-ui`          | `minecraft-script-api`    | ✅           | ✅            | 外部     |
-| `@minecraft/server-net`         | `minecraft-script-api-bp` | ✅           | ✅            | 外部     |
-| `@minecraft/server-admin`       | `minecraft-script-api-bp` | ✅           | ✅            | 外部     |
-| `@minecraft/server-gametest`    | `minecraft-script-api-bp` | ✅           | ✅            | 外部     |
-| `@minecraft/vanilla-data`       | `minecraft-vanilla-data`  | ✅           | ❌            | 内联     |
+| 包                           | 解析器                    | package.json | manifest.json | 打包方式 |
+| ---------------------------- | ------------------------- | ------------ | ------------- | -------- |
+| `@minecraft/server`          | `minecraft-script-api`    | ✅           | ✅            | 外部     |
+| `@minecraft/server-ui`       | `minecraft-script-api`    | ✅           | ✅            | 外部     |
+| `@minecraft/server-net`      | `minecraft-script-api-bp` | ✅           | ✅            | 外部     |
+| `@minecraft/server-admin`    | `minecraft-script-api-bp` | ✅           | ✅            | 外部     |
+| `@minecraft/server-gametest` | `minecraft-script-api-bp` | ✅           | ✅            | 外部     |
+| `@minecraft/vanilla-data`    | `minecraft-vanilla-data`  | ✅           | ❌            | 内联     |
 
 ### 版本解析
 
@@ -246,34 +251,34 @@ dependencies: {
 
 #### `minecraft-script-api` — `@minecraft/server`、`@minecraft/server-ui`
 
-| 说明符     | 目标     | package.json                                      | manifest.json                        |
-| ---------- | -------- | ------------------------------------------------- | ------------------------------------ |
-| `stable`   | `latest` | 注册表中的最新稳定版                               | 相同版本                             |
-| `stable`   | 具体版本 | 查找匹配的 beta → 推断稳定版 `betaMajor.(betaMinor-1).betaPatch` | 相同版本                             |
-| `beta`     | `latest` | 所有版本中最高的 beta 版（排除 preview）           | `"beta"`                             |
-| `beta`     | 具体版本 | 匹配 `*-beta.*<target>-stable` 或 `*-beta-*<target>-stable` | `"beta"`（频道依赖）或具体版本       |
-| `preview`  | `latest` | 最高的 preview 版本（rc 或 beta）                  | 完整版本字符串                       |
-| `preview`  | 具体版本 | 匹配 `*-{rc\|beta}.<target>-preview.*`            | 完整版本字符串                       |
+| 说明符    | 目标     | package.json                                                     | manifest.json                  |
+| --------- | -------- | ---------------------------------------------------------------- | ------------------------------ |
+| `stable`  | `latest` | 注册表中的最新稳定版                                             | 相同版本                       |
+| `stable`  | 具体版本 | 查找匹配的 beta → 推断稳定版 `betaMajor.(betaMinor-1).betaPatch` | 相同版本                       |
+| `beta`    | `latest` | 所有版本中最高的 beta 版（排除 preview）                         | `"beta"`                       |
+| `beta`    | 具体版本 | 匹配 `*-beta.*<target>-stable` 或 `*-beta-*<target>-stable`      | `"beta"`（频道依赖）或具体版本 |
+| `preview` | `latest` | 最高的 preview 版本（rc 或 beta）                                | 完整版本字符串                 |
+| `preview` | 具体版本 | 匹配 `*-{rc\|beta}.<target>-preview.*`                           | 完整版本字符串                 |
 
 #### `minecraft-script-api-bp` — `@minecraft/server-net`、`@minecraft/server-admin`、`@minecraft/server-gametest`
 
 这些包没有稳定版本。只接受 `beta` 和 `preview`。
 
-| 说明符     | 行为                                              |
-| ---------- | ------------------------------------------------- |
-| `beta`     | 同 `minecraft-script-api` 的 beta 解析方式         |
-| `preview`  | 同 `minecraft-script-api` 的 preview 解析方式      |
-| `stable`   | **拒绝** — `DEPENDENCY_VERSION_INVALID`            |
+| 说明符    | 行为                                          |
+| --------- | --------------------------------------------- |
+| `beta`    | 同 `minecraft-script-api` 的 beta 解析方式    |
+| `preview` | 同 `minecraft-script-api` 的 preview 解析方式 |
+| `stable`  | **拒绝** — `DEPENDENCY_VERSION_INVALID`       |
 
 #### `minecraft-vanilla-data` — `@minecraft/vanilla-data`
 
-| 说明符     | 目标         | 行为                                                        |
-| ---------- | ------------ | ----------------------------------------------------------- |
-| `stable`   | `latest`     | 最新稳定版（dist-tag `latest` 或最高 semver）               |
-| `stable`   | `"1.26.32"`  | 如果注册表中存在，则精确使用 `1.26.32`                      |
-| `preview`  | `latest`     | 最高 `X.X.X-preview.N` 版本                                 |
-| `preview`  | `"1.26.40"`  | 最高 `1.26.40-preview.N` 版本                               |
-| `beta`     | —            | **拒绝** — `DEPENDENCY_VERSION_INVALID`                     |
+| 说明符    | 目标        | 行为                                          |
+| --------- | ----------- | --------------------------------------------- |
+| `stable`  | `latest`    | 最新稳定版（dist-tag `latest` 或最高 semver） |
+| `stable`  | `"1.26.32"` | 如果注册表中存在，则精确使用 `1.26.32`        |
+| `preview` | `latest`    | 最高 `X.X.X-preview.N` 版本                   |
+| `preview` | `"1.26.40"` | 最高 `1.26.40-preview.N` 版本                 |
+| `beta`    | —           | **拒绝** — `DEPENDENCY_VERSION_INVALID`       |
 
 #### 稳定版推断示例
 
@@ -366,20 +371,22 @@ export default defineConfig({
 
 BePack 同时支持 `format_version 2` 和 `format_version 3`（Minecraft 1.21.110+ preview）：
 
-| 特性 | format 2 | format 3 |
-|------|----------|----------|
-| 版本格式 | 数组 `[1, 0, 0]` | SemVer 字符串 `"1.0.0"`（**不接受数组**） |
-| 自定义设置面板 | 不支持 | 支持（预览） |
-| 兼容性 | 高 | **不兼容** format 2 的数组版本 |
+| 特性           | format 2         | format 3                                  |
+| -------------- | ---------------- | ----------------------------------------- |
+| 版本格式       | 数组 `[1, 0, 0]` | SemVer 字符串 `"1.0.0"`（**不接受数组**） |
+| 自定义设置面板 | 不支持           | 支持（预览）                              |
+| 兼容性         | 高               | **不兼容** format 2 的数组版本            |
 
 版本字段适用范围：`header.version`、`header.min_engine_version`、`modules[].version`、dependencies 中 uuid 依赖的 `version`。Script API 的 `module_name` 依赖始终为字符串，不受影响。
 
 **format 选择优先级**：
+
 1. 配置中显式设置 `manifestFormat: 2 | 3` → 强制使用
 2. 未设置时保留 existing manifest 的 `format_version`
 3. 全新 manifest 默认 `2`
 
 **注意**：
+
 - format 2 不兼容 format 3 的字符串版本。如果配置强制使用 format 2 但 existing manifest 是 format 3，BePack 会给出降级警告。
 - `bepack init --from-bp/--from-rp` 会自动检测 manifest 的 `format_version` 和 `header.version` 实际格式是否一致。如果不一致（如 format=3 但 version 是数组），会按照 format 2 处理并给出警告。
 
@@ -452,6 +459,7 @@ Rolldown 行为：
 - `packs.bp.compile.scriptOutputDir` 控制编译脚本输出目录（相对于 BP root），默认 `"scripts"`。manifest 中的 script 模块 `entry` 路径也会随之更新为 `<scriptOutputDir>/<entry文件名>.js`。
 - 外部包来自 `packs.bp.compile.external`，默认情况下也来自受管理的依赖目录。
 - `packs.bp.compile.minify: true` 或 `--minify` 启用 Rolldown 代码压缩，输出更小的 JS 文件。
+- 字符串替换通过顶层 `replace` 配置：`replace.values` 支持字面量或接收已解析 config 的函数；`replace.builtins` 可开启 `**VERSION**`、`**NAME**`、`**UUID**`、`**DESCRIPTION**`。未配置替换时不会创建 replace plugin。`**DESCRIPTION**` 优先使用 `packs.bp.description`，再回退到根 `description`。
 - 构建完成后显示输出文件的大小统计（单文件显示路径和体积，多文件显示总文件数和总体积）。
 
 > 注意：构建命令（`build` / `dev`）不再要求 BP 必须存在。如果项目只有 RP 或 BP 没有配置 `compile`，则跳过编译流程，只执行 manifest 修补和可选的文件复制/打包。
@@ -700,9 +708,9 @@ hooks: {
 
 ```ts
 type HookContext = {
-    command: CommandName;  // "build" | "dev" | "install" | ...
+    command: CommandName; // "build" | "dev" | "install" | ...
     cwd: string;
-    mode?: string;         // 通过 --mode <value> 传入的执行模式
+    mode?: string; // 通过 --mode <value> 传入的执行模式
     target: string;
     config: ResolvedConfig;
     paths: {
@@ -712,8 +720,8 @@ type HookContext = {
         bpManifest?: string;
         rpManifest?: string;
         srcEntry?: string;
-        scriptOutFile?: string;   // 编译输出文件路径
-        scriptOutDir?: string;    // 编译输出目录路径
+        scriptOutFile?: string; // 编译输出文件路径
+        scriptOutDir?: string; // 编译输出目录路径
     };
     logger: LoggerLike;
 };
@@ -796,18 +804,18 @@ bepack init --from-bp ./bp/manifest.json --from-rp ./rp/manifest.json
 
 规则：
 
-| 场景 | 行为 |
-|---|---|
-| 只传 BP | 顶层 `name`/`description` 设为 BP manifest 的值 |
-| 只传 RP | 同上 |
-| BP + RP 都传 | 顶层 `name`/`description` 从 BP 读取；同时分别设到 `packs.bp.name`/`packs.rp.name` |
-| format_version | 自动检测原 manifest 的 `format_version`，写入生成的配置的 `manifestFormat` 字段。如果 `format_version` 与 `header.version` 的实际格式不符（如 format=3 但 version 是数组），降级为 format 2 并警告 |
-| pack root | 根据 manifest 路径相对当前目录自动推导 |
-| UUID | 直接读取 manifest 中的值，不重新生成 |
-| 版本 | 从 manifest header 读取（支持数组 `[1,0,0]` 和字符串 `"1.0.0"`）。两个包版本不同时取最高者，并给出警告 |
-| 依赖 | manifest 中的 `module_name` 依赖如果在 BePack 内置 catalog 中，自动写入配置 |
-| 编译脚本 | manifest 中有 script 模块时自动开启 compile。根据模块 `entry` 推断源入口和输出目录：`"scripts/main.js"` → `entry: "src/main.ts"`；`"custom/app.js"` → `entry: "src/app.ts"`, `scriptOutputDir: "custom"` |
-| Windows | 自动添加 `copy: { defaultTarget: "win" }" |
+| 场景           | 行为                                                                                                                                                                                                     |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 只传 BP        | 顶层 `name`/`description` 设为 BP manifest 的值                                                                                                                                                          |
+| 只传 RP        | 同上                                                                                                                                                                                                     |
+| BP + RP 都传   | 顶层 `name`/`description` 从 BP 读取；同时分别设到 `packs.bp.name`/`packs.rp.name`                                                                                                                       |
+| format_version | 自动检测原 manifest 的 `format_version`，写入生成的配置的 `manifestFormat` 字段。如果 `format_version` 与 `header.version` 的实际格式不符（如 format=3 但 version 是数组），降级为 format 2 并警告       |
+| pack root      | 根据 manifest 路径相对当前目录自动推导                                                                                                                                                                   |
+| UUID           | 直接读取 manifest 中的值，不重新生成                                                                                                                                                                     |
+| 版本           | 从 manifest header 读取（支持数组 `[1,0,0]` 和字符串 `"1.0.0"`）。两个包版本不同时取最高者，并给出警告                                                                                                   |
+| 依赖           | manifest 中的 `module_name` 依赖如果在 BePack 内置 catalog 中，自动写入配置                                                                                                                              |
+| 编译脚本       | manifest 中有 script 模块时自动开启 compile。根据模块 `entry` 推断源入口和输出目录：`"scripts/main.js"` → `entry: "src/main.ts"`；`"custom/app.js"` → `entry: "src/app.ts"`, `scriptOutputDir: "custom"` |
+| Windows        | 自动添加 `copy: { defaultTarget: "win" }"                                                                                                                                                                |
 
 manifest 路径必须在当前目录内，否则报错。
 

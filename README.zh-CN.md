@@ -95,6 +95,7 @@ bepack pack --name release
 - 至少配置一个 Pack（`packs.bp` 或 `packs.rp`），支持仅 BP、仅 RP、BP+RP 三种项目形态。
 - BP 编译配置（入口、类型检查、打包选项）放在 `packs.bp.compile` 中；未配置时 `build` 和 `dev` 跳过 TypeScript 编译。
 - Rolldown 字符串替换通过 `replace.values` 配置，值可以是字面量，也可以是接收已解析 config 的函数；`replace.builtins` 可按需开启 `**VERSION**`、`**NAME**`、`**UUID**`、`**DESCRIPTION**` 等内置占位符。
+- 未配置或未启用任何替换时不会创建替换插件，因此不会增加额外的替换开销；函数形式的值每次构建只执行一次。`**DESCRIPTION**` 优先取 `packs.bp.description`，否则取根配置 `description`，都没有时为空字符串。
 - `packs.bp.moduleUuid` 可选——仅在配置了 `compile` 时需要（用来管理 script 模块）。纯数据 BP 可省略。
 - `packs.rp.moduleUuid` 必填（始终需要 resources 模块）。
 - `build` 仅在配置了 compile 时，会清空 `<packs.bp.root>/<compile.scriptOutputDir>`（默认 `scripts`）后写入新文件。
