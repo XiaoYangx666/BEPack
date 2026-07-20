@@ -9,6 +9,7 @@ export {
 export { createDependencyCatalog } from "./install/dependencyCatalog.js";
 export { BUILTIN_DEPENDENCY_CATALOG } from "./constants/dependencyCatalog.js";
 export { NpmRegistryClient } from "./utils/npmRegistry.js";
+export { satisfiesSemver, satisfiesSemverRange } from "./utils/semver.js";
 export {
     DependencyResolverRegistry,
     BUILTIN_DEPENDENCY_RESOLVERS,
@@ -27,6 +28,7 @@ export type {
     DependencyResolverRule,
     DependencyResolverResult,
     NpmPackageMetadata,
+    NpmPackageVersionMetadata,
     PackType,
     PackInfo,
     BpConfig,

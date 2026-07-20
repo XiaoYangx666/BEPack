@@ -32,9 +32,16 @@ export type LoggerLike = {
     install?(message: string): void;
 };
 
+/** Manifest fields for one concrete version in an npm package document. */
+export type NpmPackageVersionMetadata = {
+    dependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+};
+
+/** npm registry package document fields exposed to dependency resolver plugins. */
 export type NpmPackageMetadata = {
     "dist-tags"?: Record<string, string>;
-    versions?: Record<string, unknown>;
+    versions?: Record<string, NpmPackageVersionMetadata>;
 };
 
 export type DependencyCatalogEntry = {
