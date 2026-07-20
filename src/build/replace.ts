@@ -5,7 +5,8 @@ const BUILTIN_TOKENS = {
     VERSION: (config: ResolvedConfig) => config.version,
     NAME: (config: ResolvedConfig) => config.name,
     UUID: (config: ResolvedConfig) => config.packs.bp?.uuid ?? "",
-    DESCRIPTION: (config: ResolvedConfig) => config.description ?? "",
+    DESCRIPTION: (config: ResolvedConfig) =>
+        config.packs.bp?.description ?? config.description ?? "",
 } as const;
 
 /** Resolve user replacements and enabled built-ins into Rolldown's value map. */
@@ -15,16 +16,34 @@ export function resolveReplaceValues(config: ResolvedConfig): Record<string, str
         if (enabled)
             values[`**${name}**`] = BUILTIN_TOKENS[name as keyof typeof BUILTIN_TOKENS](config);
     }
-    // User values are applied last so a custom definition can intentionally
-    // override the value of an enabled built-in token.
-    for (const [token, value] of Object.entries(config.replace.values)) {
-        values[token] = typeof value === "function" ? value(config) : value;
-    }
-    return values;
+    return { ...values, ...resolveCustomReplaceValues(config) };
 }
 
-export function createReplacePlugin(config: ResolvedConfig): ReturnType<typeof replacePlugin> {
-    return replacePlugin(resolveReplaceValues(config));
+function resolveCustomReplaceValues(config: ResolvedConfig): Record<string, string> {
+    return Object.fromEntries(
+        Object.entries(config.replace.values).map(([token, value]) => [
+            token,
+            typeof value === "function" ? value(config) : value,
+        ])
+    );
+}
+
+/** Create separate plugins so built-in `**TOKEN**` markers are matched literally. */
+export function createReplacePlugins(config: ResolvedConfig): ReturnType<typeof replacePlugin>[] {
+    const plugins: ReturnType<typeof replacePlugin>[] = [];
+    if (Object.keys(config.replace.values).length > 0) {
+        plugins.push(replacePlugin(resolveCustomReplaceValues(config)));
+    }
+    const resolvedValues = resolveReplaceValues(config);
+    const builtins = Object.fromEntries(
+        Object.entries(config.replace.builtins)
+            .filter(([, enabled]) => enabled)
+            .map(([name]) => [`**${name}**`, resolvedValues[`**${name}**`] ?? ""])
+    );
+    if (Object.keys(builtins).length > 0) {
+        plugins.push(replacePlugin(builtins, { delimiters: ["", ""] }));
+    }
+    return plugins;
 }
 
 export function normalizeReplace(options: ReplaceOptions | undefined) {

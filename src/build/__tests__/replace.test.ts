@@ -48,6 +48,13 @@ describe("replacePlugin configuration", () => {
         });
     });
 
+    it("prefers BP description over the root description", () => {
+        const config = configWithReplace({ builtins: { DESCRIPTION: true } });
+        config.packs.bp!.description = "BP description";
+
+        expect(resolveReplaceValues(config)["**DESCRIPTION**"]).toBe("BP description");
+    });
+
     it("disables built-in tokens by default", () => {
         expect(resolveReplaceValues(configWithReplace(undefined))).toEqual({});
     });

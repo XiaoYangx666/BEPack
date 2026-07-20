@@ -18,7 +18,7 @@ import {
     containsPath,
 } from "../utils/path.js";
 import { createDependencyCatalog } from "../install/dependencyCatalog.js";
-import { createReplacePlugin } from "./replace.js";
+import { createReplacePlugins } from "./replace.js";
 
 function buildExternal(config: ResolvedConfig): (string | RegExp)[] {
     if (!config.packs.bp?.compile) return [];
@@ -160,7 +160,7 @@ export async function runRolldown(
         const bundle = await rolldown({
             input: entry,
             external: buildExternal(config),
-            plugins: [createReplacePlugin(config)],
+            plugins: createReplacePlugins(config),
             onwarn(warning, warn) {
                 if (warning.code === "CIRCULAR_DEPENDENCY") return;
                 warn(warning);
