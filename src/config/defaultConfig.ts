@@ -14,6 +14,15 @@ export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
     name: "minecraft-addon",
     version: "1.0.0",
     description: "",
+    replace: {
+        values: {},
+        builtins: {
+            VERSION: false,
+            NAME: false,
+            UUID: false,
+            DESCRIPTION: false,
+        },
+    },
     target: "latest",
     plugins: [],
     install: {

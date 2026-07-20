@@ -15,6 +15,7 @@ import type {
 } from "./configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { validateScriptOutputDir, slash } from "../utils/path.js";
+import { normalizeReplace } from "../build/replace.js";
 
 function stripUndefined<T extends Record<string, unknown>>(value: T | undefined): Partial<T> {
     if (!value) return {};
@@ -300,6 +301,7 @@ export function normalizeConfig(
         name,
         version,
         ...(description !== undefined ? { description } : {}),
+        replace: normalizeReplace(raw.replace),
         target,
         plugins,
         ...(pluginDiagnostics.length > 0 ? { pluginDiagnostics } : {}),

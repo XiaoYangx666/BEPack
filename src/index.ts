@@ -41,5 +41,8 @@ export type {
     DependencyResolveHookContext,
     DependencyResolvedHookContext,
     PluginDependencyHooks,
+    ReplaceValue,
+    ReplaceBuiltins,
+    ReplaceOptions,
 } from "./config/configTypes.js";
 export { getConfiguredPacks } from "./config/configTypes.js";

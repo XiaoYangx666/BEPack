@@ -20,6 +20,10 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
         },
         name: "test-addon",
         version: "1.0.0",
+        replace: {
+            values: {},
+            builtins: { VERSION: false, NAME: false, UUID: false, DESCRIPTION: false },
+        },
         target: "latest",
         hooks: {},
         packs: {

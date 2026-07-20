@@ -94,6 +94,7 @@ bepack pack --name release
 - `description` is optional. If omitted, BePack will not overwrite existing manifest descriptions.
 - At least one pack (`packs.bp` or `packs.rp`) is required. BP-only, RP-only, and BP+RP projects are all supported.
 - BP compilation config (entry, typecheck, bundler options) goes in `packs.bp.compile`. Without it, `build` and `dev` skip TypeScript compilation.
+- Rolldown string replacement is configured with `replace.values`; values may be literals or functions receiving the resolved config. Built-in tokens such as `**VERSION**`, `**NAME**`, `**UUID**`, and `**DESCRIPTION**` can be enabled with `replace.builtins`.
 - `packs.bp.moduleUuid` is optional — only needed when `compile` is configured (to manage the script module). Data-only BPs can omit it.
 - `packs.rp.moduleUuid` is required (always needs a resources module).
 - `build` clears `<packs.bp.root>/scripts` before writing new output (only when compile is configured).

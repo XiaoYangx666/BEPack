@@ -23,6 +23,23 @@ export type CopySetting = false | true | string;
 /** Rolldown external dependency matcher. */
 export type BuildExternal = string | RegExp;
 
+/** A replacement value, resolved against the normalized BePack config. */
+export type ReplaceValue = string | ((config: ResolvedConfig) => string);
+
+export type ReplaceBuiltins = {
+    VERSION?: boolean;
+    NAME?: boolean;
+    UUID?: boolean;
+    DESCRIPTION?: boolean;
+};
+
+export type ReplaceOptions = {
+    /** Replacement tokens and their literal or config-aware values. */
+    values?: Record<string, ReplaceValue>;
+    /** Enable replacement of BePack's built-in tokens. Disabled by default. */
+    builtins?: ReplaceBuiltins;
+};
+
 export type LoggerLike = {
     info(message: string): void;
     warn(message: string): void;
@@ -317,6 +334,9 @@ export type UserConfig = {
     /** Addon description used as manifest default. */
     description?: string;
 
+    /** String replacement performed by Rolldown while compiling BP scripts. */
+    replace?: ReplaceOptions;
+
     /** Manifest format version used when writing manifest.json.
      * - `2`: array versions (e.g. `[1, 0, 0]`). Default for format_version 2 manifests.
      * - `3`: SemVer string versions (e.g. `"1.0.0"`). All version fields must be strings.
@@ -440,6 +460,10 @@ export type ResolvedConfig = {
     name: string;
     version: string;
     description?: string;
+    replace: {
+        values: Record<string, ReplaceValue>;
+        builtins: Required<ReplaceBuiltins>;
+    };
     target: string;
     /** Plugins applied while resolving this config. */
     plugins?: BePackPlugin[];
