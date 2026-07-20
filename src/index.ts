@@ -19,6 +19,7 @@ export { minecraftScriptApiBpResolver } from "./install/resolvers/minecraftScrip
 export { minecraftVanillaDataResolver } from "./install/resolvers/minecraftVanillaData.js";
 export { exactVersionResolver } from "./install/resolvers/exact.js";
 export { sapiPro } from "./plugins/sapiPro.js";
+export { BUILTIN_PLUGINS } from "./plugins/builtins.js";
 export { BePackError } from "./errors/BePackError.js";
 export type {
     UserConfig,

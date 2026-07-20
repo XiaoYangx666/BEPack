@@ -16,6 +16,7 @@ import type {
 import { BePackError } from "../errors/BePackError.js";
 import { validateScriptOutputDir, slash } from "../utils/path.js";
 import { normalizeReplace } from "../build/replace.js";
+import { BUILTIN_PLUGINS } from "../plugins/builtins.js";
 
 function stripUndefined<T extends Record<string, unknown>>(value: T | undefined): Partial<T> {
     if (!value) return {};
@@ -65,8 +66,15 @@ function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): Us
     };
 }
 
-function normalizePlugins(plugins: BePackPlugin[] | undefined): BePackPlugin[] {
-    const resolved = [...(plugins ?? [])];
+function normalizePlugins(plugins: Array<BePackPlugin | string> | undefined): BePackPlugin[] {
+    const resolved = (plugins ?? []).map((plugin) => {
+        if (typeof plugin !== "string") return plugin;
+        const factory = BUILTIN_PLUGINS[plugin];
+        if (!factory) {
+            throw new BePackError("CONFIG_INVALID", `Unknown built-in plugin: ${plugin}.`);
+        }
+        return factory();
+    });
     const names = new Set<string>();
     for (const plugin of resolved) {
         if (!plugin?.name || plugin.name.trim() === "") {

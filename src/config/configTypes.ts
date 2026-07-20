@@ -347,7 +347,7 @@ export type UserConfig = {
     target?: string;
 
     /** Plugins that add dependency resolution rules and/or lifecycle hooks. */
-    plugins?: BePackPlugin[];
+    plugins?: Array<BePackPlugin | string>;
 
     /** Behavior/resource pack configuration. At least one pack must be configured. */
     packs?: {

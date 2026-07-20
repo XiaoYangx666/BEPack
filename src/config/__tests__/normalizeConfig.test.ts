@@ -278,6 +278,26 @@ describe("plugins", () => {
             })
         ).toThrow("Plugin name is duplicated");
     });
+
+    it("resolves built-in plugins by name", () => {
+        const config = normalizeConfig({
+            name: "test",
+            plugins: ["sapi-pro"],
+            packs: { bp },
+        });
+
+        expect(config.plugins?.map((plugin) => plugin.name)).toEqual(["sapi-pro"]);
+    });
+
+    it("rejects unknown built-in plugin names", () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                plugins: ["unknown-plugin"],
+                packs: { bp },
+            })
+        ).toThrow("Unknown built-in plugin: unknown-plugin");
+    });
 });
 
 // ---------------------------------------------------------------------------
