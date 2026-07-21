@@ -50,6 +50,20 @@ export function assertSafeCopyDestination(source: string, target: string): void 
     }
 }
 
+/** Resolve a pack folder name without allowing it to escape the target root. */
+export function resolveSafeCopyDestination(targetDir: string, folderName: string): string {
+    const resolvedTargetDir = path.resolve(targetDir);
+    const destination = path.resolve(resolvedTargetDir, folderName);
+    if (destination === resolvedTargetDir || !containsPath(resolvedTargetDir, destination)) {
+        throw new BePackError(
+            "COPY_FAILED",
+            `Copy folder name "${folderName}" must resolve to a directory inside "${targetDir}".`,
+            { details: { targetDir: resolvedTargetDir, folderName, destination } }
+        );
+    }
+    return destination;
+}
+
 async function validateTargetDir(dir: string, label: string): Promise<void> {
     if (!(await pathExists(dir))) {
         throw new BePackError("COPY_FAILED", `Copy target directory does not exist: ${dir}`, {
@@ -84,7 +98,7 @@ async function copyOnePack(
     logger?: Logger
 ): Promise<string> {
     const includes = getPackIncludeItems(config, packType);
-    const to = path.join(targetDir, folderName);
+    const to = resolveSafeCopyDestination(targetDir, folderName);
     assertSafeCopyDestination(source, to);
 
     if (!dryRun) {

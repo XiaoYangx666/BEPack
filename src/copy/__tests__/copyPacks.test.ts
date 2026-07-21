@@ -30,4 +30,36 @@ describe("copyPacks", () => {
             rmSync(temp, { recursive: true, force: true });
         }
     });
+
+    it("refuses a configured folder name that escapes the copy target", async () => {
+        const temp = mkdtempSync(path.join(os.tmpdir(), "bepack-copy-"));
+        try {
+            const source = path.join(temp, "bp");
+            const target = path.join(temp, "target");
+            mkdirSync(source);
+            mkdirSync(target);
+            const config = normalizeConfig(
+                {
+                    root: temp,
+                    name: "bp",
+                    packs: { bp: { root: "bp", uuid: "bp-uuid" } },
+                    copy: {
+                        defaultTarget: "dev",
+                        name: "../outside-target",
+                        targets: { dev: { type: "custom", bp: target } },
+                    },
+                },
+                {},
+                temp
+            );
+
+            await expect(copyPacks(temp, config, undefined, true)).rejects.toMatchObject({
+                code: "COPY_FAILED",
+            });
+            expect(existsSync(source)).toBe(true);
+            expect(existsSync(target)).toBe(true);
+        } finally {
+            rmSync(temp, { recursive: true, force: true });
+        }
+    });
 });
