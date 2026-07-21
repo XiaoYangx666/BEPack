@@ -1,4 +1,20 @@
-# BePack
+<p align="center">
+  <img src="./assets/bepack-logo-horizontal.png" alt="BePack" width="400" />
+</p>
+
+<p align="center">
+  A modern build and release toolchain for Minecraft Bedrock add-ons.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/bepack"><img src="https://img.shields.io/npm/v/bepack.svg?style=flat-square" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/bepack"><img src="https://img.shields.io/npm/dm/bepack.svg?style=flat-square" alt="npm downloads" /></a>
+  <a href="https://github.com/XiaoYangx666/BEPack/blob/main/LICENSE"><img src="https://img.shields.io/github/license/XiaoYangx666/BEPack.svg?style=flat-square" alt="license" /></a>
+  <a href="https://github.com/XiaoYangx666/BEPack"><img src="https://img.shields.io/github/stars/XiaoYangx666/BEPack.svg?style=flat-square" alt="GitHub stars" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/bepack.svg?style=flat-square" alt="Node.js version" /></a>
+</p>
+
+# BEPack
 
 [中文](./README.zh-CN.md) | English
 
@@ -26,22 +42,24 @@ For a new behavior-pack project, start with [create-mcbe](https://www.npmjs.com/
 npm create mcbe
 ```
 
-Use create-mcbe's documentation for its prompts and command-line options. In the generated project, install BePack:
+Use create-mcbe's documentation for its prompts and command-line options. You can install BePack globally:
 
 ```bash
-npm install -D bepack
+npm install -g bepack
 ```
+
+You can also install it locally with `npm install -D bepack`; in that case, use `npx bepack` or package scripts.
 
 If you need a fresh BePack configuration, generate one and then edit the generated values to match your project:
 
 ```bash
-npx bepack init
+bepack init
 ```
 
 The starter config contains a BP, a TypeScript entry at `src/main.ts`, and generated UUIDs. Run the first build with dependency installation:
 
 ```bash
-npx bepack build --install
+bepack build --install
 ```
 
 ## Add BePack to an existing project
@@ -50,10 +68,10 @@ When a project already has a pack manifest, import that manifest instead of re-e
 
 ```bash
 # Behavior pack only
-npx bepack init --from-bp bp/manifest.json
+bepack init --from-bp bp/manifest.json
 
 # Behavior pack and resource pack
-npx bepack init --from-bp bp/manifest.json --from-rp rp/manifest.json
+bepack init --from-bp bp/manifest.json --from-rp rp/manifest.json
 ```
 
 This creates `bepack.config.ts` from the pack roots, names, UUIDs, versions, manifest format, and supported Script API dependencies it finds. A BP script module is also converted into a TypeScript build configuration when possible.
@@ -62,14 +80,14 @@ Useful variations:
 
 ```bash
 # Generate JavaScript or ESM JavaScript config instead of TypeScript
-npx bepack init --format js
-npx bepack init --format mjs
+bepack init --format js
+bepack init --format mjs
 
 # Run from outside the project directory
-npx bepack init --cwd path/to/project --from-bp bp/manifest.json
+bepack init --cwd path/to/project --from-bp bp/manifest.json
 
 # Replace an existing generated config deliberately
-npx bepack init --from-bp bp/manifest.json --force
+bepack init --from-bp bp/manifest.json --force
 ```
 
 ## Minimal configuration
@@ -130,26 +148,26 @@ When using a resource pack too, add an `rp/` directory and a `packs.rp` entry. B
 
 ```bash
 # Resolve configured Script API dependencies, update manifests, and build
-npx bepack build --install
+bepack build --install
 
 # Build once after dependencies are already installed
-npx bepack build
+bepack build
 
 # Watch files and rebuild during development
-npx bepack dev
+bepack dev
 
 # Create a distributable archive
-npx bepack pack
+bepack pack
 
 # Build and package in one command
-npx bepack build --pack
+bepack build --pack
 ```
 
 Use `bepack install` on its own when you only want to update managed dependencies and manifests. Set `target` in the config, or temporarily override it while installing and building:
 
 ```bash
-npx bepack install --target 1.21.120
-npx bepack build --install --target 1.21.120
+bepack install --target 1.21.120
+bepack build --install --target 1.21.120
 ```
 
 `stable`, `beta`, `preview`, and exact versions can be used for the supported `@minecraft/*` dependency entries. BePack resolves selectors such as `stable` to concrete package versions before updating `package.json` and the BP manifest.
@@ -178,11 +196,11 @@ export default defineConfig({
 
 ```bash
 # Initial build, then rebuild and copy whenever a watched file changes
-npx bepack dev
+bepack dev
 
 # Or copy a completed build once
-npx bepack build --copy
-npx bepack copy --target minecraft
+bepack build --copy
+bepack copy --target minecraft
 ```
 
 `gameRoot` writes behavior packs to `development_behavior_packs` and resource packs to `development_resource_packs`. You can also use a custom target when your BP and RP need separate destination paths. See the reference guide for the full target syntax.
@@ -202,28 +220,28 @@ export default defineConfig({
 ```
 
 ```bash
-npx bepack pack
-npx bepack pack --name my-addon-preview
+bepack pack
+bepack pack --name my-addon-preview
 ```
 
-| Configured packs | Output |
-| --- | --- |
-| BP only | `.mcpack` |
-| RP only | `.mcpack` |
-| BP and RP | `.mcaddon` |
+| Configured packs | Output     |
+| ---------------- | ---------- |
+| BP only          | `.mcpack`  |
+| RP only          | `.mcpack`  |
+| BP and RP        | `.mcaddon` |
 
 ## Commands at a glance
 
-| Command | Purpose |
-| --- | --- |
-| `bepack init` | Create a config, or import one with `--from-bp` / `--from-rp`. |
-| `bepack install` | Resolve managed dependencies and update `package.json` and manifests. |
-| `bepack manifest` | Update manifests without running dependency installation. |
-| `bepack build` | Patch manifests and compile the configured BP source. |
-| `bepack dev` | Build once, then watch and rebuild. |
-| `bepack copy` | Copy configured packs to a development target. |
-| `bepack pack` | Create a `.mcpack` or `.mcaddon`. |
-| `bepack config --summary` | Inspect the resolved configuration. |
+| Command                   | Purpose                                                               |
+| ------------------------- | --------------------------------------------------------------------- |
+| `bepack init`             | Create a config, or import one with `--from-bp` / `--from-rp`.        |
+| `bepack install`          | Resolve managed dependencies and update `package.json` and manifests. |
+| `bepack manifest`         | Update manifests without running dependency installation.             |
+| `bepack build`            | Patch manifests and compile the configured BP source.                 |
+| `bepack dev`              | Build once, then watch and rebuild.                                   |
+| `bepack copy`             | Copy configured packs to a development target.                        |
+| `bepack pack`             | Create a `.mcpack` or `.mcaddon`.                                     |
+| `bepack config --summary` | Inspect the resolved configuration.                                   |
 
 All commands accept `--cwd <project-dir>` and `--config <path>` when the current directory or config filename is different. Add `--dry-run` to preview file-writing commands, or `--json` for machine-readable output. Run `bepack <command> --help` for every command option.
 

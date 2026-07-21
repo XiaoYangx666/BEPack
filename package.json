@@ -31,6 +31,7 @@
         "README.md",
         "README.zh-CN.md",
         "reference.md",
+        "assets",
         "LICENSE"
     ],
     "exports": {
