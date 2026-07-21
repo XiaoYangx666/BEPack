@@ -1,0 +1,17 @@
+{
+  "name": "mcbe-sapi-pro",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bepack:install": "bepack install",
+    "dev": "bepack dev --copy",
+    "build": "bepack build",
+    "pack": "bepack pack",
+    "release": "bepack build --install --pack"
+  },
+  "devDependencies": {
+    "bepack": "^0.0.1",
+    "typescript": "7.0.2"
+  }
+}

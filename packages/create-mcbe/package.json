@@ -1,0 +1,51 @@
+{
+  "name": "create-mcbe",
+  "version": "0.0.0",
+  "description": "A small, extensible scaffolder for Minecraft Bedrock Edition projects.",
+  "author": "XiaoYangx666",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/XiaoYangx666/BEPack.git",
+    "directory": "packages/create-mcbe"
+  },
+  "homepage": "https://github.com/XiaoYangx666/BEPack/tree/main/packages/create-mcbe#readme",
+  "type": "module",
+  "bin": {
+    "create-mcbe": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && rolldown -c",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run tests --exclude backup-pre-bepack-rewrite-20260720/**",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@clack/prompts": "^1.6.0",
+    "kolorist": "^1.8.0",
+    "mri": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=20.0"
+  },
+  "keywords": [
+    "minecraft",
+    "bedrock",
+    "mcbe",
+    "addon",
+    "script-api",
+    "scaffold"
+  ],
+  "license": "MIT",
+  "allowScripts": {
+    "esbuild": true
+  }
+}
