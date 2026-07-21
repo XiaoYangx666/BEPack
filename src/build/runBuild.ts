@@ -68,7 +68,7 @@ export async function runBuild(options: RunBuildOptions) {
     if (compile && !options.dryRun && options.typecheck !== false) {
         const compileConfig = options.config.packs.bp!.compile!;
         const tsBuildInfoFile = options.cache
-            ? path.join(options.cwd, compileConfig.cache.file)
+            ? path.resolve(root, compileConfig.cache.file)
             : undefined;
         await timed(
             "typecheck",
@@ -76,6 +76,7 @@ export async function runBuild(options: RunBuildOptions) {
                 runTypecheck(root, {
                     quiet: Boolean(options.quiet),
                     useNpx: compileConfig.useNpx,
+                    tsconfigPath: compileConfig.tsconfig,
                     incremental: Boolean(options.cache),
                     ...(tsBuildInfoFile ? { tsBuildInfoFile } : {}),
                 }),

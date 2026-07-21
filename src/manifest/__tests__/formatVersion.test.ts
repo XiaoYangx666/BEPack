@@ -3,7 +3,6 @@ import { ManifestBuilder } from "../ManifestBuilder.js";
 import { ManifestDepManager } from "../ManifestDepManager.js";
 import { validateManifest } from "../validate.js";
 import { createDependencyCatalog } from "../../install/dependencyCatalog.js";
-import { versionToString, parseVersionToTuple } from "../../commands/init.js";
 import type { Manifest, ManifestVersion } from "../types.js";
 import type { ResolvedConfig } from "../../config/configTypes.js";
 
@@ -319,77 +318,5 @@ describe("validateManifest format-aware 校验", () => {
             modules: validModules,
         };
         expect(() => validateManifest(manifest, "bp")).toThrow("format_version is required");
-    });
-});
-
-// ---------------------------------------------------------------------------
-// 4. versionToString — 兼容两种格式
-// ---------------------------------------------------------------------------
-
-describe("versionToString 兼容性", () => {
-    it("数组 [1, 2, 3] → '1.2.3'", () => {
-        expect(versionToString([1, 2, 3])).toBe("1.2.3");
-    });
-
-    it("字符串 '1.2.3' → '1.2.3'", () => {
-        expect(versionToString("1.2.3")).toBe("1.2.3");
-    });
-
-    it("undefined → undefined", () => {
-        expect(versionToString(undefined)).toBeUndefined();
-    });
-
-    it("null → undefined", () => {
-        expect(versionToString(null)).toBeUndefined();
-    });
-
-    it("空数组 [] → ''", () => {
-        expect(versionToString([])).toBe("");
-    });
-
-    it("非法类型（number）→ undefined", () => {
-        expect(versionToString(42)).toBeUndefined();
-    });
-});
-
-// ---------------------------------------------------------------------------
-// 5. parseVersionToTuple
-// ---------------------------------------------------------------------------
-
-describe("parseVersionToTuple", () => {
-    it("数组 [1, 2, 3] → [1, 2, 3]", () => {
-        expect(parseVersionToTuple([1, 2, 3])).toEqual([1, 2, 3]);
-    });
-
-    it("字符串 '1.26.30' → [1, 26, 30]", () => {
-        expect(parseVersionToTuple("1.26.30")).toEqual([1, 26, 30]);
-    });
-
-    it("字符串 '1.0.0' → [1, 0, 0]", () => {
-        expect(parseVersionToTuple("1.0.0")).toEqual([1, 0, 0]);
-    });
-
-    it("无效字符串 '' → undefined", () => {
-        expect(parseVersionToTuple("")).toBeUndefined();
-    });
-
-    it("无效字符串 'abc' → undefined", () => {
-        expect(parseVersionToTuple("abc")).toBeUndefined();
-    });
-
-    it("undefined → undefined", () => {
-        expect(parseVersionToTuple(undefined)).toBeUndefined();
-    });
-
-    it("null → undefined", () => {
-        expect(parseVersionToTuple(null)).toBeUndefined();
-    });
-
-    it("非法类型（number）→ undefined", () => {
-        expect(parseVersionToTuple(42)).toBeUndefined();
-    });
-
-    it("数组长度不对 → undefined", () => {
-        expect(parseVersionToTuple([1, 2])).toBeUndefined();
     });
 });

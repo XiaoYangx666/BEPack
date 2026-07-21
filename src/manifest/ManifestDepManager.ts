@@ -160,9 +160,12 @@ export class ManifestDepManager {
     /**
      * 判断 dependency 是否为 BePack 管理的 RP 依赖（BP UUID 依赖）。
      */
-    isManagedRpDependency(dep: ManifestDependency, bpUuid: string): boolean {
+    isManagedRpDependency(dep: ManifestDependency, bpUuid: string | undefined): boolean {
         return (
-            "uuid" in dep && typeof dep.uuid === "string" && dep.uuid === bpUuid
+            bpUuid !== undefined &&
+            "uuid" in dep &&
+            typeof dep.uuid === "string" &&
+            dep.uuid === bpUuid
         );
     }
 
@@ -233,7 +236,7 @@ export class ManifestDepManager {
      */
     replaceRpDependencies(
         existingDeps: ManifestDependency[] | undefined,
-        bpUuid: string,
+        bpUuid: string | undefined,
         formatVersion?: number
     ): ManifestDependency[] {
         const existing = asArray<ManifestDependency>(existingDeps);
@@ -241,6 +244,7 @@ export class ManifestDepManager {
         // 保留用户手写依赖，删除旧的 BP UUID 依赖
         const userDeps = existing.filter((dep) => !this.isManagedRpDependency(dep, bpUuid));
 
+        if (!bpUuid) return userDeps;
         return [
             ...userDeps,
             {

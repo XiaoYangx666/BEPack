@@ -7,12 +7,20 @@ import { pathExists } from "../utils/fs.js";
 type TypecheckOptions = {
     quiet?: boolean;
     useNpx?: boolean;
+    /** Path to tsconfig, relative to cwd unless absolute. */
+    tsconfigPath?: string;
     incremental?: boolean;
     tsBuildInfoFile?: string;
 };
 
-function resolveCommand(useNpx: boolean, incremental: boolean, tsBuildInfoFile?: string): string {
+export function resolveTypecheckCommand(
+    useNpx: boolean,
+    tsconfigPath: string,
+    incremental: boolean,
+    tsBuildInfoFile?: string
+): string {
     let cmd = useNpx ? "npx tsc --noEmit" : "tsc --noEmit";
+    cmd += ` --project "${tsconfigPath}"`;
     if (incremental && tsBuildInfoFile) {
         cmd += ` --incremental --tsBuildInfoFile "${tsBuildInfoFile}"`;
     }
@@ -20,12 +28,13 @@ function resolveCommand(useNpx: boolean, incremental: boolean, tsBuildInfoFile?:
 }
 
 export async function runTypecheck(cwd: string, options: TypecheckOptions = {}): Promise<void> {
-    const tsconfigPath = path.join(cwd, "tsconfig.json");
+    const configuredTsconfig = options.tsconfigPath ?? "tsconfig.json";
+    const tsconfigPath = path.resolve(cwd, configuredTsconfig);
     if (!(await pathExists(tsconfigPath))) {
         throw new BePackError(
             "TYPECHECK_FAILED",
-            "tsconfig.json not found. Create tsconfig.json or run build with --skip-typecheck.",
-            { details: { path: "tsconfig.json" } }
+            `TypeScript config not found: ${configuredTsconfig}. Create it or run build with --skip-typecheck.`,
+            { details: { path: configuredTsconfig } }
         );
     }
 
@@ -34,8 +43,9 @@ export async function runTypecheck(cwd: string, options: TypecheckOptions = {}):
         await mkdir(path.dirname(options.tsBuildInfoFile), { recursive: true });
     }
 
-    const command = resolveCommand(
+    const command = resolveTypecheckCommand(
         Boolean(options.useNpx),
+        tsconfigPath,
         Boolean(options.incremental),
         options.tsBuildInfoFile
     );

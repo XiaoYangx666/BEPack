@@ -184,7 +184,8 @@ async function initFromManifests(
     const versions: string[] = [];
 
     if (hasBp) {
-        const manifest = await ManifestFile.read(options.fromBp);
+        const manifestPath = path.resolve(cwd, options.fromBp);
+        const manifest = await ManifestFile.read(manifestPath);
         if (!manifest) {
             throw new BePackError("CONFIG_NOT_FOUND", `BP manifest not found: ${options.fromBp}`);
         }
@@ -207,7 +208,7 @@ async function initFromManifests(
         if (bpVersion) versions.push(bpVersion);
 
         bpInfo = {
-            root: derivePackRoot(cwd, options.fromBp),
+            root: derivePackRoot(cwd, manifestPath),
             uuid: header.uuid,
             ...(scriptModuleUuid ? { moduleUuid: scriptModuleUuid } : {}),
             ...(bpVersion ? { version: bpVersion } : {}),
@@ -223,7 +224,8 @@ async function initFromManifests(
     }
 
     if (hasRp) {
-        const manifest = await ManifestFile.read(options.fromRp);
+        const manifestPath = path.resolve(cwd, options.fromRp);
+        const manifest = await ManifestFile.read(manifestPath);
         if (!manifest) {
             throw new BePackError("CONFIG_NOT_FOUND", `RP manifest not found: ${options.fromRp}`);
         }
@@ -249,7 +251,7 @@ async function initFromManifests(
         if (rpVersion) versions.push(rpVersion);
 
         rpInfo = {
-            root: derivePackRoot(cwd, options.fromRp),
+            root: derivePackRoot(cwd, manifestPath),
             uuid: header.uuid,
             moduleUuid,
             ...(rpVersion ? { version: rpVersion } : {}),

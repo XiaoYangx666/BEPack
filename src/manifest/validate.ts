@@ -74,17 +74,14 @@ const RULES: ValidationRule[] = [
             : versionError(m.format_version, "header.min_engine_version");
     },
 
-    // Modules
-    (m) => (!Array.isArray(m.modules) ? "modules must be an array" : null),
+    // Modules are optional for data-only BP manifests. When present, they must be an array.
+    (m) =>
+        m.modules !== undefined && !Array.isArray(m.modules) ? "modules must be an array" : null,
 
     (m, kind) => {
         if (!Array.isArray(m.modules)) return null;
-        const hasScript = m.modules.some(
-            (mod) => mod?.type === "script" && mod?.language === "javascript"
-        );
         const hasResources = m.modules.some((mod) => mod?.type === "resources");
         const errs: string[] = [];
-        if (kind === "bp" && !hasScript) errs.push("BP manifest must have a script module");
         if (kind === "rp" && !hasResources) errs.push("RP manifest must have a resources module");
         return errs.length > 0 ? errs : null;
     },

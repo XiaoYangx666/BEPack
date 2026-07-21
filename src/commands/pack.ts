@@ -24,6 +24,15 @@ function assertOutputOutsideDir(output: string, dir: string, label: string): voi
     }
 }
 
+function assertOutputInsideDist(output: string, dist: string): void {
+    const relative = path.relative(path.resolve(dist), path.resolve(output));
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        throw new BePackError("PACK_FAILED", "pack output name must stay inside pack.outDir.", {
+            details: { output: path.resolve(output), dist: path.resolve(dist) },
+        });
+    }
+}
+
 /** Resolve include items for a given pack type when packaging. */
 function getPackItems(
     config: LoadedConfig,
@@ -69,11 +78,13 @@ export async function packProject(
     if (bp && rp) {
         // BP + RP → .mcaddon
         const output = path.join(dist, `${fileName}.mcaddon`);
+        assertOutputInsideDist(output, dist);
+        assertOutputOutsideDir(output, bp.root, "BP");
+        assertOutputOutsideDir(output, rp.root, "RP");
         if (!options.dryRun) {
             const bpInfo = getPackItems(config, "bp");
             const rpInfo = getPackItems(config, "rp");
 
-            assertOutputOutsideDir(output, bp.root, "BP");
             if (rpInfo.selective) {
                 await zipAddonSelected(
                     [
@@ -97,6 +108,8 @@ export async function packProject(
     if (bp) {
         // BP-only → .mcpack
         const output = path.join(dist, `${fileName}.mcpack`);
+        assertOutputInsideDist(output, dist);
+        assertOutputOutsideDir(output, bp.root, "BP");
         if (!options.dryRun) {
             const bpInfo = getPackItems(config, "bp");
             await zipSelectedItems(bp.root, bpInfo.items, output);
@@ -107,6 +120,8 @@ export async function packProject(
     if (rp) {
         // RP-only → .mcpack
         const output = path.join(dist, `${fileName}.mcpack`);
+        assertOutputInsideDist(output, dist);
+        assertOutputOutsideDir(output, rp.root, "RP");
         if (!options.dryRun) {
             const rpInfo = getPackItems(config, "rp");
             if (rpInfo.selective) {

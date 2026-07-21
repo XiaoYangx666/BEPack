@@ -78,6 +78,24 @@ function createBuilder(
 // ---------------------------------------------------------------------------
 
 describe("ManifestBuilder buildBp", () => {
+    it("supports data-only BP projects without a module UUID", () => {
+        const config = baseConfig({
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    name: "Test BP",
+                    dependencies: {},
+                    include: [],
+                },
+            },
+        });
+
+        const manifest = createBuilder(config).buildBp();
+        expect(manifest.modules).toBeUndefined();
+        expect(() => validateManifest(manifest, "bp")).not.toThrow();
+    });
+
     it("从配置完整生成 BP manifest", () => {
         const builder = bp();
         const manifest = builder.buildBp();
@@ -160,6 +178,22 @@ describe("ManifestBuilder buildRp", () => {
 
     it("packs.rp 未配置时抛出", () => {
         expect(() => bp().buildRp()).toThrow("packs.rp is required");
+    });
+
+    it("does not add an empty BP dependency for RP-only projects", () => {
+        const config = baseConfig({
+            packs: {
+                rp: {
+                    root: "rp",
+                    uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                    moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                    name: "Test RP",
+                    include: [],
+                },
+            },
+        });
+
+        expect(createBuilder(config).buildRp().dependencies).toEqual([]);
     });
 });
 
@@ -603,7 +637,7 @@ describe("validateManifest", () => {
         ).toThrow("Manifest validation failed");
     });
 
-    it("BP 无 script module 拒绝", () => {
+    it("BP can omit a script module", () => {
         expect(() =>
             validateManifest(
                 {
@@ -618,7 +652,7 @@ describe("validateManifest", () => {
                 } as Manifest,
                 "bp"
             )
-        ).toThrow("must have a script module");
+        ).not.toThrow();
     });
 
     it("RP 无 resources module 拒绝", () => {

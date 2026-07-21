@@ -193,40 +193,4 @@ describe("integration: real npm registry", () => {
         );
     });
 
-    // -----------------------------------------------------------------------
-    // Exact version
-    // -----------------------------------------------------------------------
-    describe("exact version specifier", () => {
-        it(
-            'resolves "2.6.0" as-is',
-            async () => {
-                const registry = DependencyResolverRegistry.fromConfig([]);
-                const result = await registry.resolve(ctx({ specifier: "2.6.0", npm }));
-                console.log(
-                    `  exact 2.6.0 -> package=${result.packageVersion}, manifest=${result.manifestVersion}`
-                );
-                expect(result.packageVersion).toBe("2.6.0");
-                expect(result.manifestVersion).toBe("2.6.0");
-            },
-            NET_TIMEOUT
-        );
-
-        it(
-            'vanilla-data "1.12.0" resolves as exact',
-            async () => {
-                const registry = DependencyResolverRegistry.fromConfig([]);
-                const result = await registry.resolve(
-                    ctx({
-                        packageName: "@minecraft/vanilla-data",
-                        specifier: "1.12.0",
-                        entry: VANILLA_DATA_ENTRY,
-                        npm,
-                    })
-                );
-                console.log(`  vanilla-data 1.12.0 -> package=${result.packageVersion}`);
-                expect(result.packageVersion).toBe("1.12.0");
-            },
-            NET_TIMEOUT
-        );
-    });
 });

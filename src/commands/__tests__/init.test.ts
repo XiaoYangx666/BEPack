@@ -1,33 +1,29 @@
 import { describe, it, expect } from "vitest";
 import { versionToString, parseVersionToTuple, validateScriptEntry } from "../init.js";
 
-// ---------------------------------------------------------------------------
-// versionToString
-// ---------------------------------------------------------------------------
-
 describe("versionToString", () => {
     it.each([
-        [[1, 0, 0], "1.0.0"],
-        ["1.0.0", "1.0.0"],
-        [null, undefined],
+        [[1, 2, 3], "1.2.3"],
+        ["1.2.3", "1.2.3"],
         [undefined, undefined],
+        [null, undefined],
+        [[], ""],
+        [42, undefined],
     ])("converts %j", (value, expected) => {
         expect(versionToString(value)).toBe(expected);
     });
 });
 
-// ---------------------------------------------------------------------------
-// parseVersionToTuple
-// ---------------------------------------------------------------------------
-
 describe("parseVersionToTuple", () => {
     it.each([
-        [
-            [1, 2, 3],
-            [1, 2, 3],
-        ],
-        ["1.2.3", [1, 2, 3]],
+        [[1, 2, 3], [1, 2, 3]],
+        ["1.26.30", [1, 26, 30]],
+        ["", undefined],
         ["abc", undefined],
+        [undefined, undefined],
+        [null, undefined],
+        [42, undefined],
+        [[1, 2], undefined],
     ])("parses %j", (value, expected) => {
         expect(parseVersionToTuple(value)).toEqual(expected);
     });

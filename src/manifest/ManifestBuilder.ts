@@ -93,7 +93,7 @@ export class ManifestBuilder {
             modules: this.replaceManagedRpModules(existing.modules, rp, effectiveFormat),
             dependencies: this.depManager.replaceRpDependencies(
                 existing.dependencies,
-                this.config.packs.bp?.uuid ?? "",
+                this.config.packs.bp?.uuid,
                 effectiveFormat
             ),
         };

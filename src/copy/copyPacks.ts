@@ -4,7 +4,7 @@ import type { PackType, ResolvedConfig } from "../config/configTypes.js";
 import { getConfiguredPacks } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { copyDir, pathExists } from "../utils/fs.js";
-import { packRoot, projectRoot, getBpIncludeItems } from "../utils/path.js";
+import { containsPath, packRoot, projectRoot, getBpIncludeItems } from "../utils/path.js";
 import { DEFAULT_RP_INCLUDES } from "../constants/copyIncludes.js";
 import { resolveCopyTarget } from "./resolveCopyTarget.js";
 import type { Logger } from "../logger/logger.js";
@@ -31,6 +31,22 @@ async function copySelectedItems(source: string, target: string, items: string[]
         } catch (err: unknown) {
             if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
         }
+    }
+}
+
+/** Refuse copy operations that would delete or recursively copy the source pack. */
+export function assertSafeCopyDestination(source: string, target: string): void {
+    const resolvedSource = path.resolve(source);
+    const resolvedTarget = path.resolve(target);
+    if (
+        containsPath(resolvedSource, resolvedTarget) ||
+        containsPath(resolvedTarget, resolvedSource)
+    ) {
+        throw new BePackError(
+            "COPY_FAILED",
+            `Copy target "${target}" overlaps source pack "${source}". Refusing to copy.`,
+            { details: { source: resolvedSource, target: resolvedTarget } }
+        );
     }
 }
 
@@ -69,6 +85,7 @@ async function copyOnePack(
 ): Promise<string> {
     const includes = getPackIncludeItems(config, packType);
     const to = path.join(targetDir, folderName);
+    assertSafeCopyDestination(source, to);
 
     if (!dryRun) {
         if (packType === "bp" || includes.length > 0) {

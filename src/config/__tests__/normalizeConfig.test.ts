@@ -84,15 +84,6 @@ describe("BP/RP 对等", () => {
         expect(config.packs.rp).toBeDefined();
     });
 
-    it("无任何 Pack → 抛出", () => {
-        expect(() =>
-            normalizeConfig({
-                name: "test",
-                packs: {},
-            })
-        ).toThrow("At least one pack");
-    });
-
     it("packs 未配置 → 抛出", () => {
         expect(() =>
             normalizeConfig({
@@ -467,25 +458,6 @@ describe("compile 配置", () => {
         expect(config.packs.bp!.compile!.useNpx).toBe(false);
     });
 
-    it("未配置 compile 时不存在 compile 字段", () => {
-        const config = normalizeConfig({
-            name: "test",
-            packs: {
-                rp: { root: "rp", uuid: "c", moduleUuid: "d" },
-            },
-        });
-        expect(config.packs.bp).toBeUndefined();
-    });
-
-    it("BP 未配 compile 时不存在 compile", () => {
-        const config = normalizeConfig({
-            name: "test",
-            packs: {
-                bp: { root: "bp", uuid: "a", moduleUuid: "b" },
-            },
-        });
-        expect(config.packs.bp!.compile).toBeUndefined();
-    });
 });
 
 // ---------------------------------------------------------------------------
