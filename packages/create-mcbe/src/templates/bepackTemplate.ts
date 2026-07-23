@@ -6,16 +6,18 @@ export interface BepackTemplateDefinition extends BepackPrepareOptions {
   title: string;
   description: string;
   templateDir: string;
+  skills?: string | string[];
 }
 
 export function createBepackTemplate(definition: BepackTemplateDefinition): TemplateDefinition {
-  const { id, title, description, templateDir, ...prepareOptions } = definition;
+  const { id, title, description, templateDir, skills, ...prepareOptions } = definition;
   return {
     id,
     title,
     description,
     templateDir,
     defaultPackageManager: 'npm',
+    skills,
     workflow: 'bepack',
     prepare: (ctx) => prepareBepack(ctx, prepareOptions),
   };

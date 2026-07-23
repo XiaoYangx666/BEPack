@@ -55,6 +55,8 @@ npm create mcbe@latest -- --list-templates
 - `--template <id>`: Select a template.
 - `--yes`: Use defaults and disable prompts; recommended for agents.
 - `--install`: Install project dependencies after creation. For BePack templates, also run the BePack install script.
+- If a template declares `skills`, `--install` also installs each source into the generated project with `npx skills add`.
+- `--skip-skills-install`: Do not install skills declared by the template. This only skips skills; npm and BePack installation still run when `--install` is used.
 - `--install-bepack`: Install BePack in the generated project.
 - `--skip-bepack-install`: Do not install BePack locally; use the global `bepack` command.
 - `--pm <npm|pnpm|yarn|bun>`: Select the package manager.
@@ -82,3 +84,10 @@ npm run test:create-mcbe
 ```
 
 To add a template, create a directory under `templates/` and register its definition in `src/templates/index.ts`.
+
+Template authors can opt into skills by adding a URL (or URLs) to the template definition:
+
+```ts
+skills: 'https://github.com/example/agent-skills'
+// or: skills: ['https://github.com/example/skills-a', 'https://github.com/example/skills-b']
+```

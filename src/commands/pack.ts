@@ -24,6 +24,21 @@ function assertOutputOutsideDir(output: string, dir: string, label: string): voi
     }
 }
 
+function assertOutputOutsideSelectedItems(output: string, dir: string, items: string[]): void {
+    const resolvedOutput = path.resolve(output);
+    const resolvedDir = path.resolve(dir);
+    for (const item of items) {
+        const selectedPath = path.resolve(resolvedDir, item);
+        const relative = path.relative(selectedPath, resolvedOutput);
+        if (relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))) {
+            throw new BePackError("PACK_FAILED", "pack output must not be included in the BP archive.", {
+                details: { output: resolvedOutput, includedPath: selectedPath },
+                suggestions: [`Set pack.outDir outside the selected BP include path: ${selectedPath}`],
+            });
+        }
+    }
+}
+
 function assertOutputInsideDist(output: string, dist: string): void {
     const relative = path.relative(path.resolve(dist), path.resolve(output));
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -74,15 +89,16 @@ export async function packProject(
     const rp = config.packs.rp
         ? { root: packRoot(root, config, "rp")!, config: config }
         : undefined;
+    const bpInfo = bp ? getPackItems(config, "bp") : undefined;
 
     if (bp && rp) {
+        if (!bpInfo) throw new BePackError("PACK_FAILED", "BP pack configuration is missing.");
         // BP + RP → .mcaddon
         const output = path.join(dist, `${fileName}.mcaddon`);
         assertOutputInsideDist(output, dist);
-        assertOutputOutsideDir(output, bp.root, "BP");
+        if (bpInfo?.selective) assertOutputOutsideSelectedItems(output, bp.root, bpInfo.items);
         assertOutputOutsideDir(output, rp.root, "RP");
         if (!options.dryRun) {
-            const bpInfo = getPackItems(config, "bp");
             const rpInfo = getPackItems(config, "rp");
 
             if (rpInfo.selective) {
@@ -106,12 +122,12 @@ export async function packProject(
     }
 
     if (bp) {
+        if (!bpInfo) throw new BePackError("PACK_FAILED", "BP pack configuration is missing.");
         // BP-only → .mcpack
         const output = path.join(dist, `${fileName}.mcpack`);
         assertOutputInsideDist(output, dist);
-        assertOutputOutsideDir(output, bp.root, "BP");
+        if (bpInfo?.selective) assertOutputOutsideSelectedItems(output, bp.root, bpInfo.items);
         if (!options.dryRun) {
-            const bpInfo = getPackItems(config, "bp");
             await zipSelectedItems(bp.root, bpInfo.items, output);
         }
         return output;

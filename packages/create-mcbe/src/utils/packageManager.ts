@@ -33,6 +33,16 @@ export async function installDependencies(pm: PackageManager, cwd: string): Prom
   await run(command, args, cwd);
 }
 
+export async function installSkills(sources: string[], cwd: string): Promise<void> {
+  for (const source of sources) {
+    await run('npx', ['--yes', 'skills@latest', 'add', source, '--copy', '--yes'], cwd);
+  }
+}
+
+export function skillsInstallCommand(sources: string[]): string {
+  return sources.map((source) => `npx --yes skills@latest add ${source} --copy --yes`).join(' && ');
+}
+
 export async function initGit(cwd: string): Promise<void> {
   await run('git', ['init'], cwd);
 }

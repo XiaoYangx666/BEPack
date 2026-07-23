@@ -7,11 +7,11 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/bepack"><img src="https://img.shields.io/npm/v/bepack.svg?style=flat-square" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/bepack"><img src="https://img.shields.io/npm/dm/bepack.svg?style=flat-square" alt="npm downloads" /></a>
+  <a href="https://www.npmjs.com/package/@bepack/cli"><img src="https://img.shields.io/npm/v/@bepack/cli.svg?style=flat-square" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@bepack/cli"><img src="https://img.shields.io/npm/dm/@bepack/cli.svg?style=flat-square" alt="npm downloads" /></a>
   <a href="https://github.com/XiaoYangx666/BEPack/blob/main/LICENSE"><img src="https://img.shields.io/github/license/XiaoYangx666/BEPack.svg?style=flat-square" alt="license" /></a>
   <a href="https://github.com/XiaoYangx666/BEPack"><img src="https://img.shields.io/github/stars/XiaoYangx666/BEPack.svg?style=flat-square" alt="GitHub stars" /></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/bepack.svg?style=flat-square" alt="Node.js version" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/@bepack/cli.svg?style=flat-square" alt="Node.js version" /></a>
 </p>
 
 # BEPack
@@ -45,10 +45,10 @@ npm create mcbe
 Use create-mcbe's documentation for its prompts and command-line options. You can install BePack globally:
 
 ```bash
-npm install -g bepack
+npm install -g @bepack/cli
 ```
 
-You can also install it locally with `npm install -D bepack`; in that case, use `npx bepack` or package scripts.
+You can also install it locally with `npm install -D @bepack/cli`; in that case, use `npx bepack` or package scripts.
 
 If you need a fresh BePack configuration, generate one and then edit the generated values to match your project:
 
@@ -95,7 +95,7 @@ bepack init --from-bp bp/manifest.json --force
 BePack loads `bepack.config.ts`, `bepack.config.mjs`, or `bepack.config.js` from the project directory. This is a typical Script API behavior-pack setup:
 
 ```ts
-import { defineConfig } from "bepack";
+import { defineConfig } from "@bepack/cli";
 
 export default defineConfig({
     name: "my-addon",

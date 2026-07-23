@@ -1,6 +1,6 @@
 {
   "name": "create-mcbe",
-  "version": "0.0.0",
+  "version": "0.1.0-beta.0",
   "description": "A small, extensible scaffolder for Minecraft Bedrock Edition projects.",
   "author": "XiaoYangx666",
   "license": "MIT",
@@ -44,7 +44,6 @@
     "script-api",
     "scaffold"
   ],
-  "license": "MIT",
   "allowScripts": {
     "esbuild": true
   }

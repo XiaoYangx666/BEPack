@@ -1,6 +1,6 @@
 {
-    "name": "bepack",
-    "version": "0.0.1",
+    "name": "@bepack/cli",
+    "version": "0.1.0-beta.0",
     "description": "A modern pack builder for Minecraft Bedrock Edition.",
     "keywords": [
         "minecraft",
@@ -72,5 +72,8 @@
         "tsx": "^4.19.0",
         "typescript": "7.0.2",
         "vitest": "^4.1.10"
+    },
+    "allowScripts": {
+        "esbuild@0.28.1": true
     }
 }

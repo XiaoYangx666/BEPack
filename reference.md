@@ -55,7 +55,7 @@ export default {
 `defineConfig` 已导出并带有类型定义，以支持编辑器自动补全：
 
 ```ts
-import { defineConfig } from "bepack";
+import { defineConfig } from "@bepack/cli";
 
 export default defineConfig({
     root: ".",

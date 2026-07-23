@@ -11,7 +11,7 @@
     "release": "bepack build --install --pack"
   },
   "devDependencies": {
-    "bepack": "^0.0.1",
+    "@bepack/cli": "^0.1.0-beta.0",
     "typescript": "7.0.2"
   }
 }

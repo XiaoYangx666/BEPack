@@ -78,8 +78,8 @@ function formatConfig(config: Record<string, unknown>, plugin: BepackPrepareOpti
       : `{\n  plugins: ['${plugin.name}'],\n`)
     : unquoted;
   const imports = withBepack && plugin
-    ? `import { defineConfig, ${plugin.importName} } from 'bepack';`
-    : withBepack ? "import { defineConfig } from 'bepack';" : '';
+    ? `import { defineConfig, ${plugin.importName} } from '@bepack/cli';`
+    : withBepack ? "import { defineConfig } from '@bepack/cli';" : '';
   const expression = withBepack ? `defineConfig(${body})` : body;
   return `${imports ? `${imports}\n\n` : ''}export default ${expression};\n`;
 }

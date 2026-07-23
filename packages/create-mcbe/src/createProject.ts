@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as p from '@clack/prompts';
 import { copyTemplateDir, emptyDir, isEmptyDir, pathExists } from './utils/files.js';
-import { initGit, installDependencies, packageManagerRunCommand, run } from './utils/packageManager.js';
+import { initGit, installDependencies, installSkills, packageManagerRunCommand, run, skillsInstallCommand } from './utils/packageManager.js';
 import { toPackageName } from './utils/names.js';
 import { templates } from './templates/index.js';
 import { setPackageIdentity } from './utils/packageJson.js';
@@ -34,19 +34,27 @@ export async function createProject(cli: CliOptions): Promise<CreateResult> {
   let initializedGit = false;
   if (cli.git) { await initGit(root); initializedGit = true; }
   let installedDependencies = false;
-  if (cli.install && await pathExists(path.join(root, 'package.json'))) {
-    if (template.workflow === 'bepack' && installBepack) {
-      await installDependencies(packageManager, root);
-      await runPackageScript(packageManager, 'bepack:install', root);
-    } else if (template.workflow === 'bepack') {
-      await run('bepack', ['install'], root);
-    } else await installDependencies(packageManager, root);
-    installedDependencies = true;
+  let installedSkills = false;
+  if (cli.install) {
+    if (await pathExists(path.join(root, 'package.json'))) {
+      if (template.workflow === 'bepack' && installBepack) {
+        await installDependencies(packageManager, root);
+        await runPackageScript(packageManager, 'bepack:install', root);
+      } else if (template.workflow === 'bepack') {
+        await run('bepack', ['install'], root);
+      } else await installDependencies(packageManager, root);
+      installedDependencies = true;
+    }
+    const skills = normalizeSkills(template.skills);
+    if (!cli.skipSkillsInstall && skills.length > 0) {
+      await installSkills(skills, root);
+      installedSkills = true;
+    }
   }
 
   return {
     root, projectName, template: template.id, packageManager, installedDependencies,
-    initializedGit, warnings: [], nextSteps: nextSteps(ctx, installedDependencies),
+    installedSkills, initializedGit, warnings: [], nextSteps: nextSteps(ctx, installedDependencies, installedSkills || cli.skipSkillsInstall),
   };
 }
 
@@ -120,7 +128,7 @@ async function prepareTargetDir(ctx: CreateContext): Promise<void> {
   await emptyDir(ctx.root);
 }
 
-function nextSteps(ctx: CreateContext, installed: boolean): string[] {
+function nextSteps(ctx: CreateContext, installed: boolean, skillsInstalled: boolean): string[] {
   const steps = [`cd ${path.relative(process.cwd(), ctx.root) || '.'}`];
   if (ctx.template.workflow === 'bepack') {
     if (ctx.installBepack && !installed) {
@@ -131,7 +139,15 @@ function nextSteps(ctx: CreateContext, installed: boolean): string[] {
     }
     steps.push(packageManagerRunCommand(ctx.packageManager, 'build'));
   }
+  if (!skillsInstalled) {
+    const skills = normalizeSkills(ctx.template.skills);
+    if (skills.length > 0) steps.push(skillsInstallCommand(skills));
+  }
   return steps;
+}
+
+function normalizeSkills(skills: TemplateDefinition['skills']): string[] {
+  return (Array.isArray(skills) ? skills : skills ? [skills] : []).map((source) => source.trim()).filter(Boolean);
 }
 
 async function runPackageScript(pm: CreateContext['packageManager'], script: string, root: string): Promise<void> {
@@ -144,7 +160,7 @@ async function runPackageScript(pm: CreateContext['packageManager'], script: str
 async function removeBepackDependency(root: string): Promise<void> {
   const file = path.join(root, 'package.json');
   const packageJson = JSON.parse(await fs.readFile(file, 'utf8')) as { devDependencies?: Record<string, string>; scripts?: Record<string, string> };
-  if (packageJson.devDependencies) delete packageJson.devDependencies.bepack;
+  if (packageJson.devDependencies) delete packageJson.devDependencies['@bepack/cli'];
   if (packageJson.scripts) delete packageJson.scripts['bepack:install'];
   await fs.writeFile(file, `${JSON.stringify(packageJson, null, 2)}\n`, 'utf8');
 }

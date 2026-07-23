@@ -9,6 +9,7 @@ export interface CliOptions {
   yes: boolean;
   force: boolean;
   install: boolean;
+  skipSkillsInstall: boolean;
   installBepack?: boolean;
   git: boolean;
   json: boolean;
@@ -36,6 +37,7 @@ export interface TemplateDefinition {
   templateDir: string;
   defaultPackageManager?: PackageManager;
   defaultOptions?: Record<string, unknown>;
+  skills?: string | string[];
   workflow?: 'bepack' | 'simple';
   prepare?: (ctx: CreateContext) => Promise<void> | void;
 }
@@ -46,6 +48,7 @@ export interface CreateResult {
   template: string;
   packageManager: PackageManager;
   installedDependencies: boolean;
+  installedSkills: boolean;
   initializedGit: boolean;
   warnings: string[];
   nextSteps: string[];

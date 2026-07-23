@@ -8,7 +8,7 @@ const managers = new Set<PackageManager>(['npm', 'pnpm', 'yarn', 'bun']);
 export function parseCliOptions(argv: string[] = []): CliOptions {
   const raw = mri(argv, {
     alias: { h: 'help', v: 'version', t: 'template' },
-    boolean: ['help', 'version', 'yes', 'force', 'install', 'install-bepack', 'skip-bepack-install', 'git', 'json', 'list-templates'],
+    boolean: ['help', 'version', 'yes', 'force', 'install', 'skip-skills-install', 'install-bepack', 'skip-bepack-install', 'git', 'json', 'list-templates'],
     string: ['template', 'pm', 'cwd'],
     default: { install: false, git: false },
   }) as Record<string, unknown>;
@@ -21,6 +21,7 @@ export function parseCliOptions(argv: string[] = []): CliOptions {
     template: raw.template ? String(raw.template) : undefined,
     packageManager: pm, yes: Boolean(raw.yes), force: Boolean(raw.force),
     install: Boolean(raw.install),
+    skipSkillsInstall: Boolean(raw['skip-skills-install']),
     installBepack: raw['skip-bepack-install'] ? false : raw['install-bepack'] ? true : undefined,
     git: Boolean(raw.git), json: Boolean(raw.json),
     listTemplates: Boolean(raw['list-templates']), help: Boolean(raw.help), version: Boolean(raw.version),

@@ -7,11 +7,11 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/bepack"><img src="https://img.shields.io/npm/v/bepack.svg?style=flat-square" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/bepack"><img src="https://img.shields.io/npm/dm/bepack.svg?style=flat-square" alt="npm downloads" /></a>
+  <a href="https://www.npmjs.com/package/@bepack/cli"><img src="https://img.shields.io/npm/v/@bepack/cli.svg?style=flat-square" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@bepack/cli"><img src="https://img.shields.io/npm/dm/@bepack/cli.svg?style=flat-square" alt="npm downloads" /></a>
   <a href="https://github.com/XiaoYangx666/BEPack/blob/main/LICENSE"><img src="https://img.shields.io/github/license/XiaoYangx666/BEPack.svg?style=flat-square" alt="license" /></a>
   <a href="https://github.com/XiaoYangx666/BEPack"><img src="https://img.shields.io/github/stars/XiaoYangx666/BEPack.svg?style=flat-square" alt="GitHub stars" /></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/bepack.svg?style=flat-square" alt="Node.js version" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/@bepack/cli.svg?style=flat-square" alt="Node.js version" /></a>
 </p>
 
 # BEPack
@@ -45,10 +45,10 @@ npm create mcbe
 具体交互选项和命令行参数请查看 create-mcbe 项目文档。可以全局安装 BePack：
 
 ```bash
-npm install -g bepack
+npm install -g @bepack/cli
 ```
 
-也可以使用 `npm install -D bepack` 安装到项目中；此时使用 `npx bepack` 或 package script。
+也可以使用 `npm install -D @bepack/cli` 安装到项目中；此时使用 `npx bepack` 或 package script。
 
 如果需要新的 BePack 配置，执行以下命令后再按项目实际情况修改生成的内容：
 
@@ -95,7 +95,7 @@ bepack init --from-bp bp/manifest.json --force
 BePack 会从项目目录加载 `bepack.config.ts`、`bepack.config.mjs` 或 `bepack.config.js`。以下是常见的 Script API 行为包配置：
 
 ```ts
-import { defineConfig } from "bepack";
+import { defineConfig } from "@bepack/cli";
 
 export default defineConfig({
     name: "my-addon",

@@ -43,6 +43,7 @@ function helpText(): string {
     '  --template <id>       Template id', '  --pm <npm|pnpm|yarn|bun>',
     '  --yes                 Use defaults', '  --force               Overwrite a non-empty target directory',
     '  --install             Install dependencies after creation',
+    '  --skip-skills-install Skip template skills installation',
     '  --install-bepack      Install BEPack in the project',
     '  --skip-bepack-install Use global BEPack instead',
     '  --git                 Initialize git', '  --cwd <dir>           Working directory',

@@ -21,7 +21,7 @@ describe('createProject', () => {
     expect(config).toContain('"@minecraft/server": "stable"');
     const pkg = JSON.parse(await fs.readFile(path.join(cwd, 'demo', 'package.json'), 'utf8'));
     expect(pkg.name).toBe('demo');
-    expect(pkg.devDependencies.bepack).toBeDefined();
+    expect(pkg.devDependencies['@bepack/cli']).toBeDefined();
   });
 
   it('uses the project root as the BEPack BP root', async () => {
@@ -40,7 +40,7 @@ describe('createProject', () => {
     const root = path.join(cwd, 'Fancy Addon');
     const config = await fs.readFile(path.join(root, 'bepack.config.ts'), 'utf8');
     const source = await fs.readFile(path.join(root, 'src', 'main.ts'), 'utf8');
-    expect(config).toContain("import { defineConfig, sapiPro } from 'bepack';");
+    expect(config).toContain("import { defineConfig, sapiPro } from '@bepack/cli';");
     expect(config).toContain('plugins: [sapiPro()]');
     expect(config).toContain('"sapi-pro": "stable"');
     expect(config).toContain('replace:');
@@ -60,8 +60,8 @@ describe('createProject', () => {
     const config = await fs.readFile(path.join(root, 'bepack.config.ts'), 'utf8');
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
     expect(config).toContain("plugins: ['sapi-pro']");
-    expect(config).not.toContain("from 'bepack'");
-    expect(pkg.devDependencies?.bepack).toBeUndefined();
+  expect(config).not.toContain("from '@bepack/cli'");
+  expect(pkg.devDependencies?.['@bepack/cli']).toBeUndefined();
   });
 
   it('rejects dangerous project names', async () => {
