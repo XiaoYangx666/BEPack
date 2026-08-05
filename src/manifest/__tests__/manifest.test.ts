@@ -195,6 +195,81 @@ describe("ManifestBuilder buildRp", () => {
 
         expect(createBuilder(config).buildRp().dependencies).toEqual([]);
     });
+
+    it.each(["world", "global", "any"] as const)(
+        "packs.rp.packScope=%s 写入 header.pack_scope",
+        (packScope) => {
+            const config = baseConfig({
+                packs: {
+                    rp: {
+                        root: "rp",
+                        uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                        moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                        name: "Test RP",
+                        include: [],
+                        packScope,
+                    },
+                },
+            });
+
+            const manifest = createBuilder(config).buildRp();
+            expect(manifest.header!.pack_scope).toBe(packScope);
+        }
+    );
+
+    it("packScope 未配置时不写入 header.pack_scope", () => {
+        const config = baseConfig({
+            packs: {
+                rp: {
+                    root: "rp",
+                    uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                    moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                    name: "Test RP",
+                    include: [],
+                },
+            },
+        });
+
+        const manifest = createBuilder(config).buildRp();
+        expect(manifest.header!.pack_scope).toBeUndefined();
+    });
+
+    it("packScope 未配置时保留已有 header.pack_scope", () => {
+        const existing: Manifest = { header: { pack_scope: "global" } };
+        const config = baseConfig({
+            packs: {
+                rp: {
+                    root: "rp",
+                    uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                    moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                    name: "Test RP",
+                    include: [],
+                },
+            },
+        });
+
+        const manifest = createBuilder(config).buildRp(existing);
+        expect(manifest.header!.pack_scope).toBe("global");
+    });
+
+    it("packScope 配置后覆盖已有 header.pack_scope", () => {
+        const existing: Manifest = { header: { pack_scope: "world" } };
+        const config = baseConfig({
+            packs: {
+                rp: {
+                    root: "rp",
+                    uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                    moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                    name: "Test RP",
+                    include: [],
+                    packScope: "global",
+                },
+            },
+        });
+
+        const manifest = createBuilder(config).buildRp(existing);
+        expect(manifest.header!.pack_scope).toBe("global");
+    });
 });
 
 // ---------------------------------------------------------------------------

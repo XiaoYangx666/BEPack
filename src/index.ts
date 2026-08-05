@@ -35,6 +35,7 @@ export type {
     PackInfo,
     BpConfig,
     RpConfig,
+    PackScope,
     BpCompileOptions,
     BpCompileResolved,
     BePackPlugin,

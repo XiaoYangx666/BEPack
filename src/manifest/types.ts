@@ -22,6 +22,8 @@ export type ManifestHeader = {
     uuid?: string;
     version?: ManifestVersion;
     min_engine_version?: ManifestVersion;
+    /** 资源包可应用范围：`world` | `global` | `any`。仅资源包有效。 */
+    pack_scope?: string;
     [key: string]: unknown;
 };
 

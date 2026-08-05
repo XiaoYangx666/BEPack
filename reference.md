@@ -147,6 +147,8 @@ type UserConfig = {
             uuid: string;
             moduleUuid: string;
             pbr?: boolean;
+            /** 资源包可应用范围，写入 manifest header 的 `pack_scope`。默认 "any"。 */
+            packScope?: "world" | "global" | "any";
             /** 额外的打包/复制文件列表。 */
             include?: string[];
         };
@@ -411,6 +413,7 @@ RP 清单受控字段：
 - `header.uuid`
 - `header.version`
 - `header.min_engine_version`
+- `header.pack_scope`（当 `packs.rp.packScope` 配置时）
 - 资源模块
 - RP/BP 相互依赖
 - `capabilities: ["pbr"]`（当 `pbr: true` 时）

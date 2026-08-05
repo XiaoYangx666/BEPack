@@ -290,9 +290,23 @@ export type BpConfig = PackConfig & {
     include?: string[];
 };
 
+/**
+ * 资源包可应用范围（pack_scope），仅资源包可用。
+ * - `world`: 仅可应用于特定存档（作为世界资源包）。
+ * - `global`: 仅可应用于全局资源包。
+ * - `any`: 可应用于任何地方。默认值。
+ */
+export type PackScope = "world" | "global" | "any";
+
+/** 合法 pack_scope 取值，用于配置校验。 */
+export const PACK_SCOPES: readonly PackScope[] = ["world", "global", "any"];
+
 export type RpConfig = PackConfig & {
     /** Adds `pbr` capability to the resource pack manifest. */
     pbr?: boolean;
+
+    /** 资源包可应用范围，写入 manifest header 的 `pack_scope`。默认 "any"。 */
+    packScope?: PackScope;
 
     /** Additional files/folders to include when copying/packing the resource pack,
      * on top of built-in defaults. */
@@ -490,6 +504,7 @@ export type ResolvedConfig = {
             name: string;
             description?: string;
             pbr?: boolean;
+            packScope?: PackScope;
             include: string[];
         };
     };

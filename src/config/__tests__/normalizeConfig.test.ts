@@ -356,6 +356,56 @@ describe("getConfiguredPacks", () => {
 });
 
 // ---------------------------------------------------------------------------
+// packScope 配置 (RP)
+// ---------------------------------------------------------------------------
+
+describe("packScope 配置", () => {
+    it("RP 配置 packScope → 写入解析配置", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                rp: { root: "rp", uuid: "c", moduleUuid: "d", packScope: "world" },
+            },
+        });
+        expect(config.packs.rp!.packScope).toBe("world");
+    });
+
+    it.each(["global", "any"] as const)("接受 packScope=%s", (packScope) => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                rp: { root: "rp", uuid: "c", moduleUuid: "d", packScope },
+            },
+        });
+        expect(config.packs.rp!.packScope).toBe(packScope);
+    });
+
+    it("未配置 packScope → 解析配置保持 undefined", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: { rp: { root: "rp", uuid: "c", moduleUuid: "d" } },
+        });
+        expect(config.packs.rp!.packScope).toBeUndefined();
+    });
+
+    it("非法 packScope → 抛出 CONFIG_INVALID", () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    rp: {
+                        root: "rp",
+                        uuid: "c",
+                        moduleUuid: "d",
+                        packScope: "banana" as never,
+                    },
+                },
+            })
+        ).toThrow('packs.rp.packScope must be one of "world", "global", "any"');
+    });
+});
+
+// ---------------------------------------------------------------------------
 // include 配置
 // ---------------------------------------------------------------------------
 

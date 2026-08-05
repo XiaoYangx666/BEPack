@@ -13,6 +13,7 @@ import type {
     HookResult,
     Hooks,
 } from "./configTypes.js";
+import { PACK_SCOPES } from "./configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { validateScriptOutputDir, slash } from "../utils/path.js";
 import { normalizeReplace } from "../build/replace.js";
@@ -290,6 +291,13 @@ export function normalizeConfig(
                 "packs.rp.root is required when packs.rp is configured."
             );
         }
+        if (rp.packScope !== undefined && !PACK_SCOPES.includes(rp.packScope)) {
+            throw new BePackError(
+                "CONFIG_INVALID",
+                `packs.rp.packScope must be one of ${PACK_SCOPES.map((s) => `"${s}"`).join(", ")}.`,
+                { details: { packScope: rp.packScope } }
+            );
+        }
     }
 
     const bpDescription = bp?.description ?? description;
@@ -341,6 +349,7 @@ export function normalizeConfig(
                           name: rp.name ?? name,
                           ...(rpDescription !== undefined ? { description: rpDescription } : {}),
                           ...(rp.pbr !== undefined ? { pbr: rp.pbr } : {}),
+                          ...(rp.packScope !== undefined ? { packScope: rp.packScope } : {}),
                           include: rp.include ?? [],
                       },
                   }

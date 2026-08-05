@@ -136,6 +136,7 @@ export class ManifestBuilder {
             name: rp.name,
             ...(rp.description !== undefined ? { description: rp.description } : {}),
             uuid: rp.uuid,
+            ...(rp.packScope !== undefined ? { pack_scope: rp.packScope } : {}),
             version: this.getVersionFor(formatVersion),
             min_engine_version: this.normalizeMinEngineVersion(
                 existing.header?.min_engine_version,
