@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { normalizeConfig } from "../../config/normalizeConfig.js";
-import { resolveReplaceValues } from "../replace.js";
+import { createReplacePlugins, resolveReplaceValues } from "../replace.js";
+
+vi.mock("rolldown/plugins", () => ({
+    replacePlugin: vi.fn((values: Record<string, string>, options?: object) => ({ values, options })),
+}));
 
 function configWithReplace(replace: NonNullable<Parameters<typeof normalizeConfig>[0]>["replace"]) {
     return normalizeConfig({
@@ -57,5 +61,31 @@ describe("replacePlugin configuration", () => {
 
     it("disables built-in tokens by default", () => {
         expect(resolveReplaceValues(configWithReplace(undefined))).toEqual({});
+    });
+
+    it("matches custom values literally, not with word boundaries", () => {
+        const config = configWithReplace({ values: { "**NAMESPACE**": "my_addon_abc123" } });
+        const plugins = createReplacePlugins(config);
+        expect(plugins).toHaveLength(1);
+        expect(plugins[0]).toMatchObject({
+            values: { "**NAMESPACE**": "my_addon_abc123" },
+            options: { delimiters: ["", ""] },
+        });
+    });
+
+    it("merges custom values and enabled built-ins into one literal plugin", () => {
+        const config = configWithReplace({
+            values: { "**AUTHOR**": "me" },
+            builtins: { NAME: true },
+        });
+        const plugins = createReplacePlugins(config);
+        expect(plugins).toHaveLength(1);
+        expect(plugins[0]).toMatchObject({
+            values: { "**AUTHOR**": "me", "**NAME**": "Test Addon" },
+        });
+    });
+
+    it("emits no plugin when nothing is configured", () => {
+        expect(createReplacePlugins(configWithReplace(undefined))).toEqual([]);
     });
 });

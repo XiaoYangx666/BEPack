@@ -462,7 +462,7 @@ Rolldown 行为：
 - `packs.bp.compile.scriptOutputDir` 控制编译脚本输出目录（相对于 BP root），默认 `"scripts"`。manifest 中的 script 模块 `entry` 路径也会随之更新为 `<scriptOutputDir>/<entry文件名>.js`。
 - 外部包来自 `packs.bp.compile.external`，默认情况下也来自受管理的依赖目录。
 - `packs.bp.compile.minify: true` 或 `--minify` 启用 Rolldown 代码压缩，输出更小的 JS 文件。
-- 字符串替换通过顶层 `replace` 配置：`replace.values` 支持字面量或接收已解析 config 的函数；`replace.builtins` 可开启 `**VERSION**`、`**NAME**`、`**UUID**`、`**DESCRIPTION**`。未配置替换时不会创建 replace plugin。`**DESCRIPTION**` 优先使用 `packs.bp.description`，再回退到根 `description`。
+- 字符串替换通过顶层 `replace` 配置：`replace.values` 支持字面量或接收已解析 config 的函数；`replace.builtins` 可开启 `**VERSION**`、`**NAME**`、`**UUID**`、`**DESCRIPTION**`。未配置替换时不会创建 replace plugin。所有替换 key 都按**字面精确匹配**（不做单词边界匹配），因此自定义值可以放心使用 `**自定义标记**` 这类被非单词字符包围的 token，例如 `replace.values: { "**AUTHOR**": "Your Name" }`。`**DESCRIPTION**` 优先使用 `packs.bp.description`，再回退到根 `description`。
 - 构建完成后显示输出文件的大小统计（单文件显示路径和体积，多文件显示总文件数和总体积）。
 
 > 注意：构建命令（`build` / `dev`）不再要求 BP 必须存在。如果项目只有 RP 或 BP 没有配置 `compile`，则跳过编译流程，只执行 manifest 修补和可选的文件复制/打包。
