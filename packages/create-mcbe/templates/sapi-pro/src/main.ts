@@ -5,6 +5,6 @@ initSAPIPro({
   version: '**VERSION**',
   description: '**DESCRIPTION**',
   author: 'Your Name',
-  nameSpace: 'example_addon',
+  nameSpace: '**NAMESPACE**',
   uuid: '**UUID**',
 });

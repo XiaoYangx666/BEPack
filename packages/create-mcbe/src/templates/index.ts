@@ -17,7 +17,7 @@ export const templates: TemplateDefinition[] = [
     },
     plugin: { name: 'sapi-pro', importName: 'sapiPro', call: 'sapiPro()' },
     replaceBuiltins: true,
-    nameFromPackage: true,
+    namespace: true,
   }),
   createBepackTemplate({
     id: 'bepack-behavior',

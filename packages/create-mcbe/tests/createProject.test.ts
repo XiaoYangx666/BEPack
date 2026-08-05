@@ -46,7 +46,10 @@ describe('createProject', () => {
     expect(config).toContain('replace:');
     expect(source).toContain("from 'sapi-pro'");
     expect(source).toContain('**NAME**');
-    expect(source).toContain("nameSpace: 'example_addon'");
+    // **NAMESPACE** is injected at scaffold time, so src/main.ts already has the concrete value.
+    expect(source).toMatch(/nameSpace: '[a-z0-9_]+_[0-9a-f]{6}'/);
+    expect(source).not.toContain('**NAMESPACE**');
+    expect(config).not.toContain('**NAMESPACE**');
     expect(source).toContain("author: 'Your Name'");
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
     expect(pkg.name).toBe('fancy-addon');
@@ -60,8 +63,22 @@ describe('createProject', () => {
     const config = await fs.readFile(path.join(root, 'bepack.config.ts'), 'utf8');
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
     expect(config).toContain("plugins: ['sapi-pro']");
-  expect(config).not.toContain("from '@bepack/cli'");
-  expect(pkg.devDependencies?.['@bepack/cli']).toBeUndefined();
+    expect(config).not.toContain("from '@bepack/cli'");
+    expect(pkg.devDependencies?.['@bepack/cli']).toBeUndefined();
+  });
+
+  it('derives a legal random namespace for non-ASCII project names', async () => {
+    const cwd = await temp();
+    await createProject(parseCliOptions(['我的插件', '--template', 'sapi-pro', '--yes', '--cwd', cwd]));
+    const source = await fs.readFile(path.join(cwd, '我的插件', 'src', 'main.ts'), 'utf8');
+    const match = /nameSpace: '([a-z0-9_]+)'/.exec(source);
+    expect(match).not.toBeNull();
+    const namespace = match![1];
+    // Legal Minecraft namespace: lowercase ascii, letters/digits/underscore, starts with a letter.
+    expect(namespace).toMatch(/^[a-z][a-z0-9_]*_[0-9a-f]{6}$/);
+    // Stable hash base so different Chinese project names do not collide.
+    expect(namespace).toMatch(/^mcbe_[0-9a-f]{8}_[0-9a-f]{6}$/);
+    expect(source).not.toContain('**NAMESPACE**');
   });
 
   it('rejects dangerous project names', async () => {

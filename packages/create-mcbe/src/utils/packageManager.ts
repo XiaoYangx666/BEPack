@@ -12,7 +12,7 @@ export function detectPackageManager(): PackageManager {
 
 export function packageManagerField(pm: PackageManager): string {
   const versions: Record<PackageManager, string> = {
-    npm: 'npm@10',
+    npm: 'npm@11',
     pnpm: 'pnpm@9',
     yarn: 'yarn@1.22',
     bun: 'bun@1',

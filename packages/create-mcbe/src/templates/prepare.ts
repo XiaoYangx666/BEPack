@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { CreateContext } from '../types.js';
 import { pathExists } from '../utils/files.js';
 import { patchJson } from '../utils/json.js';
+import { toNamespace } from '../utils/names.js';
 
 type Manifest = { header: Record<string, any>; modules?: Array<Record<string, any>> };
 
@@ -30,7 +31,8 @@ export interface BepackPrepareOptions {
   dependencies?: Record<string, string>;
   plugin?: { name: string; importName: string; call: string };
   replaceBuiltins?: boolean;
-  nameFromPackage?: boolean;
+  /** Replace the **NAMESPACE** placeholder in src/main.ts with a random unique namespace. */
+  namespace?: boolean;
 }
 
 export async function prepareBepack(ctx: CreateContext, options: BepackPrepareOptions): Promise<void> {
@@ -40,8 +42,11 @@ export async function prepareBepack(ctx: CreateContext, options: BepackPrepareOp
     ? JSON.parse(await fs.readFile(path.join(ctx.root, options.rpRoot, 'manifest.json'), 'utf8')) as Manifest
     : undefined;
   const bpModule = bpManifest.modules?.find((module) => module.type === 'script');
+  if (options.namespace) {
+    await replaceNamespacePlaceholder(ctx, toNamespace(ctx.projectName));
+  }
   const config = {
-    name: options.nameFromPackage ? ctx.packageName : ctx.projectName,
+    name: ctx.packageName,
     version: '1.0.0',
     description: `${ctx.projectName} Bedrock add-on`,
     target: 'latest',
@@ -67,6 +72,13 @@ export async function prepareBepack(ctx: CreateContext, options: BepackPrepareOp
     formatConfig(config, options.plugin, ctx.installBepack),
     'utf8',
   );
+}
+
+async function replaceNamespacePlaceholder(ctx: CreateContext, namespace: string): Promise<void> {
+  const file = path.join(ctx.root, 'src', 'main.ts');
+  if (!(await pathExists(file))) return;
+  const source = await fs.readFile(file, 'utf8');
+  await fs.writeFile(file, source.replaceAll('**NAMESPACE**', namespace), 'utf8');
 }
 
 function formatConfig(config: Record<string, unknown>, plugin: BepackPrepareOptions['plugin'], withBepack: boolean): string {

@@ -14,6 +14,9 @@ export function parseCliOptions(argv: string[] = []): CliOptions {
   }) as Record<string, unknown>;
   const pm = String(raw.pm || detectPackageManager()) as PackageManager;
   if (!managers.has(pm)) throw new Error(`Unknown package manager: ${pm}`);
+  if (raw['install-bepack'] && raw['skip-bepack-install']) {
+    throw new Error('--install-bepack and --skip-bepack-install cannot be used together.');
+  }
   const projectName = Array.isArray(raw._) ? raw._.find(Boolean) : undefined;
   return {
     cwd: path.resolve(String(raw.cwd || process.cwd())),

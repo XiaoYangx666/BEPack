@@ -12,5 +12,5 @@
     "forceConsistentCasingInFileNames": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "tests", "tsdown.config.ts"]
+  "include": ["src", "tests", "rolldown.config.ts"]
 }
