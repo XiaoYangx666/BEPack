@@ -47,6 +47,8 @@ export class ManifestBuilder {
      * 构建（或重建）BP manifest。
      * 纯函数——不会修改传入的 existingValue。
      * 调用前应确保 config.packs.bp 已配置。
+     *
+     * `manifest.merge` 决定增量保留（"preserve"）还是从配置全量重建（"clean"）。
      */
     buildBp(existingValue?: unknown): Manifest {
         const bp = this.requireBp();
@@ -55,21 +57,10 @@ export class ManifestBuilder {
 
         const effectiveFormat = this.getWriteFormatVersion(existing);
 
-        const manifest: Manifest = {
-            ...existing,
-            format_version: effectiveFormat,
-            header: this.buildBpHeader(existing, bp, effectiveFormat),
-            ...(bp.moduleUuid
-                ? { modules: this.replaceManagedBpModules(existing.modules, bp, effectiveFormat) }
-                : existing.modules
-                  ? { modules: existing.modules }
-                  : {}),
-            dependencies: this.depManager.replaceBpDependencies(
-                existing.dependencies,
-                this.config.packs.rp?.uuid,
-                effectiveFormat
-            ),
-        };
+        const manifest: Manifest =
+            bp.manifest.merge === "clean"
+                ? this.buildCleanBp(bp, effectiveFormat)
+                : this.buildPreserveBp(existing, bp, effectiveFormat);
 
         this.applyAchievementMetadata(manifest, bp);
         return manifest;
@@ -79,6 +70,8 @@ export class ManifestBuilder {
      * 构建（或重建）RP manifest。
      * 纯函数——不会修改传入的 existingValue。
      * 调用前应确保 config.packs.rp 已配置。
+     *
+     * `manifest.merge` 决定增量保留（"preserve"）还是从配置全量重建（"clean"）。
      */
     buildRp(existingValue?: unknown): Manifest {
         const rp = this.requireRp();
@@ -86,20 +79,148 @@ export class ManifestBuilder {
 
         const effectiveFormat = this.getWriteFormatVersion(existing);
 
-        const manifest: Manifest = {
-            ...existing,
-            format_version: effectiveFormat,
-            header: this.buildRpHeader(existing, rp, effectiveFormat),
-            modules: this.replaceManagedRpModules(existing.modules, rp, effectiveFormat),
-            dependencies: this.depManager.replaceRpDependencies(
-                existing.dependencies,
-                this.config.packs.bp?.uuid,
-                effectiveFormat
-            ),
-        };
+        const manifest: Manifest =
+            rp.manifest.merge === "clean"
+                ? this.buildCleanRp(rp, effectiveFormat)
+                : this.buildPreserveRp(existing, rp, effectiveFormat);
 
         this.applyPbrCapability(manifest, rp);
         return manifest;
+    }
+
+    // -----------------------------------------------------------------------
+    // Preserve 模式（增量合并，默认）
+    // -----------------------------------------------------------------------
+
+    private buildPreserveBp(
+        existing: Manifest,
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>,
+        formatVersion: number
+    ): Manifest {
+        return {
+            ...existing,
+            format_version: formatVersion,
+            header: this.buildBpHeader(existing, bp, formatVersion),
+            ...(bp.moduleUuid
+                ? { modules: this.replaceManagedBpModules(existing.modules, bp, formatVersion) }
+                : existing.modules
+                  ? { modules: existing.modules }
+                  : {}),
+            dependencies: this.depManager.replaceBpDependencies(
+                existing.dependencies,
+                this.config.packs.rp?.uuid,
+                formatVersion
+            ),
+        };
+    }
+
+    private buildPreserveRp(
+        existing: Manifest,
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>,
+        formatVersion: number
+    ): Manifest {
+        return {
+            ...existing,
+            format_version: formatVersion,
+            header: this.buildRpHeader(existing, rp, formatVersion),
+            modules: this.replaceManagedRpModules(existing.modules, rp, formatVersion),
+            dependencies: this.depManager.replaceRpDependencies(
+                existing.dependencies,
+                this.config.packs.bp?.uuid,
+                formatVersion
+            ),
+        };
+    }
+
+    // -----------------------------------------------------------------------
+    // Clean 模式（从配置全量重建，丢弃非 managed 条目）
+    // -----------------------------------------------------------------------
+
+    private buildCleanBp(
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>,
+        formatVersion: number
+    ): Manifest {
+        return {
+            format_version: formatVersion,
+            header: this.buildBpHeaderClean(bp, formatVersion),
+            ...(bp.moduleUuid ? { modules: this.buildCleanBpModules(bp, formatVersion) } : {}),
+            dependencies: this.depManager.buildBpDependenciesClean(
+                formatVersion,
+                this.config.packs.rp?.uuid,
+                bp.manifest.extraDependencies
+            ),
+        };
+    }
+
+    private buildCleanRp(
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>,
+        formatVersion: number
+    ): Manifest {
+        return {
+            format_version: formatVersion,
+            header: this.buildRpHeaderClean(rp, formatVersion),
+            modules: this.buildCleanRpModules(rp, formatVersion),
+            dependencies: this.depManager.buildRpDependenciesClean(
+                formatVersion,
+                this.config.packs.bp?.uuid,
+                rp.manifest.extraDependencies
+            ),
+        };
+    }
+
+    private buildBpHeaderClean(
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>,
+        formatVersion: number
+    ): ManifestHeader {
+        return {
+            ...bp.manifest.extraHeader,
+            name: bp.name,
+            ...(bp.description !== undefined ? { description: bp.description } : {}),
+            uuid: bp.uuid,
+            version: this.getVersionFor(formatVersion),
+            min_engine_version: this.cleanMinEngineVersion(
+                bp.manifest.minEngineVersion,
+                formatVersion
+            ),
+        };
+    }
+
+    private buildRpHeaderClean(
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>,
+        formatVersion: number
+    ): ManifestHeader {
+        return {
+            ...rp.manifest.extraHeader,
+            name: rp.name,
+            ...(rp.description !== undefined ? { description: rp.description } : {}),
+            uuid: rp.uuid,
+            ...(rp.packScope !== undefined ? { pack_scope: rp.packScope } : {}),
+            version: this.getVersionFor(formatVersion),
+            min_engine_version: this.cleanMinEngineVersion(
+                rp.manifest.minEngineVersion,
+                formatVersion
+            ),
+        };
+    }
+
+    private buildCleanBpModules(
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>,
+        formatVersion: number
+    ): ManifestModule[] {
+        const modules: ManifestModule[] = bp.moduleUuid
+            ? [this.createScriptModule(bp, formatVersion)]
+            : [];
+        return [...modules, ...(bp.manifest.extraModules as ManifestModule[])];
+    }
+
+    private buildCleanRpModules(
+        rp: NonNullable<ResolvedConfig["packs"]["rp"]>,
+        formatVersion: number
+    ): ManifestModule[] {
+        return [
+            this.createResourcesModule(rp, formatVersion),
+            ...(rp.manifest.extraModules as ManifestModule[]),
+        ];
     }
 
     // -----------------------------------------------------------------------
@@ -114,9 +235,7 @@ export class ManifestBuilder {
         return {
             ...(existing.header ?? {}),
             name: bp.name,
-            ...(bp.description !== undefined
-                ? { description: bp.description }
-                : {}),
+            ...(bp.description !== undefined ? { description: bp.description } : {}),
             uuid: bp.uuid,
             version: this.getVersionFor(formatVersion),
             min_engine_version: this.normalizeMinEngineVersion(
@@ -278,7 +397,7 @@ export class ManifestBuilder {
         formatVersion: number
     ): ManifestVersion {
         if (existingValue === undefined || existingValue === null) {
-            return formatVersion === 3 ? "1.21.0" : MIN_ENGINE_VERSION;
+            return this.defaultMinEngineVersion(formatVersion);
         }
 
         if (Array.isArray(existingValue)) {
@@ -290,15 +409,37 @@ export class ManifestBuilder {
 
         if (typeof existingValue === "string") {
             if (formatVersion === 2) {
-                const parts = existingValue.split(".").map(Number);
-                if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
-                    return parts as [number, number, number];
-                }
+                const tuple = this.stringToVersionTuple(existingValue);
+                if (tuple) return tuple;
             }
             return existingValue;
         }
 
+        return this.defaultMinEngineVersion(formatVersion);
+    }
+
+    private cleanMinEngineVersion(
+        minEngineVersion: string | undefined,
+        formatVersion: number
+    ): ManifestVersion {
+        if (minEngineVersion === undefined) return this.defaultMinEngineVersion(formatVersion);
+        if (formatVersion === 3) return minEngineVersion;
+        return (
+            this.stringToVersionTuple(minEngineVersion) ??
+            this.defaultMinEngineVersion(formatVersion)
+        );
+    }
+
+    private defaultMinEngineVersion(formatVersion: number): ManifestVersion {
         return formatVersion === 3 ? "1.21.0" : MIN_ENGINE_VERSION;
+    }
+
+    private stringToVersionTuple(value: string): [number, number, number] | undefined {
+        const parts = value.split(".").map(Number);
+        if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+            return parts as [number, number, number];
+        }
+        return undefined;
     }
 
     // -----------------------------------------------------------------------

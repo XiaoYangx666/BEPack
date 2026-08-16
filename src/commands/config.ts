@@ -1,5 +1,6 @@
 import { loadConfig } from "../config/loadConfig.js";
 import { Logger } from "../logger/logger.js";
+import { createDependencyCatalog } from "../install/dependencyCatalog.js";
 
 /**
  * Safer serialization using a recursion depth tracker.
@@ -91,6 +92,14 @@ export async function commandConfig(options: any) {
         }
 
         logger.info(`install.registry: ${config.install.registry}`);
+
+        const catalogNames = Object.keys(createDependencyCatalog(config));
+        if (catalogNames.length > 0) {
+            logger.info(`install.dependencyCatalog: ${catalogNames.join(", ")}`);
+        } else {
+            logger.info("install.dependencyCatalog: (none)");
+        }
+
         logger.info(`pack.outDir: ${config.pack.outDir}`);
 
         if (config.copy.defaultTarget)

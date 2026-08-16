@@ -223,6 +223,47 @@ export type PackConfig = {
 
     /** Manifest header description. Defaults to top-level `description`. */
     description?: string;
+
+    /** Manifest generation strategy and extra fields. */
+    manifest?: PackManifestOptions;
+};
+
+/** User-facing manifest generation options (merged, not rewritten). */
+export type PackManifestOptions = {
+    /**
+     * Manifest patch strategy.
+     *
+     * - `"preserve"` (default): keep user-owned fields from the existing manifest and
+     *   overwrite only BePack-managed ones (incremental merge).
+     * - `"clean"`: rebuild the manifest from config. Non-managed entries are dropped;
+     *   declare them explicitly via the `extra*` fields below.
+     *
+     * Use `"clean"` when a pack's manifest should be fully generated from config
+     * (e.g. dual-config projects) so another config's residue never survives.
+     */
+    merge?: "preserve" | "clean";
+
+    /** `header.min_engine_version` in clean mode. Accepts a SemVer string (e.g. `"1.21.0"`),
+     *  converted to `[n, n, n]` for format 2 manifests. Ignored in preserve mode. */
+    minEngineVersion?: string;
+
+    /** Dependencies appended verbatim to manifest `dependencies` in clean mode. */
+    extraDependencies?: Record<string, unknown>[];
+
+    /** Modules appended verbatim to manifest `modules` in clean mode. */
+    extraModules?: Record<string, unknown>[];
+
+    /** Extra fields merged into manifest `header` in clean mode (e.g. `pack_scope`). */
+    extraHeader?: Record<string, unknown>;
+};
+
+/** Resolved manifest generation options with defaults filled. */
+export type PackManifestResolved = {
+    merge: "preserve" | "clean";
+    minEngineVersion?: string;
+    extraDependencies: Record<string, unknown>[];
+    extraModules: Record<string, unknown>[];
+    extraHeader: Record<string, unknown>;
 };
 
 /** TypeScript incremental compilation cache settings. */
@@ -245,6 +286,16 @@ export type CacheResolved = {
 export type BpCompileOptions = {
     /** Script entry file, relative to project root. Default: "src/main.ts". */
     entry: string;
+
+    /**
+     * Identifier reference replacement (rolldown `transform.define` semantics).
+     *
+     * Values are JavaScript expression strings, e.g. `{ __TARGET__: JSON.stringify("server") }`.
+     * Only *references* to the key identifier are replaced — `declare` type declarations,
+     * object keys, string literals, and comments are left untouched.
+     * Prefer this over `replace` for feature flags and conditional compilation.
+     */
+    define?: Record<string, string>;
 
     /** Path to tsconfig.json relative to project root. Default: "tsconfig.json". */
     tsconfig?: string;
@@ -455,6 +506,7 @@ export type UserConfig = {
 /** Resolved BP compile configuration (all fields filled with defaults). */
 export type BpCompileResolved = {
     entry: string;
+    define: Record<string, string>;
     tsconfig: string;
     typecheck: boolean;
     preserveModules: boolean;
@@ -493,6 +545,7 @@ export type ResolvedConfig = {
             name: string;
             description?: string;
             compile?: BpCompileResolved;
+            manifest: PackManifestResolved;
             dependencies: Record<string, DependencySpecifier>;
             achievement?: boolean;
             include: string[];
@@ -503,6 +556,7 @@ export type ResolvedConfig = {
             moduleUuid: string;
             name: string;
             description?: string;
+            manifest: PackManifestResolved;
             pbr?: boolean;
             packScope?: PackScope;
             include: string[];

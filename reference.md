@@ -81,6 +81,16 @@ export default defineConfig({
 });
 ```
 
+#### bepack.config.ts 支持的语法范围
+
+`.ts` 配置文件通过 Node 原生 type-stripping 加载，**只支持"可擦除"的 TypeScript 语法**：
+
+- ✅ `import type`、类型标注、`interface` / `type`、`satisfies`、as 断言
+- ✅ 带类型的箭头函数参数（如 `(ctx: { cwd: string }) => ...`）
+- ❌ 运行时产生代码的 TS 语法：`enum`（建议用 `as const` 对象）、带代码的 `namespace`、构造参数属性、legacy decorators
+
+复杂 config（或依赖运行时逻辑的配置）建议把逻辑抽到独立的 `.mjs`/`.js` 模块再在 config 里 import，或直接使用 `bepack.config.mjs` / `bepack.config.js`。
+
 生成的包类型可通过以下方式使用：
 
 ```json
@@ -121,6 +131,13 @@ type UserConfig = {
             /** BP 编译配置（入口、TypeScript 检查、Rolldown 选项）。 */
             compile?: {
                 entry: string;
+                /**
+                 * 标识符引用替换（条件编译，推荐）。
+                 * 值为 JavaScript 表达式字符串（如 `{ __TARGET__: JSON.stringify("server") }`）。
+                 * 只替换**表达式位置的标识符引用**——`declare` 类型声明、对象键、字符串字面量、注释均不受影响。
+                 * 与顶层 `replace` 并存；同一 key 不能同时配在两者中。
+                 */
+                define?: Record<string, string>;
                 tsconfig?: string;
                 typecheck?: boolean;
                 preserveModules?: boolean;
@@ -138,6 +155,19 @@ type UserConfig = {
             /** 所有 BP 依赖都在此声明——包括清单依赖和纯代码依赖。 */
             dependencies?: Record<string, "stable" | "beta" | "preview" | string>;
             achievement?: boolean;
+            /**
+             * manifest 生成策略。
+             * - `merge: "preserve"`（默认）：增量合并，保留用户手写字段。
+             * - `merge: "clean"`：从配置全量重建，非 managed 条目丢弃，改用 `extra*` 字段显式声明。
+             * - `minEngineVersion`：clean 模式下的 `header.min_engine_version`（format 2 自动转数组）。
+             */
+            manifest?: {
+                merge?: "preserve" | "clean";
+                minEngineVersion?: string;
+                extraDependencies?: Record<string, unknown>[];
+                extraModules?: Record<string, unknown>[];
+                extraHeader?: Record<string, unknown>;
+            };
             /** 额外的打包/复制文件列表（在默认 include 基础上追加）。 */
             include?: string[];
         };
@@ -149,6 +179,14 @@ type UserConfig = {
             pbr?: boolean;
             /** 资源包可应用范围，写入 manifest header 的 `pack_scope`。默认 "any"。 */
             packScope?: "world" | "global" | "any";
+            /** manifest 生成策略，与 bp 同构。 */
+            manifest?: {
+                merge?: "preserve" | "clean";
+                minEngineVersion?: string;
+                extraDependencies?: Record<string, unknown>[];
+                extraModules?: Record<string, unknown>[];
+                extraHeader?: Record<string, unknown>;
+            };
             /** 额外的打包/复制文件列表。 */
             include?: string[];
         };
@@ -365,6 +403,18 @@ export default defineConfig({
 4. 内置 `minecraft-vanilla-data` — `@minecraft/vanilla-data` 的 stable/preview 解析
 5. 内置 `exact-version` — 任意精确版本说明符
 
+### 依赖错误排查
+
+`UNSUPPORTED_DEPENDENCY` 报错会附带**当前可用的 catalog 包列表**与扩展指引：
+
+```txt
+[Error] foo-pkg is not a managed dependency.
+  → Managed packages: @minecraft/server, @minecraft/server-ui, ...
+  → Add a missing package to install.dependencyCatalog, or remove it from packs.bp.dependencies.
+```
+
+执行 `bepack config --summary`（或 `bepack config --json`）可查看当前生效的完整依赖目录（内置 + 插件 + 自定义 `install.dependencyCatalog`）与解析器注册顺序。
+
 ## 清单管理
 
 `bepack manifest` 和 `bepack install` 可以创建和修补清单。
@@ -428,6 +478,41 @@ RP 清单受控字段：
 - 每个受管理的 Script API 依赖必须使用 `stable` 说明符。
 - 如果在启用成就时使用了 `beta` 或 `preview` 依赖，BePack 会抛出 `ACHIEVEMENT_REQUIRES_STABLE_API`。
 
+### manifest 生成策略
+
+`packs.bp.manifest` / `packs.rp.manifest` 控制清单如何与已有文件合并：
+
+| 条目来源 | `merge: "preserve"`（默认） | `merge: "clean"` |
+| -------- | --------------------------- | ---------------- |
+| `header.name` / `description` / `uuid` / `version` | config | config |
+| `header.min_engine_version` | 保留旧文件值 | config（缺省用默认值，可用 `minEngineVersion` 显式指定） |
+| managed 依赖 / module | 重建 | 重建 |
+| 非 managed 条目（手写依赖、额外 module、capabilities 等） | **保留** | **丢弃**，改用 `extra*` 字段显式声明 |
+| 其他 config 的残留（双配置交替构建） | 保留 → 污染 | **清除** |
+
+`clean` 模式下可用的补充字段：
+
+- `minEngineVersion`：写 `header.min_engine_version`。SemVer 字符串（如 `"1.21.80"`），format 2 自动转 `[1, 21, 80]`。
+- `extraDependencies`：原样追加到 `dependencies`（非 catalog 依赖）。
+- `extraModules`：原样追加到 `modules`（如自定义 script 模块）。
+- `extraHeader`：合并进 `header`（如 `pack_scope`）。
+
+推荐用法——双配置交替构建时，用 `clean` 的一侧从配置全量生成，杜绝另一侧 config 的残留：
+
+```ts
+// bepack.server.config.ts
+export default defineConfig({
+    packs: {
+        bp: {
+            root: "bp",
+            manifest: { merge: "clean", minEngineVersion: "1.21.80" },
+        },
+    },
+});
+```
+
+client 侧保持默认 `preserve`（尊重手写 manifest），server 侧 `clean`（从配置全量生成），无需再写外部清理脚本。
+
 ## 构建
 
 `bepack build` 执行以下步骤：
@@ -462,7 +547,7 @@ Rolldown 行为：
 - `packs.bp.compile.scriptOutputDir` 控制编译脚本输出目录（相对于 BP root），默认 `"scripts"`。manifest 中的 script 模块 `entry` 路径也会随之更新为 `<scriptOutputDir>/<entry文件名>.js`。
 - 外部包来自 `packs.bp.compile.external`，默认情况下也来自受管理的依赖目录。
 - `packs.bp.compile.minify: true` 或 `--minify` 启用 Rolldown 代码压缩，输出更小的 JS 文件。
-- 字符串替换通过顶层 `replace` 配置：`replace.values` 支持字面量或接收已解析 config 的函数；`replace.builtins` 可开启 `**VERSION**`、`**NAME**`、`**UUID**`、`**DESCRIPTION**`。未配置替换时不会创建 replace plugin。所有替换 key 都按**字面精确匹配**（不做单词边界匹配），因此自定义值可以放心使用 `**自定义标记**` 这类被非单词字符包围的 token，例如 `replace.values: { "**AUTHOR**": "Your Name" }`。`**DESCRIPTION**` 优先使用 `packs.bp.description`，再回退到根 `description`。
+- 字符串替换通过顶层 `replace` 配置：`replace.values` 支持字面量或接收已解析 config 的函数；`replace.builtins` 可开启 `**VERSION**`、`**NAME**`、`**UUID**`、`**DESCRIPTION**`。未配置替换时不会创建 replace plugin。所有替换 key 都按**字面精确匹配**（不做单词边界匹配），因此自定义值可以放心使用 `**自定义标记**` 这类被非单词字符包围的 token，例如 `replace.values: { "**AUTHOR**": "Your Name" }`。`**DESCRIPTION**` 优先使用 `packs.bp.description`，再回退到根 `description`。**feature flag / 条件编译请优先用 `packs.bp.compile.define`**（详见《构建注入与条件编译》），`replace` 保留给模板 token 等文本级替换。
 - 构建完成后显示输出文件的大小统计（单文件显示路径和体积，多文件显示总文件数和总体积）。
 
 > 注意：构建命令（`build` / `dev`）不再要求 BP 必须存在。如果项目只有 RP 或 BP 没有配置 `compile`，则跳过编译流程，只执行 manifest 修补和可选的文件复制/打包。
@@ -478,6 +563,93 @@ timing    rolldown        45 ms
 ```
 
 `--timing` 同样支持 `bepack dev` 命令。
+
+## 构建注入与条件编译
+
+BePack 提供两种编译期注入机制，**建议按用途选择**：
+
+| 对比 | `replace`（顶层） | `define`（`packs.bp.compile.define`） |
+| ---- | ---------------- | ------------------------------------- |
+| 替换目标 | 所有出现位置（声明、注释、字符串内也换） | **仅标识符引用**（表达式位置） |
+| `declare const __T__: ...` | 被破坏（`declare const "client"`） | **保留**（typecheck 正常） |
+| `if (__T__ === "server")` | 可折叠 | 可折叠 |
+| 典型用途 | 模板 token、历史兼容 | **feature flag / 条件编译（推荐）** |
+| 冲突规则 | — | 与 `replace.values` 同一 key 同时配置会报错 |
+
+### define 用法
+
+`define` 的值是 **JavaScript 表达式字符串**，写入前 BePack 会做语法校验并定位报错：
+
+```ts
+export default defineConfig({
+    packs: {
+        bp: {
+            compile: {
+                entry: "src/main.ts",
+                define: {
+                    __TARGET__: JSON.stringify("server"), // → '"server"'
+                    __FLAG__: "true",                     // → true
+                },
+            },
+        },
+    },
+});
+```
+
+`declare` 声明可以留在源码里，typecheck 与运行时都正常：
+
+```ts
+declare const __TARGET__: "server" | "client";
+
+if (__TARGET__ === "server") {
+    console.log("server-only path");
+}
+```
+
+编译产物只替换引用：对象键、字符串字面量、注释中的同名 token 均不受影响。
+
+### 双产物示例（一次构建产出 server / client 两份脚本）
+
+利用两套 config + 共享的 `declare` 声明：
+
+```ts
+// src/main.ts
+declare const __TARGET__: "server" | "client";
+export const target = __TARGET__;
+```
+
+```ts
+// bepack.server.config.ts
+export default defineConfig({
+    name: "my-addon-server",
+    packs: {
+        bp: {
+            root: "bp",
+            compile: { entry: "src/main.ts", define: { __TARGET__: JSON.stringify("server") } },
+        },
+    },
+});
+```
+
+```ts
+// bepack.client.config.ts —— 同上，仅 define 值改为 JSON.stringify("client")
+```
+
+```bash
+bepack build --config bepack.server.config.ts
+bepack build --config bepack.client.config.ts
+```
+
+## Tree-shaking 与产物裁剪
+
+BePack 默认 `preserveModules: true`，Rolldown 仍会做 tree-shaking：
+
+- **未引用的模块**（import 了但没有任何导出被使用）不会出现在输出目录。
+- **死代码导出**（同模块内未被引用的导出）被剔除。
+- **动态 `import()`** 会拆分为独立 chunk 输出（如 `dynamic.js`），并按需加载。
+- 结果：输出目录 = 仅存活模块 + 动态 import chunk。
+
+验证方法：构建后检查 `<packs.bp.root>/<scriptOutputDir>`（默认 `bp/scripts`）下的文件列表，对比源码模块数。
 
 ## 开发模式
 
@@ -744,6 +916,22 @@ hooks: {
 ```
 
 未传入 `--mode` 时，`mode` 为 `undefined`，保持完全向后兼容。
+
+#### `--mode` 取值约定
+
+BePack 对 `mode` 的取值**不做语义判断**，以下只是社区推荐约定（可自定义）：
+
+| mode | 语义 |
+| ---- | ---- |
+| `development` | 开发构建（默认不传时的常见取值），跳过发布相关动作 |
+| `release` / `template` | 发布 / 模板构建，可跳过复制、跳过打包 |
+| 自定义任意字符串 | 由钩子内自行判断 |
+
+要点：
+
+- `mode` 透传给**同一命令的所有相关钩子**（如 `build` 的 `beforeBuild` / `afterBuild`；`dev` 的初始构建与增量重建）。
+- 判断用 `===` 精确匹配；未传 `--mode` 时 `mode === undefined`，可当作默认分支。
+- 不要依赖 `mode` 来区分命令——命令用 `ctx.command`（`"build"` / `"dev"` / ...）判断。
 
 ## 输出与错误
 

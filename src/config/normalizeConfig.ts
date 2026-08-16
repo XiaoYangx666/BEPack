@@ -12,11 +12,14 @@ import type {
     DependencyCatalogEntry,
     HookResult,
     Hooks,
+    PackManifestOptions,
+    PackManifestResolved,
 } from "./configTypes.js";
 import { PACK_SCOPES } from "./configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { validateScriptOutputDir, slash } from "../utils/path.js";
 import { normalizeReplace } from "../build/replace.js";
+import { normalizeDefine } from "../build/define.js";
 import { BUILTIN_PLUGINS } from "../plugins/builtins.js";
 
 function stripUndefined<T extends Record<string, unknown>>(value: T | undefined): Partial<T> {
@@ -199,6 +202,7 @@ function normalizeCompile(
     const normalizedDir = validateScriptOutputDir(bpRootDir, rawDir, resolvedSrcDir);
     return {
         entry: compile?.entry ?? defs.entry,
+        define: normalizeDefine(compile?.define),
         tsconfig: compile?.tsconfig ?? defs.tsconfig,
         typecheck: compile?.typecheck ?? defs.typecheck,
         preserveModules: compile?.preserveModules ?? defs.preserveModules,
@@ -217,6 +221,31 @@ function normalizeCompile(
             file: cache?.file ?? defs.file,
         };
     }
+}
+
+/** Normalize manifest generation options with defaults. */
+function normalizeManifestOptions(options: PackManifestOptions | undefined): PackManifestResolved {
+    const merge = options?.merge ?? "preserve";
+    if (merge !== "preserve" && merge !== "clean") {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            `manifest.merge must be "preserve" or "clean", got: ${String(options?.merge)}.`
+        );
+    }
+    const minEngineVersion = options?.minEngineVersion;
+    if (minEngineVersion !== undefined && !/^\d+\.\d+\.\d+$/.test(minEngineVersion)) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            `manifest.minEngineVersion must be a SemVer string like "1.21.0", got: ${minEngineVersion}.`
+        );
+    }
+    return {
+        merge,
+        ...(minEngineVersion !== undefined ? { minEngineVersion } : {}),
+        extraDependencies: options?.extraDependencies ?? [],
+        extraModules: options?.extraModules ?? [],
+        extraHeader: options?.extraHeader ?? {},
+    };
 }
 
 export function normalizeConfig(
@@ -271,6 +300,20 @@ export function normalizeConfig(
                 "CONFIG_INVALID",
                 "packs.bp.root is required. Set the behavior pack directory in bepack.config.ts."
             );
+        }
+
+        if (compile?.define) {
+            const replaceKeys = Object.keys(raw.replace?.values ?? {});
+            const defineKeys = Object.keys(compile.define);
+            const overlap = replaceKeys.filter((key) => defineKeys.includes(key));
+            if (overlap.length > 0) {
+                throw new BePackError(
+                    "CONFIG_INVALID",
+                    `Config conflict: ${overlap.map((k) => `"${k}"`).join(", ")} is configured in both ` +
+                        "replace.values and packs.bp.compile.define. Use only one mechanism per key.",
+                    { details: { overlap } }
+                );
+            }
         }
     }
 
@@ -334,6 +377,7 @@ export function normalizeConfig(
                           ...(compile && bpRootDir
                               ? { compile: normalizeCompile(compile, bpRootDir, projectRootDir) }
                               : {}),
+                          manifest: normalizeManifestOptions(bp.manifest),
                           dependencies: bp.dependencies ?? {},
                           ...(bp.achievement !== undefined ? { achievement: bp.achievement } : {}),
                           include: bp.include ?? [],
@@ -348,6 +392,7 @@ export function normalizeConfig(
                           moduleUuid: rp.moduleUuid!,
                           name: rp.name ?? name,
                           ...(rpDescription !== undefined ? { description: rpDescription } : {}),
+                          manifest: normalizeManifestOptions(rp.manifest),
                           ...(rp.pbr !== undefined ? { pbr: rp.pbr } : {}),
                           ...(rp.packScope !== undefined ? { packScope: rp.packScope } : {}),
                           include: rp.include ?? [],

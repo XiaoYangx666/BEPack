@@ -25,7 +25,9 @@ BePack 是 Minecraft 基岩版附加包的构建工具。它将行为包和资�
 - 从零创建 BePack 配置，或从已有 manifest 导入配置。
 - 同步 `manifest.json`，同时保留不由 BePack 管理的字段。
 - 将行为包的 TypeScript Script API 入口构建到 `scripts/` 目录。
+- 通过 `compile.define`（标识符级、typecheck 安全）或 `replace` 标记注入编译期 feature flag。
 - 解析受支持的 `@minecraft/*` 依赖，并将具体版本写入项目。
+- 以 `preserve`（增量）或 `clean`（从配置生成）策略同步 `manifest.json`。
 - 将包复制到 Minecraft 开发目录，并生成发布压缩包。
 
 ## 环境要求

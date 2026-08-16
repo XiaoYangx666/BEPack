@@ -25,7 +25,9 @@ BePack is a build tool for Minecraft Bedrock add-ons. It keeps behavior-pack and
 - Create a BePack configuration from scratch or import it from existing manifests.
 - Keep `manifest.json` in sync without overwriting fields that BePack does not own.
 - Build a Behavior Pack's TypeScript Script API entry into its `scripts/` directory.
+- Inject build-time feature flags with `compile.define` (identifier-level, typecheck-safe) or `replace` tokens.
 - Resolve supported `@minecraft/*` dependencies and write their concrete versions to your project.
+- Keep `manifest.json` in sync with a `preserve` (incremental) or `clean` (config-generated) merge strategy.
 - Copy packs into a Minecraft development folder and create release archives.
 
 ## Requirements

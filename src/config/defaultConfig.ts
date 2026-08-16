@@ -63,6 +63,7 @@ export const CACHE_DEFAULTS: CacheResolved = {
 /** Defaults applied when packs.bp.compile is configured but a field is omitted. */
 export const BP_COMPILE_DEFAULTS: BpCompileResolved = {
     entry: "src/main.ts",
+    define: {},
     tsconfig: "tsconfig.json",
     typecheck: true,
     preserveModules: true,

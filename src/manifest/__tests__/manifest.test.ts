@@ -12,6 +12,13 @@ import type { ResolvedConfig } from "../../config/configTypes.js";
 
 const MOD_VERSION: ManifestVersion = [1, 0, 0];
 
+const DEFAULT_MANIFEST = {
+    merge: "preserve" as const,
+    extraDependencies: [],
+    extraModules: [],
+    extraHeader: {},
+};
+
 function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
     return {
         root: ".",
@@ -33,6 +40,7 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
                 uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                 name: "Test BP",
+                manifest: DEFAULT_MANIFEST,
                 dependencies: {
                     "@minecraft/server": "2.6.0",
                 },
@@ -85,6 +93,7 @@ describe("ManifestBuilder buildBp", () => {
                     root: "bp",
                     uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                     name: "Test BP",
+                    manifest: DEFAULT_MANIFEST,
                     dependencies: {},
                     include: [],
                 },
@@ -142,6 +151,7 @@ describe("ManifestBuilder buildRp", () => {
                     uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                     moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                     name: "Test BP",
+                    manifest: DEFAULT_MANIFEST,
                     dependencies: {},
                     include: [],
                 },
@@ -150,6 +160,7 @@ describe("ManifestBuilder buildRp", () => {
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    manifest: DEFAULT_MANIFEST,
                     include: [],
                 },
             },
@@ -188,6 +199,7 @@ describe("ManifestBuilder buildRp", () => {
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    manifest: DEFAULT_MANIFEST,
                     include: [],
                 },
             },
@@ -206,6 +218,7 @@ describe("ManifestBuilder buildRp", () => {
                         uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                         moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                         name: "Test RP",
+                        manifest: DEFAULT_MANIFEST,
                         include: [],
                         packScope,
                     },
@@ -225,6 +238,7 @@ describe("ManifestBuilder buildRp", () => {
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    manifest: DEFAULT_MANIFEST,
                     include: [],
                 },
             },
@@ -243,6 +257,7 @@ describe("ManifestBuilder buildRp", () => {
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    manifest: DEFAULT_MANIFEST,
                     include: [],
                 },
             },
@@ -261,6 +276,7 @@ describe("ManifestBuilder buildRp", () => {
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    manifest: DEFAULT_MANIFEST,
                     include: [],
                     packScope: "global",
                 },
@@ -285,6 +301,7 @@ describe("同一 ManifestBuilder 构建 BP 和 RP", () => {
                     uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                     moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                     name: "Test BP",
+                    manifest: DEFAULT_MANIFEST,
                     dependencies: {},
                     include: [],
                 },
@@ -293,6 +310,7 @@ describe("同一 ManifestBuilder 构建 BP 和 RP", () => {
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    manifest: DEFAULT_MANIFEST,
                     include: [],
                 },
             },
@@ -418,8 +436,23 @@ describe("Module 管理", () => {
     it("保留用户额外的 resources module", () => {
         const config = baseConfig({
             packs: {
-                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", dependencies: {}, include: [] },
-                rp: { root: "rp", uuid: "c", moduleUuid: "d", name: "RP", include: [] },
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    name: "BP",
+                    manifest: DEFAULT_MANIFEST,
+                    dependencies: {},
+                    include: [],
+                },
+                rp: {
+                    root: "rp",
+                    uuid: "c",
+                    moduleUuid: "d",
+                    name: "RP",
+                    manifest: DEFAULT_MANIFEST,
+                    include: [],
+                },
             },
         });
         const existing: Manifest = {
@@ -507,6 +540,7 @@ describe("Dependency 替换", () => {
                     uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                     moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                     name: "Test BP",
+                    manifest: DEFAULT_MANIFEST,
                     dependencies: {
                         "@minecraft/server": "2.6.0",
                         "@minecraft/vanilla-data": "2.6.0",
@@ -541,12 +575,21 @@ describe("PBR capability", () => {
     function rpConfig(pbr?: boolean): ResolvedConfig {
         return baseConfig({
             packs: {
-                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", dependencies: {}, include: [] },
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    name: "BP",
+                    manifest: DEFAULT_MANIFEST,
+                    dependencies: {},
+                    include: [],
+                },
                 rp: {
                     root: "rp",
                     uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
                     moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
                     name: "Test RP",
+                    manifest: DEFAULT_MANIFEST,
                     include: [],
                     ...(pbr !== undefined ? { pbr } : {}),
                 },
@@ -594,6 +637,7 @@ describe("achievement", () => {
                         uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                         moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                         name: "Test BP",
+                        manifest: DEFAULT_MANIFEST,
                         dependencies: deps,
                         achievement: true,
                         include: [],
@@ -624,6 +668,7 @@ describe("achievement", () => {
                         uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                         moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                         name: "Test BP",
+                        manifest: DEFAULT_MANIFEST,
                         dependencies: { "@minecraft/server": "stable" },
                         achievement: true,
                         include: [],
@@ -650,6 +695,7 @@ describe("achievement", () => {
                         uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                         moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                         name: "Test BP",
+                        manifest: DEFAULT_MANIFEST,
                         dependencies: { "@minecraft/server": "2.6.0" },
                         achievement: false,
                         include: [],
@@ -659,6 +705,216 @@ describe("achievement", () => {
         );
         const manifest = builder.buildBp();
         expect(manifest.metadata).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Clean 模式（manifest.merge: "clean"）
+// ---------------------------------------------------------------------------
+
+describe("manifest.merge = clean", () => {
+    function cleanConfig(manifest: {
+        merge?: "preserve" | "clean";
+        minEngineVersion?: string;
+        extraDependencies?: Record<string, unknown>[];
+        extraModules?: Record<string, unknown>[];
+        extraHeader?: Record<string, unknown>;
+    }) {
+        return baseConfig({
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                    name: "Test BP",
+                    manifest: {
+                        merge: manifest.merge ?? "clean",
+                        ...(manifest.minEngineVersion !== undefined
+                            ? { minEngineVersion: manifest.minEngineVersion }
+                            : {}),
+                        extraDependencies: manifest.extraDependencies ?? [],
+                        extraModules: manifest.extraModules ?? [],
+                        extraHeader: manifest.extraHeader ?? {},
+                    },
+                    dependencies: { "@minecraft/server": "2.6.0" },
+                    include: [],
+                },
+            },
+        });
+    }
+
+    it("丢弃根对象非 managed 字段", () => {
+        const existing: Manifest = {
+            minecraft_screening: true,
+            _comment: "note",
+            capabilities: ["raytraced"],
+        };
+        const manifest = createBuilder(cleanConfig({})).buildBp(existing);
+
+        expect(manifest.minecraft_screening).toBeUndefined();
+        expect(manifest._comment).toBeUndefined();
+        expect(manifest.capabilities).toBeUndefined();
+    });
+
+    it("丢弃用户手写 dependency 和额外 module", () => {
+        const existing: Manifest = {
+            dependencies: [
+                { module_name: "my-custom-lib", version: "3.0.0" },
+                {
+                    uuid: "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz",
+                    version: [1, 0, 0] as ManifestVersion,
+                },
+            ],
+            modules: [
+                {
+                    type: "script",
+                    language: "javascript",
+                    uuid: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+                    version: [1, 0, 0] as ManifestVersion,
+                    entry: "scripts/custom.js",
+                },
+            ],
+        };
+        const manifest = createBuilder(cleanConfig({})).buildBp(existing);
+
+        expect(manifest.dependencies).toHaveLength(1);
+        expect(manifest.dependencies![0]).toMatchObject({ module_name: "@minecraft/server" });
+        expect(manifest.modules).toHaveLength(1);
+        expect(manifest.modules![0]).toMatchObject({
+            type: "script",
+            uuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        });
+    });
+
+    it("minEngineVersion 写入 header.min_engine_version（format 2 转数组）", () => {
+        const manifest = createBuilder(cleanConfig({ minEngineVersion: "1.21.80" })).buildBp();
+        expect(manifest.header!.min_engine_version).toEqual([1, 21, 80]);
+    });
+
+    it("format 3 时 minEngineVersion 保持字符串", () => {
+        const builder = createBuilder(cleanConfig({ minEngineVersion: "1.26.0" }));
+        const manifest = builder.buildBp({ format_version: 3 } as Manifest);
+        expect(manifest.header!.min_engine_version).toBe("1.26.0");
+    });
+
+    it("未配置 minEngineVersion 使用默认值", () => {
+        const manifest = createBuilder(cleanConfig({})).buildBp();
+        expect(manifest.header!.min_engine_version).toEqual([1, 21, 0]);
+    });
+
+    it("extraHeader 合并进 header", () => {
+        const manifest = createBuilder(
+            cleanConfig({ extraHeader: { product_icon: "icon.png" } })
+        ).buildBp();
+        expect(manifest.header!.product_icon).toBe("icon.png");
+    });
+
+    it("extraDependencies 原样追加", () => {
+        const extra = [{ module_name: "my-custom-lib", version: "3.0.0" }];
+        const manifest = createBuilder(cleanConfig({ extraDependencies: extra })).buildBp();
+        expect(manifest.dependencies).toHaveLength(2);
+        expect(manifest.dependencies).toContainEqual(extra[0]);
+    });
+
+    it("extraModules 原样追加", () => {
+        const extra = [
+            {
+                type: "script",
+                language: "javascript",
+                uuid: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+                version: [1, 0, 0] as ManifestVersion,
+                entry: "scripts/custom.js",
+            },
+        ];
+        const manifest = createBuilder(cleanConfig({ extraModules: extra })).buildBp();
+        expect(manifest.modules).toHaveLength(2);
+        expect(manifest.modules![1]).toEqual(extra[0]);
+    });
+
+    it("RP clean 模式丢弃非 managed 字段并写入 extra", () => {
+        const config = baseConfig({
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    name: "BP",
+                    manifest: DEFAULT_MANIFEST,
+                    dependencies: {},
+                    include: [],
+                },
+                rp: {
+                    root: "rp",
+                    uuid: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                    moduleUuid: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+                    name: "Test RP",
+                    manifest: {
+                        merge: "clean",
+                        minEngineVersion: "1.21.80",
+                        extraModules: [],
+                        extraHeader: { pack_scope: "global" },
+                        extraDependencies: [
+                            { uuid: "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz", version: [1, 0, 0] },
+                        ],
+                    },
+                    include: [],
+                },
+            },
+        });
+        const existing: Manifest = {
+            capabilities: ["raytraced"],
+            dependencies: [{ module_name: "stale", version: "1.0.0" }],
+            header: { product_icon: "old.png", min_engine_version: [1, 20, 0] as ManifestVersion },
+        };
+        const manifest = createBuilder(config).buildRp(existing);
+
+        expect(manifest.capabilities).toBeUndefined();
+        expect(manifest.header!.product_icon).toBeUndefined();
+        expect(manifest.header!.min_engine_version).toEqual([1, 21, 80]);
+        expect(manifest.header!.pack_scope).toBe("global");
+        expect(manifest.dependencies).toHaveLength(2);
+        expect(manifest.dependencies).toContainEqual({
+            uuid: "a",
+            version: [1, 0, 0] as ManifestVersion,
+        });
+        expect(manifest.dependencies).toContainEqual({
+            uuid: "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz",
+            version: [1, 0, 0] as ManifestVersion,
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// UNSUPPORTED_DEPENDENCY 报错增强
+// ---------------------------------------------------------------------------
+
+describe("UNSUPPORTED_DEPENDENCY", () => {
+    it("列出可用 catalog 并给出扩展指引", () => {
+        const config = baseConfig({
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                    name: "Test BP",
+                    manifest: DEFAULT_MANIFEST,
+                    dependencies: { "my-unknown-lib": "1.0.0" },
+                    include: [],
+                },
+            },
+        });
+        try {
+            createBuilder(config).buildBp();
+            throw new Error("expected UNSUPPORTED_DEPENDENCY");
+        } catch (error) {
+            expect((error as Error).message).toContain(
+                "my-unknown-lib is not a managed dependency"
+            );
+            const bepackError = error as { code?: string; suggestions?: string[] };
+            expect(bepackError.code).toBe("UNSUPPORTED_DEPENDENCY");
+            expect(bepackError.suggestions?.[0]).toContain("@minecraft/server");
+            expect(bepackError.suggestions?.[1]).toContain("install.dependencyCatalog");
+        }
     });
 });
 
@@ -844,8 +1100,10 @@ describe("ManifestDepManager.isAllowedSpecifier", () => {
 });
 
 describe("ManifestDepManager.isAchievementCompatible", () => {
-    it("stable 通过", () => expect(ManifestDepManager.isAchievementCompatible("stable")).toBe(true));
+    it("stable 通过", () =>
+        expect(ManifestDepManager.isAchievementCompatible("stable")).toBe(true));
     it("版本号通过", () => expect(ManifestDepManager.isAchievementCompatible("2.6.0")).toBe(true));
     it("beta 拒绝", () => expect(ManifestDepManager.isAchievementCompatible("beta")).toBe(false));
-    it("preview 拒绝", () => expect(ManifestDepManager.isAchievementCompatible("preview")).toBe(false));
+    it("preview 拒绝", () =>
+        expect(ManifestDepManager.isAchievementCompatible("preview")).toBe(false));
 });

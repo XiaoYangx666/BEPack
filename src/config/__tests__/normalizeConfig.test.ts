@@ -508,6 +508,185 @@ describe("compile 配置", () => {
         expect(config.packs.bp!.compile!.useNpx).toBe(false);
     });
 
+    it("compile.define 默认空对象", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    compile: { entry: "src/main.ts" },
+                },
+            },
+        });
+        expect(config.packs.bp!.compile!.define).toEqual({});
+    });
+
+    it("compile.define 保留合法表达式值", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    compile: {
+                        entry: "src/main.ts",
+                        define: {
+                            __TARGET__: JSON.stringify("server"),
+                            __FLAG__: "true",
+                            __ENV__: "process.env.NODE_ENV",
+                        },
+                    },
+                },
+            },
+        });
+        expect(config.packs.bp!.compile!.define).toEqual({
+            __TARGET__: '"server"',
+            __FLAG__: "true",
+            __ENV__: "process.env.NODE_ENV",
+        });
+    });
+
+    it("compile.define 非法表达式值抛出 CONFIG_INVALID", () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    bp: {
+                        root: "bp",
+                        uuid: "a",
+                        moduleUuid: "b",
+                        compile: {
+                            entry: "src/main.ts",
+                            define: { __BAD__: "this is not an expression {" },
+                        },
+                    },
+                },
+            })
+        ).toThrow('packs.bp.compile.define["__BAD__"] is not a valid JavaScript expression');
+    });
+
+    it("同一 key 同时配置 replace.values 与 compile.define 报错", () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                replace: { values: { __TARGET__: "client" } },
+                packs: {
+                    bp: {
+                        root: "bp",
+                        uuid: "a",
+                        moduleUuid: "b",
+                        compile: {
+                            entry: "src/main.ts",
+                            define: { __TARGET__: '"server"' },
+                        },
+                    },
+                },
+            })
+        ).toThrow(
+            'Config conflict: "__TARGET__" is configured in both replace.values and packs.bp.compile.define'
+        );
+    });
+
+    it("不同 key 的 replace 与 define 不冲突", () => {
+        const config = normalizeConfig({
+            name: "test",
+            replace: { values: { "**AUTHOR**": "me" } },
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    compile: { entry: "src/main.ts", define: { __TARGET__: '"server"' } },
+                },
+            },
+        });
+        expect(config.packs.bp!.compile!.define).toEqual({ __TARGET__: '"server"' });
+        expect(config.replace.values).toEqual({ "**AUTHOR**": "me" });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// manifest 生成策略
+// ---------------------------------------------------------------------------
+
+describe("manifest 生成策略", () => {
+    it("默认 merge=preserve", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: { bp: { root: "bp", uuid: "a", moduleUuid: "b" } },
+        });
+        expect(config.packs.bp!.manifest.merge).toBe("preserve");
+        expect(config.packs.bp!.manifest.extraDependencies).toEqual([]);
+        expect(config.packs.bp!.manifest.extraModules).toEqual([]);
+        expect(config.packs.bp!.manifest.extraHeader).toEqual({});
+        expect(config.packs.bp!.manifest.minEngineVersion).toBeUndefined();
+    });
+
+    it("merge=clean 生效", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    manifest: { merge: "clean", minEngineVersion: "1.21.80" },
+                },
+            },
+        });
+        expect(config.packs.bp!.manifest.merge).toBe("clean");
+        expect(config.packs.bp!.manifest.minEngineVersion).toBe("1.21.80");
+    });
+
+    it("RP manifest 配置生效", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                rp: {
+                    root: "rp",
+                    uuid: "c",
+                    moduleUuid: "d",
+                    manifest: { merge: "clean" },
+                },
+            },
+        });
+        expect(config.packs.rp!.manifest.merge).toBe("clean");
+    });
+
+    it("非法 merge 值抛出 CONFIG_INVALID", () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    bp: {
+                        root: "bp",
+                        uuid: "a",
+                        moduleUuid: "b",
+                        manifest: { merge: "delete" as never },
+                    },
+                },
+            })
+        ).toThrow('manifest.merge must be "preserve" or "clean"');
+    });
+
+    it("非法 minEngineVersion 抛出 CONFIG_INVALID", () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    bp: {
+                        root: "bp",
+                        uuid: "a",
+                        moduleUuid: "b",
+                        manifest: { merge: "clean", minEngineVersion: "latest" },
+                    },
+                },
+            })
+        ).toThrow('manifest.minEngineVersion must be a SemVer string like "1.21.0"');
+    });
 });
 
 // ---------------------------------------------------------------------------

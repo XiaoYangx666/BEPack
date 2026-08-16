@@ -10,6 +10,13 @@ import type { ResolvedConfig } from "../../config/configTypes.js";
 // 测试辅助
 // ---------------------------------------------------------------------------
 
+const DEFAULT_MANIFEST = {
+    merge: "preserve" as const,
+    extraDependencies: [],
+    extraModules: [],
+    extraHeader: {},
+};
+
 function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
     return {
         root: ".",
@@ -31,6 +38,7 @@ function baseConfig(overrides?: Partial<ResolvedConfig>): ResolvedConfig {
                 uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                 name: "Test BP",
+                manifest: DEFAULT_MANIFEST,
                 dependencies: {},
                 include: [],
             },
@@ -85,8 +93,8 @@ describe("ManifestBuilder format_version 行为", () => {
     it("保留 existing.format_version = 3（RP）", () => {
         const config = baseConfig({
             packs: {
-                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", dependencies: {}, include: [] },
-                rp: { root: "rp", uuid: "c", moduleUuid: "d", name: "RP", include: [] },
+                bp: { root: "bp", uuid: "a", moduleUuid: "b", name: "BP", manifest: DEFAULT_MANIFEST, dependencies: {}, include: [] },
+                rp: { root: "rp", uuid: "c", moduleUuid: "d", name: "RP", manifest: DEFAULT_MANIFEST, include: [] },
             },
         });
         const builder = createBuilder(config);

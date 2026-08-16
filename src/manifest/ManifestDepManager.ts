@@ -105,10 +105,23 @@ export class ManifestDepManager {
 
         for (const [name, specifier] of Object.entries(this.config.packs.bp.dependencies)) {
             if (!this.catalog[name]) {
+                const available = Object.keys(this.catalog);
+                const suggestion =
+                    available.length > 0
+                        ? [
+                              `Managed packages: ${available.join(", ")}.`,
+                              "Add a missing package to install.dependencyCatalog, or remove it from packs.bp.dependencies.",
+                          ]
+                        : [
+                              "No managed packages are available. Extend install.dependencyCatalog to add one.",
+                          ];
                 throw new BePackError(
                     "UNSUPPORTED_DEPENDENCY",
-                    `${name} is not a managed dependency. Add it to install.dependencyCatalog or remove it from packs.bp.dependencies.`,
-                    { details: { package: name } }
+                    `${name} is not a managed dependency.`,
+                    {
+                        details: { package: name },
+                        suggestions: suggestion,
+                    }
                 );
             }
             if (!ManifestDepManager.isAllowedSpecifier(specifier)) {
@@ -252,5 +265,35 @@ export class ManifestDepManager {
                 version: this.getFormatAwareVersion(formatVersion),
             },
         ];
+    }
+
+    // -----------------------------------------------------------------------
+    // Clean 模式依赖构建（丢弃非 managed 条目）
+    // -----------------------------------------------------------------------
+
+    /** clean 模式 BP 依赖：管理依赖 + RP 交叉引用 + extra 依赖。 */
+    buildBpDependenciesClean(
+        formatVersion: number,
+        rpUuid: string | undefined,
+        extra: Record<string, unknown>[]
+    ): ManifestDependency[] {
+        const deps = this.buildManagedDependencies();
+        if (rpUuid) {
+            deps.push({ uuid: rpUuid, version: this.getFormatAwareVersion(formatVersion) });
+        }
+        return [...deps, ...(extra as ManifestDependency[])];
+    }
+
+    /** clean 模式 RP 依赖：BP 交叉引用 + extra 依赖。 */
+    buildRpDependenciesClean(
+        formatVersion: number,
+        bpUuid: string | undefined,
+        extra: Record<string, unknown>[]
+    ): ManifestDependency[] {
+        const deps: ManifestDependency[] = [];
+        if (bpUuid) {
+            deps.push({ uuid: bpUuid, version: this.getFormatAwareVersion(formatVersion) });
+        }
+        return [...deps, ...(extra as ManifestDependency[])];
     }
 }
