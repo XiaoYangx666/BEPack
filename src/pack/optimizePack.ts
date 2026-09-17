@@ -12,12 +12,16 @@ import type { FileMap, FilesTransform } from "./fileMap.js";
  * - every directory (recursively) becomes `<pack>/__brarchive/<relative-dir>.brarchive`
  *   holding that directory's own files;
  * - pack-root files such as `manifest.json` stay loose;
- * - path-addressed folders (`scripts`, `functions`, `texts`, `textures`, ...) stay loose,
- *   because the engine resolves those by path on disk;
+ * - the path-addressed folders listed in {@link DEFAULT_KEEP_LOOSE_BP} /
+ *   {@link DEFAULT_KEEP_LOOSE_RP} keep their real files loose, because the engine resolves
+ *   those by path on disk; their archive holds only 0-byte name stubs. `scripts` is **not**
+ *   one of them — Mojang ships it archived (see `behavior_packs/editor`), so do not add it
+ *   to that list;
  * - the packaged `manifest.json` gets `header.pack_optimization_version: "0.1.0"`, which
  *   is what makes the engine read registries (`blocks/`, `items/`, `entities/`, ...)
  *   from `__brarchive/`;
- * - JSON entries are minified, other entries are stored verbatim.
+ * - JSON entries are minified, other entries are stored verbatim. Entries that cannot be
+ *   decoded or parsed are stored byte-for-byte and reported via `OptimizeLogger.warn`.
  */
 
 /** Folder inside a pack root that holds the generated archives. */
@@ -57,6 +61,33 @@ export type OptimizeLogger = {
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+const utf16leDecoder = new TextDecoder("utf-16le");
+const utf16beDecoder = new TextDecoder("utf-16be");
+
+/**
+ * Decode JSON-ish bytes to text.
+ *
+ * Hand-edited Bedrock files are occasionally UTF-16 despite the ecosystem convention
+ * being UTF-8, so honour a BOM when one is present instead of decoding garbage. Without
+ * a BOM we assume UTF-8 — a heuristic, not a guarantee, which is why callers must treat
+ * a failed `JSON.parse` as "leave it alone" rather than "corrupt it".
+ */
+function decodeText(data: Uint8Array): string {
+    if (data.length >= 2) {
+        if (data[0] === 0xff && data[1] === 0xfe) return utf16leDecoder.decode(data.subarray(2));
+        if (data[0] === 0xfe && data[1] === 0xff) return utf16beDecoder.decode(data.subarray(2));
+    }
+    // UTF-8 BOM (EF BB BF) also decodes to U+FEFF, which stripBom then removes.
+    return textDecoder.decode(data);
+}
+
+/** True when the bytes start with a UTF-16 BOM. */
+export function hasUtf16Bom(data: Uint8Array): boolean {
+    return (
+        data.length >= 2 &&
+        ((data[0] === 0xff && data[1] === 0xfe) || (data[0] === 0xfe && data[1] === 0xff))
+    );
+}
 
 function stripBom(text: string): string {
     return text.startsWith("\uFEFF") ? text.slice(1) : text;
@@ -99,7 +130,7 @@ function readManifest(files: FileMap): Record<string, unknown> | undefined {
 function readManifestBytes(raw: Uint8Array | undefined): Record<string, unknown> | undefined {
     if (!raw) return undefined;
     try {
-        return asRecord(JSON.parse(stripBom(textDecoder.decode(raw))));
+        return asRecord(JSON.parse(stripBom(decodeText(raw))));
     } catch {
         return undefined;
     }
@@ -144,13 +175,26 @@ function warnIfEngineTooOld(
     );
 }
 
-function minifyJson(entryName: string, data: Uint8Array): Uint8Array {
+/**
+ * Minify one archive entry, or return it untouched.
+ *
+ * Anything that is not a `.json` entry, or that cannot be decoded and parsed as JSON, is
+ * passed through byte-for-byte. Those misses are reported to `logger.warn` rather than
+ * swallowed: a `minifyJson: true` run that quietly skipped a file is indistinguishable
+ * from one that minified it, which makes a bad source file very hard to notice.
+ */
+function minifyJson(entryName: string, data: Uint8Array, logger?: OptimizeLogger): Uint8Array {
     if (!entryName.toLowerCase().endsWith(".json")) return data;
     try {
-        const parsed: unknown = JSON.parse(stripBom(textDecoder.decode(data)));
+        const parsed: unknown = JSON.parse(stripBom(decodeText(data)));
         return textEncoder.encode(JSON.stringify(parsed));
-    } catch {
-        // Not valid JSON (or not UTF-8) — store it untouched rather than corrupting it.
+    } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        const encoding = hasUtf16Bom(data) ? " (UTF-16)" : "";
+        logger?.warn(
+            `pack optimization: could not minify ${entryName}${encoding}, storing it unchanged. ` +
+                `${reason}. Fix the JSON to have it minified.`
+        );
         return data;
     }
 }
@@ -166,7 +210,7 @@ function withPackOptimizationVersion(raw: Uint8Array | undefined, version: strin
 
     let manifest: Record<string, unknown>;
     try {
-        const parsed = asRecord(JSON.parse(stripBom(textDecoder.decode(raw))));
+        const parsed = asRecord(JSON.parse(stripBom(decodeText(raw))));
         if (!parsed) throw new Error("manifest is not an object");
         manifest = parsed;
     } catch {
@@ -243,7 +287,7 @@ export function optimizePackFiles(
         } else {
             entries.push({
                 name: entryName,
-                data: options.minifyJson ? minifyJson(entryName, data) : data,
+                data: options.minifyJson ? minifyJson(entryName, data, logger) : data,
             });
             archivedCount++;
             if (keepFileLoose) duplicated[name] = data;

@@ -216,6 +216,51 @@ describe("optimizePackFiles", () => {
         );
     });
 
+    it("warns instead of silently skipping a JSON entry it cannot minify", () => {
+        const warnings: string[] = [];
+        const output = optimizePackFiles(
+            files({
+                "manifest.json": manifest(),
+                "entities/broken.json": "{ not json",
+                "entities/large.json": '{ "a" : 1 }',
+            }),
+            options(),
+            { pack: () => {}, warn: (message) => warnings.push(message) }
+        );
+
+        // The broken entry is still stored verbatim, but no longer invisibly.
+        expect(entryText(output, "__brarchive/entities.brarchive", "broken.json")).toBe(
+            "{ not json"
+        );
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain("broken.json");
+        expect(warnings[0]).toContain("storing it unchanged");
+    });
+
+    it("minifies JSON entries encoded as UTF-16 with a BOM", () => {
+        const source = '{ "a" : 1 }';
+        const utf16le = new Uint8Array([
+            0xff,
+            0xfe,
+            ...Array.from(source, (char) => [char.charCodeAt(0) & 0xff, char.charCodeAt(0) >> 8]).flat(),
+        ]);
+        const output = optimizePackFiles(
+            files({ "manifest.json": manifest(), "entities/le.json": utf16le }),
+            options()
+        );
+        expect(entryText(output, "__brarchive/entities.brarchive", "le.json")).toBe('{"a":1}');
+    });
+
+    it("does not warn for non-JSON entries", () => {
+        const warnings: string[] = [];
+        optimizePackFiles(
+            files({ "manifest.json": manifest(), "entities/notes.txt": "  keep  " }),
+            options(),
+            { pack: () => {}, warn: (message) => warnings.push(message) }
+        );
+        expect(warnings).toEqual([]);
+    });
+
     it("keeps JSON readable when minifyJson is disabled", () => {
         const raw = '{ "a" : 1 }';
         const output = optimizePackFiles(
