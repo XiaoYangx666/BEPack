@@ -25,7 +25,9 @@ BePack 是 Minecraft 基岩版附加包的构建工具。它将行为包和资�
 - 从零创建 BePack 配置，或从已有 manifest 导入配置。
 - 同步 `manifest.json`，同时保留不由 BePack 管理的字段。
 - 将行为包的 TypeScript Script API 入口构建到 `scripts/` 目录。
+- 打包前用 `tsc --noEmit` 做类型检查——**默认开启**。
 - 通过 `compile.define`（标识符级、typecheck 安全）或 `replace` 标记注入编译期 feature flag。
+- 自定义 Rolldown 构建：内联选项、函数，或独立的 `rolldown.config.ts`。
 - 解析受支持的 `@minecraft/*` 依赖，并将具体版本写入项目。
 - 以 `preserve`（增量）或 `clean`（从配置生成）策略同步 `manifest.json`。
 - 将包复制到 Minecraft 开发目录，并生成发布压缩包。
@@ -172,7 +174,41 @@ bepack install --target 1.21.120
 bepack build --install --target 1.21.120
 ```
 
+> **类型检查默认开启。** 每次 `bepack build` / `bepack dev` 都会先用 `tsc --noEmit` 检查源码，再交给 Rolldown 打包。检查失败会以 `TYPECHECK_FAILED` 终止构建，而不是产出一个损坏的包。可用 `--skip-typecheck` 跳过，或设置 `packs.bp.compile.typecheck: false`。这与自定义 Rolldown 选项无关——加了自定义选项**不会**关闭类型检查。
+
 受支持的 `@minecraft/*` 依赖可使用 `stable`、`beta`、`preview` 或精确版本。BePack 会先把如 `stable` 这样的选择器解析为具体包版本，再更新 `package.json` 和 BP manifest。
+
+## 自定义 Rolldown 构建
+
+`packs.bp.compile` 覆盖了常见场景。需要 Rolldown 的其它能力时（额外插件、`resolve.alias`、`treeshake`、`sourcemap` 等），可以用内联选项、函数或配置文件传入：
+
+```ts
+export default defineConfig({
+    // 此处省略 name、version、packs.bp.root、uuid 等
+    packs: {
+        bp: {
+            compile: {
+                entry: "src/main.ts",
+                // 对象形式，或函数形式 (options, context) => options
+                rolldown: {
+                    resolve: { alias: { "@lib": "./src/lib" } },
+                    output: { sourcemap: true },
+                },
+                // 或使用配置文件（相对项目根）：
+                // rolldownConfig: "rolldown.bp.config.ts",
+            },
+        },
+    },
+});
+```
+
+```bash
+# 临时替换配置里指定的文件
+bepack build --rolldown-config rolldown.staging.mjs
+bepack dev --rolldown-config rolldown.staging.mjs
+```
+
+自定义选项会合并在 BePack 生成的选项之上：`plugins` 追加，`external` 取并集，`transform` / `resolve` / `output` / `experimental` 一层深合并。`input` 和输出位置字段始终由 BePack 管理，尝试修改会报 `CONFIG_INVALID`。自定义配置文件支持 `.ts` / `.mts` / `.js` / `.mjs`，且只能导出单个配置。完整合并规则与受保护字段见[参考文档](./reference.md)。
 
 ## 开发时复制到 Minecraft
 
@@ -234,16 +270,16 @@ bepack pack --name my-addon-preview
 
 ## 命令速查
 
-| 命令                      | 用途                                                  |
-| ------------------------- | ----------------------------------------------------- |
-| `bepack init`             | 创建配置，或用 `--from-bp` / `--from-rp` 导入配置。   |
-| `bepack install`          | 解析受管理的依赖，并更新 `package.json` 和 manifest。 |
-| `bepack manifest`         | 不安装依赖，仅更新 manifest。                         |
-| `bepack build`            | 修补 manifest 并编译已配置的 BP 源码。                |
-| `bepack dev`              | 先构建一次，随后监听并重建。                          |
-| `bepack copy`             | 复制已配置的包到开发目标。                            |
-| `bepack pack`             | 生成 `.mcpack` 或 `.mcaddon`。                        |
-| `bepack config --summary` | 查看解析后的配置摘要。                                |
+| 命令                      | 用途                                                          |
+| ------------------------- | ------------------------------------------------------------- |
+| `bepack init`             | 创建配置，或用 `--from-bp` / `--from-rp` 导入配置。           |
+| `bepack install`          | 解析受管理的依赖，并更新 `package.json` 和 manifest。         |
+| `bepack manifest`         | 不安装依赖，仅更新 manifest。                                 |
+| `bepack build`            | 修补 manifest，用 `tsc` 类型检查，再编译已配置的 BP 源码。    |
+| `bepack dev`              | 先构建一次，随后监听并重建（类型检查默认开启）。              |
+| `bepack copy`             | 复制已配置的包到开发目标。                                    |
+| `bepack pack`             | 生成 `.mcpack` 或 `.mcaddon`。                                |
+| `bepack config --summary` | 查看解析后的配置摘要。                                        |
 
 所有命令都支持 `--cwd <项目目录>` 和 `--config <路径>`，可用于在非项目目录执行或使用不同的配置文件名。对于会写入文件的命令，可添加 `--dry-run` 预览；如需机器可读输出，可添加 `--json`。使用 `bepack <命令> --help` 查看每个命令的全部参数。
 

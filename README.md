@@ -25,7 +25,9 @@ BePack is a build tool for Minecraft Bedrock add-ons. It keeps behavior-pack and
 - Create a BePack configuration from scratch or import it from existing manifests.
 - Keep `manifest.json` in sync without overwriting fields that BePack does not own.
 - Build a Behavior Pack's TypeScript Script API entry into its `scripts/` directory.
+- Type-check that source with `tsc --noEmit` before bundling — **on by default**.
 - Inject build-time feature flags with `compile.define` (identifier-level, typecheck-safe) or `replace` tokens.
+- Customize the Rolldown build with inline options, a function, or your own `rolldown.config.ts`.
 - Resolve supported `@minecraft/*` dependencies and write their concrete versions to your project.
 - Keep `manifest.json` in sync with a `preserve` (incremental) or `clean` (config-generated) merge strategy.
 - Copy packs into a Minecraft development folder and create release archives.
@@ -172,7 +174,41 @@ bepack install --target 1.21.120
 bepack build --install --target 1.21.120
 ```
 
+> **Type checking runs by default.** Every `bepack build` and `bepack dev` executes `tsc --noEmit` before Rolldown bundles your source. A failing check stops the build with `TYPECHECK_FAILED` instead of emitting a broken pack. Skip it with `--skip-typecheck`, or set `packs.bp.compile.typecheck: false`. This is independent of any custom Rolldown options — adding them does **not** turn the type check off.
+
 `stable`, `beta`, `preview`, and exact versions can be used for the supported `@minecraft/*` dependency entries. BePack resolves selectors such as `stable` to concrete package versions before updating `package.json` and the BP manifest.
+
+## Customize the Rolldown build
+
+`packs.bp.compile` covers the common cases. When you need the rest of Rolldown (extra plugins, `resolve.alias`, `treeshake`, `sourcemap`, ...), pass your own options inline, through a function, or through a config file:
+
+```ts
+export default defineConfig({
+    // name, version, packs.bp.root, uuid, ... omitted
+    packs: {
+        bp: {
+            compile: {
+                entry: "src/main.ts",
+                // Object form, or a function (options, context) => options
+                rolldown: {
+                    resolve: { alias: { "@lib": "./src/lib" } },
+                    output: { sourcemap: true },
+                },
+                // Or a config file (relative to the project root):
+                // rolldownConfig: "rolldown.bp.config.ts",
+            },
+        },
+    },
+});
+```
+
+```bash
+# Temporarily replace the configured file
+bepack build --rolldown-config rolldown.staging.mjs
+bepack dev --rolldown-config rolldown.staging.mjs
+```
+
+Your options are merged on top of the ones BePack generates: `plugins` are appended, `external` is unioned, and `transform` / `resolve` / `output` / `experimental` are merged one level deep. `input` and the output location fields stay under BePack's control and are rejected with `CONFIG_INVALID` if a customization tries to move them. Custom config files may be `.ts`, `.mts`, `.js`, or `.mjs` and must export a single configuration. See [the reference guide](./reference.md) for the full merge table and the list of protected fields.
 
 ## Run in Minecraft during development
 
@@ -234,16 +270,16 @@ bepack pack --name my-addon-preview
 
 ## Commands at a glance
 
-| Command                   | Purpose                                                               |
-| ------------------------- | --------------------------------------------------------------------- |
-| `bepack init`             | Create a config, or import one with `--from-bp` / `--from-rp`.        |
-| `bepack install`          | Resolve managed dependencies and update `package.json` and manifests. |
-| `bepack manifest`         | Update manifests without running dependency installation.             |
-| `bepack build`            | Patch manifests and compile the configured BP source.                 |
-| `bepack dev`              | Build once, then watch and rebuild.                                   |
-| `bepack copy`             | Copy configured packs to a development target.                        |
-| `bepack pack`             | Create a `.mcpack` or `.mcaddon`.                                     |
-| `bepack config --summary` | Inspect the resolved configuration.                                   |
+| Command                   | Purpose                                                                          |
+| ------------------------- | -------------------------------------------------------------------------------- |
+| `bepack init`             | Create a config, or import one with `--from-bp` / `--from-rp`.                    |
+| `bepack install`          | Resolve managed dependencies and update `package.json` and manifests.             |
+| `bepack manifest`         | Update manifests without running dependency installation.                         |
+| `bepack build`            | Patch manifests, type-check with `tsc`, then compile the configured BP source.    |
+| `bepack dev`              | Build once, then watch and rebuild (type checking on by default).                 |
+| `bepack copy`             | Copy configured packs to a development target.                                    |
+| `bepack pack`             | Create a `.mcpack` or `.mcaddon`.                                                 |
+| `bepack config --summary` | Inspect the resolved configuration.                                               |
 
 All commands accept `--cwd <project-dir>` and `--config <path>` when the current directory or config filename is different. Add `--dry-run` to preview file-writing commands, or `--json` for machine-readable output. Run `bepack <command> --help` for every command option.
 

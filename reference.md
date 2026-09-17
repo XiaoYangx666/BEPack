@@ -139,6 +139,7 @@ type UserConfig = {
                  */
                 define?: Record<string, string>;
                 tsconfig?: string;
+                /** 打包前是否运行 tsc 类型检查。默认 true（即默认会跑）。 */
                 typecheck?: boolean;
                 preserveModules?: boolean;
                 external?: (string | RegExp)[];
@@ -151,6 +152,13 @@ type UserConfig = {
                 };
                 /** 编译脚本输出目录，相对于 BP root。默认 "scripts"。 */
                 scriptOutputDir?: string;
+                /**
+                 * 额外的 Rolldown 选项（对象），或自定义函数 (options, context) => options。
+                 * 在 BePack 生成的选项之上增量合并；input 与输出位置字段由 BePack 管理。
+                 */
+                rolldown?: RolldownOptions | RolldownCustomizeFunction;
+                /** Rolldown 配置文件路径（相对项目根或绝对路径），支持 .ts/.mts/.js/.mjs。 */
+                rolldownConfig?: string;
             };
             /** 所有 BP 依赖都在此声明——包括清单依赖和纯代码依赖。 */
             dependencies?: Record<string, "stable" | "beta" | "preview" | string>;
@@ -512,23 +520,27 @@ client 侧保持默认 `preserve`（尊重手写 manifest），server 侧 `clean
 ```txt
 清单修补
 hooks.beforeBuild
-类型检查
+类型检查（tsc --noEmit，默认开启）
 Rolldown 构建
 hooks.afterBuild
 可选复制
 可选打包
 ```
 
+> **默认会运行 TypeScript 类型检查。** 只要配置了 `packs.bp.compile`，`bepack build` 与 `bepack dev` 都会在 Rolldown 打包**之前**执行 `tsc --noEmit`；检查失败会以 `TYPECHECK_FAILED` 终止本次构建，不会产出残缺脚本。跳过方式：CLI `--skip-typecheck`，或 `packs.bp.compile.typecheck: false`。注意类型检查与打包是两件独立的事——自定义 Rolldown 选项、替换 `rolldown` 配置都不会关闭它，要关只能显式配置。
+
 CLI 选项：
 
 - `--mode <value>`：执行模式，透传给 Hook 上下文（`HookContext.mode`）。不设则为 `undefined`。Hook 内自行判断是否执行特定逻辑。
+- `--rolldown-config <path>`：临时指定 Rolldown 配置文件，覆盖 `packs.bp.compile.rolldownConfig`（`bepack dev` 同样支持）。
 
 类型检查行为：
 
-- 默认：系统 `tsc --noEmit`。
+- **默认：系统 `tsc --noEmit`（`packs.bp.compile.typecheck` 默认为 `true`）。** 只有显式设置 `typecheck: false` 或传 `--skip-typecheck` 才会跳过。
 - `build.useNpx: true` 或 `--use-npx`：`npx tsc --noEmit`。
 - `packs.bp.compile.cache`：增量编译缓存配置。`cache.dev`（默认 `true`）控制 dev 模式；`cache.build`（默认 `false`）控制 build 模式。`cache.file` 指定 `.tsbuildinfo` 路径。`bepack build --cache` / `--no-cache` 可覆盖 build 模式。`dev` 命令默认启用缓存。
 - 缺少 `tsconfig.json` 会提前失败，返回 `TYPECHECK_FAILED`。
+- 类型检查在 `hooks.beforeBuild` 之后、Rolldown 之前运行；`--dry-run` 会跳过它。
 
 Rolldown 行为：
 
@@ -544,7 +556,7 @@ Rolldown 行为：
 
 > 注意：构建命令（`build` / `dev`）不再要求 BP 必须存在。如果项目只有 RP 或 BP 没有配置 `compile`，则跳过编译流程，只执行 manifest 修补和可选的文件复制/打包。
 
-`packs.bp.compile.externalDependencies` 默认为 `true`，因此内置的 `manifest: true` 受管理包（例如 `@minecraft/server`、`@minecraft/server-ui`、`@minecraft/server-net`）不会被内联打包。`manifest: false` 的包（例如 `@minecraft/vanilla-data`）可以被内联打包。设置 `externalDependencies` 为 `false` 可自定义，或通过 `packs.bp.compile.external` 添加额外条目。
+`manifest: true` 的受管理包（例如 `@minecraft/server`、`@minecraft/server-ui`、`@minecraft/server-net`）**始终**作为 external 写入 rolldown，不会被内联打包；`manifest: false` 的包（例如 `@minecraft/vanilla-data`）可以被打包进产物。需要额外的 external 时，通过 `packs.bp.compile.external` 追加字符串或正则。
 
 `build.timing: true` 或 `--timing` 可在构建时显示各步骤的耗时明细，便于排查性能瓶颈：
 
@@ -555,6 +567,95 @@ timing    rolldown        45 ms
 ```
 
 `--timing` 同样支持 `bepack dev` 命令。
+
+## 自定义 Rolldown 配置
+
+`packs.bp.compile` 覆盖了常见场景，Rolldown 的完整能力通过三个入口开放：
+
+- `packs.bp.compile.rolldown`：内联选项对象，或自定义函数；
+- `packs.bp.compile.rolldownConfig`：Rolldown 配置文件路径（相对项目根或绝对路径）；
+- CLI：`bepack build --rolldown-config <path>` / `bepack dev --rolldown-config <path>`，临时替换配置文件。
+
+> 自定义 Rolldown 配置**不会**关闭类型检查：`bepack build` / `bepack dev` 依然会先执行 `tsc --noEmit`（默认开启，详见《构建》一节）。
+
+### 对象形式
+
+```ts
+packs: {
+    bp: {
+        compile: {
+            entry: "src/main.ts",
+            rolldown: {
+                resolve: { alias: { "@lib": "./src/lib" } },
+                treeshake: { moduleSideEffects: false },
+                output: { sourcemap: true },
+            },
+        },
+    },
+}
+```
+
+### 函数形式
+
+函数接收当前已合并的选项与上下文，返回值再按同样的规则合并一次；返回空则不做改动：
+
+```ts
+packs: {
+    bp: {
+        compile: {
+            rolldown(options, context) {
+                if (context.command === "dev") return { output: { sourcemap: true } };
+                return {};
+            },
+        },
+    },
+}
+```
+
+上下文 `RolldownCustomizeContext` 字段：`command`（`"build"` / `"dev"`）、`mode`（CLI `--mode`）、`target`、`entry`、`outDir`、`outFile`、`preserveModules`，路径均为绝对路径。
+
+### 配置文件
+
+配置文件由 Rolldown 自带的加载器读取，因此 `.ts` / `.mts` / `.js` / `.mjs` 都支持，默认导出可以是选项对象、单元素数组或函数（与 `rolldown.config.ts` 用法一致）：
+
+```ts
+// rolldown.bp.config.ts
+import { defineConfig } from "rolldown";
+
+export default defineConfig({
+    resolve: { alias: { "@lib": "./src/lib" } },
+});
+```
+
+- 只支持**单个**配置：导出多元素数组会报 `CONFIG_INVALID`（BePack 每次只构建一个 BP）。
+- `.ts` 配置文件会先被 Rolldown 打包成 `rolldown.config.<hash>.js` 再导入，随后删除；`dev` watcher 已忽略该临时文件。
+- 优先级：`--rolldown-config` > `compile.rolldownConfig` > `compile.rolldown`。
+
+### 合并规则
+
+BePack 先生成基础选项，再把自定义选项合并上去：
+
+| 字段 | 规则 |
+| --- | --- |
+| `plugins` | 追加在 BePack 插件（replace / define）之后 |
+| `external` | 取并集（字符串去重，`RegExp` 原样保留） |
+| `transform`、`resolve`、`experimental`、`checks`、`optimization`、`watch`、`moduleTypes`、`output` | 一层深合并；其中 `transform.define` 按 key 合并，不会清掉 `compile.define` |
+| 其它字段 | 用户值直接覆盖 |
+
+函数返回值按同一规则合并——因此只能追加，不能移除 BePack 的插件或受管理的外部依赖。
+
+### 受保护字段
+
+以下字段由 BePack 管理，配成其它值会报 `CONFIG_INVALID`（manifest 的 script entry、复制、打包、dev 监听都依赖它们）：
+
+| 字段 | 替代方式 |
+| --- | --- |
+| `input` | `packs.bp.compile.entry` |
+| `output.file` / `output.dir` | `packs.bp.compile.scriptOutputDir` |
+| `output.preserveModules` / `output.preserveModulesRoot` | `packs.bp.compile.preserveModules` |
+| `output.entryFileNames` | manifest script entry 假定"每个源模块一个 `.js`" |
+| `output.format` | Script API 只支持 ESM |
+| `output` 数组（多输出） | 不支持，BePack 只写一个输出 |
 
 ## 构建注入与条件编译
 
