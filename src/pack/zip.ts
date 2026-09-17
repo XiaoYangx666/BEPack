@@ -41,18 +41,6 @@ export async function zipSelectedItems(
     );
 }
 
-export async function zipAddon(
-    packs: { dir: string; transform?: FilesTransform }[],
-    output: string
-): Promise<void> {
-    const files: FileMap = {};
-    for (const pack of packs) {
-        const collected = await transformFiles(await collectDirFiles(pack.dir), pack.transform);
-        Object.assign(files, withPrefix(collected, path.basename(path.resolve(pack.dir))));
-    }
-    await writeZip(files, output);
-}
-
 export async function zipAddonSelected(
     packs: { source: string; items: string[]; transform?: FilesTransform }[],
     output: string

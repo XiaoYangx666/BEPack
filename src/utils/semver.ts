@@ -34,13 +34,6 @@ export function targetSupportsChannelDependency(target: string): boolean {
     return compareLooseSemver(target, "1.21.120") >= 0;
 }
 
-export function isStableApiSpecifier(value: string): boolean {
-    return (
-        value === "stable" ||
-        (isSpecificVersion(value) && !/(?:^|[-.])(beta|alpha|preview|rc)(?:[-.]|$)/i.test(value))
-    );
-}
-
 type ParsedCompatibilityVersion = {
     major: number;
     minor: number;

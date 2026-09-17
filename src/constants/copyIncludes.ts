@@ -24,16 +24,3 @@ export const DEFAULT_BP_INCLUDES = [
 
 /** Default files/folders included when copying a resource pack. */
 export const DEFAULT_RP_INCLUDES: string[] = [];
-
-/**
- * Merge default includes with user-configured additions.
- *
- * When the merged result is empty (e.g. RP with no user includes),
- * callers should fall back to copying the full directory.
- */
-export function getIncludes(
-    defaults: string[],
-    userAdditions: string[] | undefined
-): string[] {
-    return userAdditions?.length ? [...defaults, ...userAdditions] : defaults;
-}
