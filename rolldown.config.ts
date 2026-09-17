@@ -1,7 +1,9 @@
 import { defineConfig } from "rolldown";
 import { dts } from "rolldown-plugin-dts";
 
-const external = ["chokidar", "rolldown"];
+// `rolldown` subpaths (e.g. `rolldown/config`, `rolldown/plugins`) must stay external
+// too — bundling them would inline a second copy of rolldown's runtime.
+const external = ["chokidar", /^rolldown(\/.*)?$/];
 
 export default defineConfig([
     {
