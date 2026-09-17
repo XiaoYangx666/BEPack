@@ -154,7 +154,6 @@ type UserConfig = {
             };
             /** 所有 BP 依赖都在此声明——包括清单依赖和纯代码依赖。 */
             dependencies?: Record<string, "stable" | "beta" | "preview" | string>;
-            achievement?: boolean;
             /**
              * manifest 生成策略。
              * - `merge: "preserve"`（默认）：增量合并，保留用户手写字段。
@@ -453,7 +452,6 @@ BP 清单受控字段：
 - 脚本模块
 - BePack 管理的 `@minecraft/*` 依赖
 - BP/RP 相互依赖
-- `metadata.product_type`（仅在 `achievement: true` 时）
 
 RP 清单受控字段：
 
@@ -471,12 +469,6 @@ RP 清单受控字段：
 用户定义的清单字段会被保留。
 
 当同时配置了 BP 和 RP 时，BePack 会维护它们 header UUID 之间的相互依赖。
-
-成就元数据：
-
-- `packs.bp.achievement: true` 添加 `metadata.product_type = "addon"`。
-- 每个受管理的 Script API 依赖必须使用 `stable` 说明符。
-- 如果在启用成就时使用了 `beta` 或 `preview` 依赖，BePack 会抛出 `ACHIEVEMENT_REQUIRES_STABLE_API`。
 
 ### manifest 生成策略
 
@@ -785,7 +777,7 @@ copy: {
 ```
 scripts  manifest.json  animation_controllers  animations  biomes
 blocks  entities  functions  items  loot_tables  pack_icon.png
-recipes  spawn_rules  structures  texts  trading
+recipes  shapes  spawn_rules  structures  texts  trading
 feature_rules  features  worldgen
 ```
 
@@ -958,7 +950,6 @@ UNSUPPORTED_DEPENDENCY
 DEPENDENCY_VERSION_INVALID
 DEPENDENCY_REQUIRES_INSTALL
 SAPI_VERSION_NOT_FOUND
-ACHIEVEMENT_REQUIRES_STABLE_API
 TYPECHECK_FAILED
 BUILD_FAILED
 COPY_TARGET_NOT_FOUND

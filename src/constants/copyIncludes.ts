@@ -12,6 +12,7 @@ export const DEFAULT_BP_INCLUDES = [
     "loot_tables",
     "pack_icon.png",
     "recipes",
+    "shapes",
     "spawn_rules",
     "structures",
     "texts",

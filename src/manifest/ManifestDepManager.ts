@@ -88,13 +88,6 @@ export class ManifestDepManager {
         return specifier;
     }
 
-    /**
-     * 检查 specifier 是否与 achievement 模式兼容。
-     */
-    static isAchievementCompatible(specifier: string): boolean {
-        return specifier !== "beta" && specifier !== "preview";
-    }
-
     // -----------------------------------------------------------------------
     // 依赖校验
     // -----------------------------------------------------------------------
@@ -130,17 +123,6 @@ export class ManifestDepManager {
                     `${name} dependency version is invalid: ${specifier}`,
                     { details: { package: name, specifier } }
                 );
-            }
-        }
-
-        if (this.config.packs.bp.achievement) {
-            for (const [name, specifier] of Object.entries(this.config.packs.bp.dependencies)) {
-                if (!ManifestDepManager.isAchievementCompatible(specifier)) {
-                    throw new BePackError(
-                        "ACHIEVEMENT_REQUIRES_STABLE_API",
-                        `${name}: achievement requires stable Script API dependencies (${specifier} is not allowed).`
-                    );
-                }
             }
         }
     }

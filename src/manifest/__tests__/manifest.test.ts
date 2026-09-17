@@ -624,91 +624,6 @@ describe("PBR capability", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Achievement
-// ---------------------------------------------------------------------------
-
-describe("achievement", () => {
-    function withAchievement(deps: Record<string, string>): ManifestBuilder {
-        return createBuilder(
-            baseConfig({
-                packs: {
-                    bp: {
-                        root: "bp",
-                        uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                        moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-                        name: "Test BP",
-                        manifest: DEFAULT_MANIFEST,
-                        dependencies: deps,
-                        achievement: true,
-                        include: [],
-                    },
-                },
-            })
-        );
-    }
-
-    it("achievement + beta 抛出", () => {
-        expect(() => withAchievement({ "@minecraft/server": "beta" }).buildBp()).toThrow(
-            "achievement requires stable"
-        );
-    });
-
-    it("achievement + preview 抛出", () => {
-        expect(() => withAchievement({ "@minecraft/server": "preview" }).buildBp()).toThrow(
-            "achievement requires stable"
-        );
-    });
-
-    it("achievement + stable 通过", () => {
-        const builder = createBuilder(
-            baseConfig({
-                packs: {
-                    bp: {
-                        root: "bp",
-                        uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                        moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-                        name: "Test BP",
-                        manifest: DEFAULT_MANIFEST,
-                        dependencies: { "@minecraft/server": "stable" },
-                        achievement: true,
-                        include: [],
-                    },
-                },
-            }),
-            { "@minecraft/server": "2.6.0" }
-        );
-        const result = builder.buildBp();
-        expect(result.metadata).toMatchObject({ product_type: "addon" });
-    });
-
-    it("achievement + 具体版本通过", () => {
-        const manifest = withAchievement({ "@minecraft/server": "2.6.0" }).buildBp();
-        expect(manifest.metadata).toMatchObject({ product_type: "addon" });
-    });
-
-    it("achievement=false 不设置 product_type", () => {
-        const builder = createBuilder(
-            baseConfig({
-                packs: {
-                    bp: {
-                        root: "bp",
-                        uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                        moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-                        name: "Test BP",
-                        manifest: DEFAULT_MANIFEST,
-                        dependencies: { "@minecraft/server": "2.6.0" },
-                        achievement: false,
-                        include: [],
-                    },
-                },
-            })
-        );
-        const manifest = builder.buildBp();
-        expect(manifest.metadata).toBeUndefined();
-    });
-});
-
-// ---------------------------------------------------------------------------
 // Clean 模式（manifest.merge: "clean"）
 // ---------------------------------------------------------------------------
 
@@ -1097,13 +1012,4 @@ describe("ManifestDepManager.isAllowedSpecifier", () => {
     it.each(["", "abc", "latest"])("拒绝 '%s'", (v) => {
         expect(ManifestDepManager.isAllowedSpecifier(v)).toBe(false);
     });
-});
-
-describe("ManifestDepManager.isAchievementCompatible", () => {
-    it("stable 通过", () =>
-        expect(ManifestDepManager.isAchievementCompatible("stable")).toBe(true));
-    it("版本号通过", () => expect(ManifestDepManager.isAchievementCompatible("2.6.0")).toBe(true));
-    it("beta 拒绝", () => expect(ManifestDepManager.isAchievementCompatible("beta")).toBe(false));
-    it("preview 拒绝", () =>
-        expect(ManifestDepManager.isAchievementCompatible("preview")).toBe(false));
 });

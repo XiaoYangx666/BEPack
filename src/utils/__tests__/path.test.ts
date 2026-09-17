@@ -138,6 +138,9 @@ describe("getBpIncludeItems", () => {
     it("default items contain scripts", () => {
         expect(getBpIncludeItems(makeConfig())).toContain("scripts");
     });
+    it("default items contain shapes (voxel shapes)", () => {
+        expect(getBpIncludeItems(makeConfig())).toContain("shapes");
+    });
     it("custom dir replaces scripts", () => {
         const items = getBpIncludeItems(makeConfig({ scriptOutputDir: "build_scripts" }));
         expect(items).toContain("build_scripts");

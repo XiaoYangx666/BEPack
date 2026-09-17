@@ -333,9 +333,6 @@ export type BpConfig = PackConfig & {
     /** Script API dependencies managed in both package.json and bp/manifest.json. */
     dependencies?: Record<string, DependencySpecifier>;
 
-    /** Adds achievement-compatible metadata when every Script API dependency is stable. */
-    achievement?: boolean;
-
     /** Additional files/folders to include when copying/packing the behavior pack,
      * on top of built-in defaults (scripts/, manifest.json, animations/, etc.). */
     include?: string[];
@@ -547,7 +544,6 @@ export type ResolvedConfig = {
             compile?: BpCompileResolved;
             manifest: PackManifestResolved;
             dependencies: Record<string, DependencySpecifier>;
-            achievement?: boolean;
             include: string[];
         };
         rp?: {

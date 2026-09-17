@@ -7,7 +7,7 @@ import {
 } from "../constants/manifest.js";
 import { parseVersionTuple } from "../utils/semver.js";
 import type { ResolvedConfig } from "../config/configTypes.js";
-import { normalizeManifest, asArray, removeEmptyObject } from "./ManifestFile.js";
+import { normalizeManifest, asArray } from "./ManifestFile.js";
 import type { ManifestDepManager } from "./ManifestDepManager.js";
 import type {
     Manifest,
@@ -57,13 +57,9 @@ export class ManifestBuilder {
 
         const effectiveFormat = this.getWriteFormatVersion(existing);
 
-        const manifest: Manifest =
-            bp.manifest.merge === "clean"
-                ? this.buildCleanBp(bp, effectiveFormat)
-                : this.buildPreserveBp(existing, bp, effectiveFormat);
-
-        this.applyAchievementMetadata(manifest, bp);
-        return manifest;
+        return bp.manifest.merge === "clean"
+            ? this.buildCleanBp(bp, effectiveFormat)
+            : this.buildPreserveBp(existing, bp, effectiveFormat);
     }
 
     /**
@@ -339,23 +335,8 @@ export class ManifestBuilder {
     }
 
     // -----------------------------------------------------------------------
-    // Achievement / PBR
+    // PBR
     // -----------------------------------------------------------------------
-
-    private applyAchievementMetadata(
-        manifest: Manifest,
-        bp: NonNullable<ResolvedConfig["packs"]["bp"]>
-    ): void {
-        if (bp.achievement === true) {
-            manifest.metadata = { ...(manifest.metadata ?? {}), product_type: "addon" };
-        } else if (bp.achievement === false && manifest.metadata) {
-            const meta = { ...manifest.metadata };
-            delete meta.product_type;
-            const cleaned = removeEmptyObject(meta);
-            if (cleaned) manifest.metadata = cleaned;
-            else delete manifest.metadata;
-        }
-    }
 
     private applyPbrCapability(
         manifest: Manifest,

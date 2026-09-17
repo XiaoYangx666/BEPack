@@ -25,14 +25,6 @@ export function asRecord(value: unknown): Record<string, unknown> {
     return { ...(value as Record<string, unknown>) };
 }
 
-/** Return undefined if the object has no own enumerable keys. */
-export function removeEmptyObject<T extends Record<string, unknown>>(
-    value: T | undefined
-): T | undefined {
-    if (value && Object.keys(value).length === 0) return undefined;
-    return value;
-}
-
 // ---------------------------------------------------------------------------
 // ManifestFile — file I/O with normalization and validation
 // ---------------------------------------------------------------------------

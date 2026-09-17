@@ -379,7 +379,6 @@ export function normalizeConfig(
                               : {}),
                           manifest: normalizeManifestOptions(bp.manifest),
                           dependencies: bp.dependencies ?? {},
-                          ...(bp.achievement !== undefined ? { achievement: bp.achievement } : {}),
                           include: bp.include ?? [],
                       },
                   }
