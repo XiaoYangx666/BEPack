@@ -690,6 +690,84 @@ describe("manifest 生成策略", () => {
 });
 
 // ---------------------------------------------------------------------------
+// pack.optimize / copy.optimize
+// ---------------------------------------------------------------------------
+
+describe("pack.optimize 与 copy.optimize", () => {
+    const base = {
+        name: "test",
+        packs: { bp: { root: "bp", uuid: "a", moduleUuid: "b" } },
+    };
+
+    it("默认关闭", () => {
+        const config = normalizeConfig(base);
+        expect(config.pack.optimize).toBeUndefined();
+        expect(config.copy.optimize).toBeUndefined();
+    });
+
+    it("true 使用默认值", () => {
+        const config = normalizeConfig({
+            ...base,
+            pack: { optimize: true },
+            copy: { optimize: true },
+        });
+        expect(config.pack.optimize).toEqual({
+            keepLooseFiles: false,
+            keepLoose: [],
+            exclude: [],
+            minifyJson: true,
+            packOptimizationVersion: "0.1.0",
+            allowUnsupportedTarget: false,
+        });
+        expect(config.copy.optimize).toEqual(config.pack.optimize);
+    });
+
+    it("选项对象被解析", () => {
+        const config = normalizeConfig({
+            ...base,
+            pack: {
+                optimize: {
+                    keepLooseFiles: true,
+                    keepLoose: ["entities"],
+                    exclude: ["./blocks", "items\\"],
+                    minifyJson: false,
+                    packOptimizationVersion: "0.2.0",
+                    allowUnsupportedTarget: true,
+                },
+            },
+        });
+        expect(config.pack.optimize).toEqual({
+            keepLooseFiles: true,
+            keepLoose: ["entities"],
+            exclude: ["blocks", "items"],
+            minifyJson: false,
+            packOptimizationVersion: "0.2.0",
+            allowUnsupportedTarget: true,
+        });
+    });
+
+    it("keepLoose: false 表示不额外保留散文件", () => {
+        const config = normalizeConfig({ ...base, pack: { optimize: { keepLoose: false } } });
+        expect(config.pack.optimize?.keepLoose).toBe(false);
+    });
+
+    it("拒绝非法取值", () => {
+        expect(() => normalizeConfig({ ...base, pack: { optimize: 42 as never } })).toThrow(
+            /pack\.optimize must be/
+        );
+        expect(() =>
+            normalizeConfig({ ...base, pack: { optimize: { exclude: ["a/b"] } } })
+        ).toThrow(/top-level folder names/);
+        expect(() => normalizeConfig({ ...base, copy: { optimize: { exclude: [".."] } } })).toThrow(
+            /top-level folder names/
+        );
+        expect(() =>
+            normalizeConfig({ ...base, pack: { optimize: { packOptimizationVersion: "  " } } })
+        ).toThrow(/packOptimizationVersion must be a non-empty string/);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // scriptOutputDir 安全校验
 // ---------------------------------------------------------------------------
 

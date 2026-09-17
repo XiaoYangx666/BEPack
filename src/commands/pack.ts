@@ -3,6 +3,9 @@ import { loadConfig } from "../config/loadConfig.js";
 import { getConfiguredPacks } from "../config/configTypes.js";
 import type { PackType } from "../config/configTypes.js";
 import { zipSelectedItems, zipAddonSelected, zipAddonHybrid } from "../pack/zip.js";
+import type { FilesTransform } from "../pack/zip.js";
+import { createPackOptimizer } from "../pack/optimizePack.js";
+import { PACK_OPTIMIZE_DEFAULTS } from "../config/defaultConfig.js";
 import { runHook } from "../hooks/runHook.js";
 import { Logger } from "../logger/logger.js";
 import { packRoot, projectRoot, distRoot, getBpIncludeItems } from "../utils/path.js";
@@ -11,6 +14,19 @@ import { pathExists } from "../utils/fs.js";
 import { BePackError } from "../errors/BePackError.js";
 
 type LoadedConfig = Awaited<ReturnType<typeof loadConfig>>["config"];
+
+/** Options accepted by packProject / runPack. */
+export type PackRunOptions = {
+    name?: string;
+    dryRun?: boolean;
+    /**
+     * CLI `--optimize` override: `true` forces optimization on (using `pack.optimize`
+     * options when configured), `false` forces it off, `undefined` follows the config.
+     */
+    optimize?: boolean;
+    /** Logger used for optimization diagnostics. */
+    logger?: Logger;
+};
 
 function assertOutputOutsideDir(output: string, dir: string, label: string): void {
     const resolvedOutput = path.resolve(output);
@@ -30,11 +46,22 @@ function assertOutputOutsideSelectedItems(output: string, dir: string, items: st
     for (const item of items) {
         const selectedPath = path.resolve(resolvedDir, item);
         const relative = path.relative(selectedPath, resolvedOutput);
-        if (relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))) {
-            throw new BePackError("PACK_FAILED", "pack output must not be included in the BP archive.", {
-                details: { output: resolvedOutput, includedPath: selectedPath },
-                suggestions: [`Set pack.outDir outside the selected BP include path: ${selectedPath}`],
-            });
+        if (
+            relative === "" ||
+            (!relative.startsWith(`..${path.sep}`) &&
+                relative !== ".." &&
+                !path.isAbsolute(relative))
+        ) {
+            throw new BePackError(
+                "PACK_FAILED",
+                "pack output must not be included in the BP archive.",
+                {
+                    details: { output: resolvedOutput, includedPath: selectedPath },
+                    suggestions: [
+                        `Set pack.outDir outside the selected BP include path: ${selectedPath}`,
+                    ],
+                }
+            );
         }
     }
 }
@@ -67,11 +94,7 @@ function getPackItems(
     return { items: [], selective: false };
 }
 
-export async function packProject(
-    cwd: string,
-    config: LoadedConfig,
-    options: { name?: string; dryRun?: boolean } = {}
-) {
+export async function packProject(cwd: string, config: LoadedConfig, options: PackRunOptions = {}) {
     const root = projectRoot(cwd, config);
     const fileName = (options.name ?? config.pack.name)
         .replaceAll("{name}", config.name)
@@ -82,6 +105,17 @@ export async function packProject(
     if (packs.length === 0) {
         throw new BePackError("PACK_FAILED", "No packs configured. At least one pack is required.");
     }
+
+    // CLI --optimize / --no-optimize wins; otherwise follow the config.
+    const optimizeOptions =
+        options.optimize === undefined
+            ? config.pack.optimize
+            : options.optimize
+              ? (config.pack.optimize ?? PACK_OPTIMIZE_DEFAULTS)
+              : undefined;
+    const transform: FilesTransform | undefined = optimizeOptions
+        ? createPackOptimizer(optimizeOptions, options.logger)
+        : undefined;
 
     const bp = config.packs.bp
         ? { root: packRoot(root, config, "bp")!, config: config }
@@ -104,16 +138,24 @@ export async function packProject(
             if (rpInfo.selective) {
                 await zipAddonSelected(
                     [
-                        { source: bp.root, items: bpInfo.items },
-                        { source: rp.root, items: rpInfo.items },
+                        {
+                            source: bp.root,
+                            items: bpInfo.items,
+                            ...(transform ? { transform } : {}),
+                        },
+                        {
+                            source: rp.root,
+                            items: rpInfo.items,
+                            ...(transform ? { transform } : {}),
+                        },
                     ],
                     output
                 );
             } else {
                 // BP selective + RP full directory
                 await zipAddonHybrid(
-                    [{ source: bp.root, items: bpInfo.items }],
-                    [{ dir: rp.root }],
+                    [{ source: bp.root, items: bpInfo.items, ...(transform ? { transform } : {}) }],
+                    [{ dir: rp.root, ...(transform ? { transform } : {}) }],
                     output
                 );
             }
@@ -128,7 +170,7 @@ export async function packProject(
         assertOutputInsideDist(output, dist);
         if (bpInfo?.selective) assertOutputOutsideSelectedItems(output, bp.root, bpInfo.items);
         if (!options.dryRun) {
-            await zipSelectedItems(bp.root, bpInfo.items, output);
+            await zipSelectedItems(bp.root, bpInfo.items, output, transform);
         }
         return output;
     }
@@ -141,11 +183,11 @@ export async function packProject(
         if (!options.dryRun) {
             const rpInfo = getPackItems(config, "rp");
             if (rpInfo.selective) {
-                await zipSelectedItems(rp.root, rpInfo.items, output);
+                await zipSelectedItems(rp.root, rpInfo.items, output, transform);
             } else {
                 // RP full directory
                 const { packMcpack } = await import("../pack/packMcpack.js");
-                return await packMcpack(rp.root, dist, fileName, options.dryRun);
+                return await packMcpack(rp.root, dist, fileName, options.dryRun, transform);
             }
         }
         return output;
@@ -158,11 +200,11 @@ export async function runPack(
     cwd: string,
     config: LoadedConfig,
     logger: Logger,
-    options: { name?: string; dryRun?: boolean } = {}
+    options: PackRunOptions = {}
 ) {
     const start = Date.now();
     await runHook("beforePack", "pack", cwd, config, logger);
-    const output = await packProject(cwd, config, options);
+    const output = await packProject(cwd, config, { ...options, logger });
     await runHook("afterPack", "pack", cwd, config, logger);
     const durationMs = Date.now() - start;
     logger.done("pack", `packed ${output} in ${logger.formatDuration(durationMs)}`);
@@ -179,6 +221,7 @@ export async function commandPack(options: any) {
     const { output, durationMs } = await runPack(cwd, config, logger, {
         name: options.name,
         dryRun: options.dryRun,
+        ...(options.optimize !== undefined ? { optimize: Boolean(options.optimize) } : {}),
     });
     return { ok: true, command: "pack", durationMs, output };
 }

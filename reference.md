@@ -221,6 +221,11 @@ type UserConfig = {
                 name?: string | { bp?: string; rp?: string };
             }
         >;
+        /**
+         * 复制到开发目录时也生成 __brarchive 归档，方便实机验证"打包后的形态"。
+         * 默认关闭；要求与 pack.optimize 相同的 min_engine_version >= 1.26.40。
+         */
+        optimize?: boolean | PackOptimizeOptions;
     };
 
     dev?: {
@@ -234,6 +239,24 @@ type UserConfig = {
     pack?: {
         name?: string;
         outDir?: string;
+        /**
+         * 把包内散文件打成 __brarchive 归档（Minecraft 官方 pack optimizer 的行为）。
+         * 默认关闭。开启后 BePack 会往产物 manifest 写入
+         * header.pack_optimization_version = "0.1.0"（这是让引擎读归档的开关）。
+         * 只影响 pack 产物；复制到开发目录默认不优化，可用 copy.optimize 开启。
+         */
+        optimize?: boolean | {
+            /** 额外保留"散文件 + 归档存根"的目录（默认按包类型内置列表）。传 false 表示全部只进归档。 */
+            keepLoose?: string[] | false;
+            /** 这些目录完全不归档，只留散文件。默认无。 */
+            exclude?: string[];
+            /** 是否压缩 JSON 条目。默认 true。 */
+            minifyJson?: boolean;
+            /** 产物 manifest 里 header.pack_optimization_version 的取值。默认 "0.1.0"。 */
+            packOptimizationVersion?: string;
+            /** 关闭 min_engine_version < 1.26.40 时的兼容性警告。默认 false（会警告但照常输出）。 */
+            allowUnsupportedTarget?: boolean;
+        };
     };
 };
 ```
@@ -533,6 +556,7 @@ CLI 选项：
 
 - `--mode <value>`：执行模式，透传给 Hook 上下文（`HookContext.mode`）。不设则为 `undefined`。Hook 内自行判断是否执行特定逻辑。
 - `--rolldown-config <path>`：临时指定 Rolldown 配置文件，覆盖 `packs.bp.compile.rolldownConfig`（`bepack dev` 同样支持）。
+- `--optimize`：与 `--pack` / `--copy` 一起使用时，把产物（或开发目录）优化为 `__brarchive/` 归档（`--no-optimize` 可覆盖配置）。详见《打包》一节的 Pack 优化。
 
 类型检查行为：
 
@@ -751,6 +775,7 @@ BePack 默认 `preserveModules: true`，Rolldown 仍会做 tree-shaking：
 - 在监视前先执行一次初始构建（manifest + 若有 compile 则编译）。
 - 支持 `--skip-typecheck` 跳过类型检查（与 `build` 命令一致）。
 - 支持 `--mode <value>`，用法与 `build` 命令相同，透传给 Hook 上下文。初始构建和后续增量重建均会传入该值。
+- 支持 `--optimize`：每次自动复制都生成 `__brarchive/` 归档（等价于 `copy.optimize: true`，`--no-optimize` 可覆盖配置）。
 - 默认监视的路径：
     - `packs.bp.compile.entry` 所在目录（仅在 BP 配置了 compile 时，TypeScript 源码变化 → 触发编译）
     - BP 的默认 include 列表 + `packs.bp.include` 中的文件/文件夹（不含 `scripts` 和 `manifest.json`）
@@ -783,6 +808,12 @@ export default defineConfig({
 `bepack copy` 将 BP/RP 复制到配置的目标路径。
 
 **如果没有配置任何复制目标，`bepack copy` 会报错。** 复制前会验证目标目录是否存在，不存在则报错。
+
+CLI 选项：
+
+- `--target <target>`：指定复制目标。
+- `--all`：复制到所有目标。
+- `--optimize`：复制时生成 `__brarchive/` 归档（`--no-optimize` 覆盖配置），详见下文《复制时也做 Pack 优化》。
 
 ### 内置目标
 
@@ -926,6 +957,25 @@ dev: {
 
 `build.copy` 和 `dev.copy` 默认为 `false`（不复制）。`true` 表示使用 `copy.defaultTarget`，字符串表示使用指定目标。
 
+### 复制时也做 Pack 优化
+
+复制到开发目录默认是"散文件"形态，与发布产物（可能带 `__brarchive/`）不同。为了让开发者能在实机里提前验证**打包后的形态**，可以单独开启 `copy.optimize`：
+
+```ts
+copy: {
+    defaultTarget: "minecraft",
+    optimize: true,          // 或与 pack.optimize 相同的选项对象
+},
+```
+
+```bash
+bepack copy --optimize               # 临时开启（--no-optimize 覆盖配置）
+bepack build --copy --optimize       # build 的 --optimize 同时作用于 pack 与 copy
+bepack dev --optimize                # dev 的每次自动复制也生成归档
+```
+
+行为与 `pack.optimize` 完全一致（同一套镜像规则、排除表、JSON 压缩、1.26.40 门槛），区别只是输出到开发目录而不是 `.mcpack`。默认不保留散文件，因此开发目录里的形态与发布产物一致；需要同时保留散文件时用 `optimize: { keepLooseFiles: true }`。
+
 ## 打包
 
 `bepack pack` 创建：
@@ -952,6 +1002,72 @@ pack: {
 ```
 
 打包输入配置必须显式指定，且输入路径必须存在。这可以防止意外打包猜测的默认目录。
+
+### Pack 优化（`__brarchive`）
+
+Minecraft 1.26.40 起官方提供 **Pack Optimization**：把包里的散文件装进 `__brarchive/` 归档，并对 JSON 做压缩。BePack 可以在打包时做同样的事：
+
+```ts
+pack: {
+    outDir: "dist",
+    optimize: true,               // 或传入下面的选项对象
+}
+```
+
+```bash
+bepack pack --optimize            # 临时开启（--no-optimize 可覆盖配置里的开启状态）
+bepack build --pack --optimize    # 构建后打包并优化
+```
+
+产物结构（只影响 `.mcpack` / `.mcaddon` 内部，磁盘上的包目录**不会被修改**）：
+
+```txt
+manifest.json                     # 包根散文件保持原样，并写入 pack_optimization_version
+functions/diag_fn.mcfunction      # 按路径引用的目录：散文件保留（归档里只登记文件名）
+texts/en_US.lang
+__brarchive/entities.brarchive    # 注册表型目录：完整内容进归档，散文件删除
+__brarchive/entities/sub.brarchive   # 每个目录一个归档，镜像目录树
+```
+
+规则：
+
+- **开关是产物 `manifest.json` 里的 `header.pack_optimization_version`**，BePack 默认写入 `"0.1.0"`。只有这个字段能让引擎从 `__brarchive/` 读取注册表；写成游戏版本号（如 `"1.26.40"`）无效。它只写进产物，磁盘上的 `manifest.json` 不受影响。
+- `header.min_engine_version` **不参与判断**（原版 `vanilla` 行为包是 `[1,13,0]` 且带归档）。低于 1.26.40 时只是打印一条警告：旧客户端没有归档支持，只能看到保留散文件的那部分。
+- 每个目录（递归）生成 `<包根>/__brarchive/<相对目录>.brarchive`，条目名是**裸文件名**（如 `entities.brarchive` 里是 `zombie.json`），按名称排序；文件名最多 247 字节。
+- 包根散文件（`manifest.json`、`pack_icon.png` 等）不归档；已存在的 `__brarchive/` 内容原样保留。
+- **按路径引用**的目录会把散文件留在原处，归档里只写一条 **0 字节存根**（登记文件名）——这是原版 `structures/**`、`sounds/**`、`texts` 的做法。默认列表：
+    - 行为包：`functions`、`loot_tables`、`structures`、`texts`
+    - 资源包：`font`、`materials`、`sounds`、`texts`、`textures`
+- 其余目录（`entities`、`items`、`blocks`、`recipes`、`shapes`、`spawn_rules`、`trading`、`models`、`ui`、`particles`、`render_controllers` 等）归档**完整内容并删除散文件**。
+- JSON 条目会被压缩（`{ "a": 1 }` → `{"a":1}`），非 JSON（`.lang`、二进制、`MCB`）原样存储；JSON 解析失败时也原样存储，不会损坏文件。
+
+想调整时用这些选项：
+
+| 选项 | 作用 |
+| --- | --- |
+| `keepLoose: ["blocks"]` | 额外把某些目录改成"散文件 + 存根" |
+| `keepLoose: false` | 不保留任何散文件（产物最小，全部只进归档） |
+| `exclude: ["blocks"]` | 这些目录完全不归档，只留散文件 |
+| `keepLooseFiles: true` | 归档 + 完整散文件都写（体积最大，兼容 1.26.40 之前的旧客户端） |
+| `minifyJson: false` | 不压缩 JSON 条目（排查问题用） |
+| `packOptimizationVersion: "0.2.0"` | 改用其它优化版本号 |
+
+**实机验证（1.26.40 客户端，内置 `@minecraft/server` 探针脚本）**：
+
+| 内容 | 存放方式 | 结果 |
+| --- | --- | --- |
+| `blocks/`、`items/`、`entities/`、`recipes/` | 归档完整内容、删除散文件 | ✅ `BlockTypes/ItemTypes/EntityTypes.get()` 与 `spawnEntity()` 全部通过；配方也从归档正常解析 |
+| `functions/`、`loot_tables/` | 散文件 + 归档存根 | ✅ `/function`、`/loot spawn … loot …` 均返回 success=1 |
+| `structures/` | 散文件 + 归档存根 | ⚠️ `/place structure` 在本机返回 success=0（原版对照名称带 `/` 需要加引号，未能取得正向对照），建议自行用结构方块验证 |
+| `texts/` | 散文件 + 归档存根 | ✅ 散文件 `.lang` 正常（中文客户端需自带 `zh_CN.lang`，否则显示 key） |
+
+> **`scripts/` 默认也会归档**（官方 `behavior_packs/editor` 就是这样，且实测脚本模块可从归档加载）；上面的探针为了确保一定输出，用的是 `keepLoose: ["scripts"]`。如果你的脚本在归档后不执行，加 `keepLoose: ["scripts"]` 即可。
+>
+> **注意模块 UUID 不能重复**：手写 `manifest.json` 里的 `data`/`resources` 模块 UUID 必须和 `packs.bp.moduleUuid`（脚本模块）不同，否则引擎会丢掉脚本模块且没有明显报错。
+
+> **兼容性**：能读 `__brarchive/` 的客户端才有完整内容；1.26.40 之前的客户端只能看到"保留散文件"的目录。设 `allowUnsupportedTarget: true` 可关闭 min_engine_version 警告。
+>
+> 同一套选项也适用于复制：见《复制》一节的[复制时也做 Pack 优化](#复制时也做-pack-优化)。
 
 ## 钩子
 

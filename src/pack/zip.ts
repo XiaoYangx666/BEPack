@@ -1,45 +1,28 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { zipSync } from "fflate";
+import {
+    collectDirFiles,
+    collectSelectedFiles,
+    sortedFiles,
+    transformFiles,
+    withPrefix,
+} from "./fileMap.js";
+import type { FileMap, FilesTransform } from "./fileMap.js";
 
-async function addDir(
-    root: string,
-    dir: string,
-    out: Record<string, Uint8Array>,
-    prefix = ""
-): Promise<void> {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-        const full = path.join(dir, entry.name);
-        const name = prefix ? `${prefix}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) await addDir(root, full, out, name);
-        else out[name] = new Uint8Array(await fs.readFile(full));
-    }
-}
+export type { FileMap, FilesTransform } from "./fileMap.js";
 
-async function addItem(
-    source: string,
-    item: string,
-    out: Record<string, Uint8Array>
-): Promise<void> {
-    const full = path.join(source, item);
-    try {
-        const stat = await fs.stat(full);
-        if (stat.isDirectory()) {
-            await addDir(source, full, out, item);
-        } else {
-            out[item] = new Uint8Array(await fs.readFile(full));
-        }
-    } catch {
-        // skip missing items
-    }
-}
-
-export async function zipDir(source: string, output: string): Promise<void> {
-    const files: Record<string, Uint8Array> = {};
-    await addDir(source, source, files);
+async function writeZip(files: FileMap, output: string): Promise<void> {
     await fs.mkdir(path.dirname(output), { recursive: true });
-    await fs.writeFile(output, zipSync(files));
+    await fs.writeFile(output, zipSync(sortedFiles(files)));
+}
+
+export async function zipDir(
+    source: string,
+    output: string,
+    transform?: FilesTransform
+): Promise<void> {
+    await writeZip(await transformFiles(await collectDirFiles(source), transform), output);
 }
 
 /**
@@ -49,48 +32,40 @@ export async function zipDir(source: string, output: string): Promise<void> {
 export async function zipSelectedItems(
     source: string,
     items: string[],
-    output: string
+    output: string,
+    transform?: FilesTransform
 ): Promise<void> {
-    const files: Record<string, Uint8Array> = {};
-    for (const item of items) {
-        await addItem(source, item, files);
-    }
-    await fs.mkdir(path.dirname(output), { recursive: true });
-    await fs.writeFile(output, zipSync(files));
+    await writeZip(
+        await transformFiles(await collectSelectedFiles(source, items), transform),
+        output
+    );
 }
 
-export async function zipAddon(packs: { dir: string }[], output: string): Promise<void> {
-    const files: Record<string, Uint8Array> = {};
+export async function zipAddon(
+    packs: { dir: string; transform?: FilesTransform }[],
+    output: string
+): Promise<void> {
+    const files: FileMap = {};
     for (const pack of packs) {
-        await addDir(pack.dir, pack.dir, files, path.basename(path.resolve(pack.dir)));
+        const collected = await transformFiles(await collectDirFiles(pack.dir), pack.transform);
+        Object.assign(files, withPrefix(collected, path.basename(path.resolve(pack.dir))));
     }
-    await fs.mkdir(path.dirname(output), { recursive: true });
-    await fs.writeFile(output, zipSync(files));
+    await writeZip(files, output);
 }
 
 export async function zipAddonSelected(
-    packs: { source: string; items: string[] }[],
+    packs: { source: string; items: string[]; transform?: FilesTransform }[],
     output: string
 ): Promise<void> {
-    const files: Record<string, Uint8Array> = {};
+    const files: FileMap = {};
     for (const pack of packs) {
-        const prefix = path.basename(path.resolve(pack.source));
-        for (const item of pack.items) {
-            const full = path.join(pack.source, item);
-            try {
-                const stat = await fs.stat(full);
-                if (stat.isDirectory()) {
-                    await addDir(pack.source, full, files, `${prefix}/${item}`);
-                } else {
-                    files[`${prefix}/${item}`] = new Uint8Array(await fs.readFile(full));
-                }
-            } catch {
-                // skip missing items
-            }
-        }
+        const collected = await transformFiles(
+            await collectSelectedFiles(pack.source, pack.items),
+            pack.transform
+        );
+        Object.assign(files, withPrefix(collected, path.basename(path.resolve(pack.source))));
     }
-    await fs.mkdir(path.dirname(output), { recursive: true });
-    await fs.writeFile(output, zipSync(files));
+    await writeZip(files, output);
 }
 
 /**
@@ -98,30 +73,21 @@ export async function zipAddonSelected(
  * Used when BP is selective (always) but RP may be a full directory.
  */
 export async function zipAddonHybrid(
-    selectivePacks: { source: string; items: string[] }[],
-    fullPacks: { dir: string }[],
+    selectivePacks: { source: string; items: string[]; transform?: FilesTransform }[],
+    fullPacks: { dir: string; transform?: FilesTransform }[],
     output: string
 ): Promise<void> {
-    const files: Record<string, Uint8Array> = {};
+    const files: FileMap = {};
     for (const pack of selectivePacks) {
-        const prefix = path.basename(path.resolve(pack.source));
-        for (const item of pack.items) {
-            const full = path.join(pack.source, item);
-            try {
-                const stat = await fs.stat(full);
-                if (stat.isDirectory()) {
-                    await addDir(pack.source, full, files, `${prefix}/${item}`);
-                } else {
-                    files[`${prefix}/${item}`] = new Uint8Array(await fs.readFile(full));
-                }
-            } catch {
-                // skip missing items
-            }
-        }
+        const collected = await transformFiles(
+            await collectSelectedFiles(pack.source, pack.items),
+            pack.transform
+        );
+        Object.assign(files, withPrefix(collected, path.basename(path.resolve(pack.source))));
     }
     for (const pack of fullPacks) {
-        await addDir(pack.dir, pack.dir, files, path.basename(path.resolve(pack.dir)));
+        const collected = await transformFiles(await collectDirFiles(pack.dir), pack.transform);
+        Object.assign(files, withPrefix(collected, path.basename(path.resolve(pack.dir))));
     }
-    await fs.mkdir(path.dirname(output), { recursive: true });
-    await fs.writeFile(output, zipSync(files));
+    await writeZip(files, output);
 }

@@ -26,6 +26,8 @@ export type DevWatchOptions = {
     mode?: string;
     /** CLI `--rolldown-config` path, kept for every rebuild. */
     rolldownConfig?: string;
+    /** CLI `--optimize` override for copied dev folders. */
+    optimize?: boolean;
 };
 
 /**
@@ -108,7 +110,9 @@ export function watchProject(
 
     const copyIfEnabled = async () => {
         if (options.copy) {
-            await copyPacks(cwd, config, options.copyTarget, options.dryRun, logger);
+            await copyPacks(cwd, config, options.copyTarget, options.dryRun, logger, {
+                ...(options.optimize === undefined ? {} : { optimize: options.optimize }),
+            });
         }
     };
 

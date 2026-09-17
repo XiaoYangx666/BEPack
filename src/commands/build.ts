@@ -88,13 +88,15 @@ export async function commandBuild(options: any) {
             config,
             options.copyTarget ?? (typeof shouldCopy === "string" ? shouldCopy : undefined),
             options.dryRun,
-            logger
+            logger,
+            options.optimize !== undefined ? { optimize: Boolean(options.optimize) } : {}
         );
     let packResult = null;
     if (!options.skipPack && options.pack)
         packResult = await runPack(cwd, config, logger, {
             name: options.name,
             dryRun: options.dryRun,
+            ...(options.optimize !== undefined ? { optimize: Boolean(options.optimize) } : {}),
         });
     logger.done("build", `complete in ${logger.formatDuration(build.durationMs)}`);
     return {

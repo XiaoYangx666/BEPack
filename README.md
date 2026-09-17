@@ -268,6 +268,31 @@ bepack pack --name my-addon-preview
 | RP only          | `.mcpack`  |
 | BP and RP        | `.mcaddon` |
 
+### Pack optimization (`__brarchive`)
+
+Bedrock 1.26.40 introduced Mojang's **pack optimizer**, which stores a pack's loose files in `__brarchive/` archives. BePack can produce the same layout:
+
+```ts
+pack: { outDir: "dist", optimize: true }
+```
+
+```bash
+bepack pack --optimize            # --no-optimize turns it back off
+bepack build --pack --optimize
+```
+
+BePack writes `header.pack_optimization_version: "0.1.0"` into the packaged manifest — that field is what makes the engine read the archives (a game version such as `"1.26.40"` is ignored). Registry folders such as `entities/`, `items/`, `blocks/`, `recipes/` and `models/` are archived in full and their loose files dropped; path-addressed folders (`functions/`, `loot_tables/`, `structures/`, `texts/`, `textures/`, `sounds/`, `font/`, `materials/`) keep their real files and get a name-only stub entry in the archive, exactly like Mojang's own packs. Verified in-game with an embedded `@minecraft/server` probe: archived blocks/items/entities/recipes register, and functions/loot tables resolve from the loose files.
+
+Your pack folder on disk is never modified, and `bepack copy` only optimizes when you ask it to.
+
+> **Compatibility:** only clients that understand `__brarchive/` (1.26.40+) see the archived content; older clients only see the folders that were kept loose. `min_engine_version` does not gate any of this, so BePack just warns when it is below 1.26.40 (`allowUnsupportedTarget: true` silences it). See the reference guide for every option.
+
+Copies to a development folder stay loose by default. Turn on `copy.optimize` (or pass `--optimize` to `copy` / `dev` / `build --copy`) to put the **optimized** shape into the dev folder, so you can catch archive-only problems in-game before shipping:
+
+```ts
+copy: { defaultTarget: "minecraft", optimize: true }
+```
+
 ## Commands at a glance
 
 | Command                   | Purpose                                                                          |

@@ -38,6 +38,8 @@ export type {
     PackScope,
     BpCompileOptions,
     BpCompileResolved,
+    PackOptimizeOptions,
+    PackOptimizeResolved,
     RolldownOverrides,
     RolldownCustomizeContext,
     RolldownCustomizeFunction,

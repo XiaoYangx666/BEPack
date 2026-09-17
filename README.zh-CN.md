@@ -268,6 +268,31 @@ bepack pack --name my-addon-preview
 | 仅 RP      | `.mcpack`  |
 | BP 和 RP   | `.mcaddon` |
 
+### Pack 优化（`__brarchive`）
+
+1.26.40 起官方提供 **pack optimizer**：把包里的散文件装进 `__brarchive/` 归档。BePack 可以在打包时生成同样的结构：
+
+```ts
+pack: { outDir: "dist", optimize: true }
+```
+
+```bash
+bepack pack --optimize            # --no-optimize 可覆盖配置里的开启状态
+bepack build --pack --optimize
+```
+
+BePack 会往产物 manifest 写入 `header.pack_optimization_version: "0.1.0"` —— **这个字段才是引擎读取归档的开关**（写游戏版本号如 `"1.26.40"` 无效）。`entities/`、`items/`、`blocks/`、`recipes/`、`models/` 这类注册表目录会完整进归档并删除散文件；而按路径引用的目录（`functions/`、`loot_tables/`、`structures/`、`texts/`、`textures/`、`sounds/`、`font/`、`materials/`）保留真实散文件，归档里只登记一条 0 字节存根 —— 与官方包的做法一致。已用内置 `@minecraft/server` 探针脚本实机验证：归档的 blocks/items/entities/recipes 全部正常注册，functions/loot_tables 从散文件正常解析。
+
+磁盘上的包目录不会被修改，`bepack copy` 也只在显式开启时才优化。
+
+> **兼容性**：只有支持 `__brarchive/` 的客户端（1.26.40+）才能看到归档内容；旧客户端只能看到保留散文件的目录。`min_engine_version` 不参与这个判断，所以低于 1.26.40 时 BePack 只打印警告（`allowUnsupportedTarget: true` 可关闭）。完整选项见参考文档。
+
+复制到开发目录默认仍是散文件形态。开启 `copy.optimize`（或给 `copy` / `dev` / `build --copy` 传 `--optimize`）可以把**优化后的形态**放进开发目录，这样打包后才可能出现的问题能在实机里提前发现：
+
+```ts
+copy: { defaultTarget: "minecraft", optimize: true }
+```
+
 ## 命令速查
 
 | 命令                      | 用途                                                          |

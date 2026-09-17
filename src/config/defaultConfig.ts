@@ -3,6 +3,7 @@ import type {
     UserConfig,
     BpCompileResolved,
     CacheResolved,
+    PackOptimizeResolved,
 } from "./configTypes.js";
 
 export const DEFAULT_CONFIG: Omit<ResolvedConfig, "packs"> = {
@@ -58,6 +59,16 @@ export const CACHE_DEFAULTS: CacheResolved = {
     dev: true,
     build: false,
     file: "node_modules/.cache/bepack/tsconfig.tsbuildinfo",
+};
+
+/** Defaults for `pack.optimize` once it is enabled. */
+export const PACK_OPTIMIZE_DEFAULTS: PackOptimizeResolved = {
+    keepLooseFiles: false,
+    keepLoose: [],
+    exclude: [],
+    minifyJson: true,
+    packOptimizationVersion: "0.1.0",
+    allowUnsupportedTarget: false,
 };
 
 /** Defaults applied when packs.bp.compile is configured but a field is omitted. */

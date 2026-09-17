@@ -1,5 +1,10 @@
 import path from "node:path";
-import { DEFAULT_CONFIG, BP_COMPILE_DEFAULTS, CACHE_DEFAULTS } from "./defaultConfig.js";
+import {
+    DEFAULT_CONFIG,
+    BP_COMPILE_DEFAULTS,
+    CACHE_DEFAULTS,
+    PACK_OPTIMIZE_DEFAULTS,
+} from "./defaultConfig.js";
 import type {
     BpCompileResolved,
     CacheOptions,
@@ -14,6 +19,8 @@ import type {
     Hooks,
     PackManifestOptions,
     PackManifestResolved,
+    PackOptimizeOptions,
+    PackOptimizeResolved,
 } from "./configTypes.js";
 import { PACK_SCOPES } from "./configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
@@ -263,6 +270,65 @@ function normalizeCompile(
     }
 }
 
+/**
+ * Normalize `pack.optimize` into resolved options.
+ * Returns undefined when pack optimization is disabled (the default).
+ */
+function normalizePackOptimize(
+    optimize: boolean | PackOptimizeOptions | undefined
+): PackOptimizeResolved | undefined {
+    if (optimize === undefined || optimize === false) return undefined;
+
+    const options: PackOptimizeOptions = optimize === true ? {} : optimize;
+    if (typeof options !== "object" || options === null || Array.isArray(options)) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            "pack.optimize must be a boolean or an options object, " +
+                `got: ${describeValue(optimize)}.`
+        );
+    }
+
+    const version = options.packOptimizationVersion;
+    if (version !== undefined && (typeof version !== "string" || version.trim() === "")) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            "pack.optimize.packOptimizationVersion must be a non-empty string, " +
+                `got: ${describeValue(version)}.`
+        );
+    }
+
+    return {
+        keepLooseFiles: options.keepLooseFiles ?? PACK_OPTIMIZE_DEFAULTS.keepLooseFiles,
+        keepLoose:
+            options.keepLoose === false
+                ? false
+                : (options.keepLoose ?? []).map(normalizeOptimizeExclude),
+        exclude: (options.exclude ?? []).map(normalizeOptimizeExclude),
+        minifyJson: options.minifyJson ?? PACK_OPTIMIZE_DEFAULTS.minifyJson,
+        packOptimizationVersion: version ?? PACK_OPTIMIZE_DEFAULTS.packOptimizationVersion,
+        allowUnsupportedTarget:
+            options.allowUnsupportedTarget ?? PACK_OPTIMIZE_DEFAULTS.allowUnsupportedTarget,
+    };
+}
+
+/** `pack.optimize.exclude` entries must be plain top-level folder names. */
+function normalizeOptimizeExclude(value: string): string {
+    const normalized = String(value).replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+    if (
+        !normalized ||
+        normalized.includes("/") ||
+        normalized.includes("..") ||
+        path.posix.isAbsolute(normalized)
+    ) {
+        throw new BePackError(
+            "CONFIG_INVALID",
+            "pack.optimize.exclude entries must be top-level folder names " +
+                `(no path separators, no ".."), got: ${describeValue(value)}.`
+        );
+    }
+    return normalized;
+}
+
 /** Normalize manifest generation options with defaults. */
 function normalizeManifestOptions(options: PackManifestOptions | undefined): PackManifestResolved {
     const merge = options?.merge ?? "preserve";
@@ -390,6 +456,8 @@ export function normalizeConfig(
         raw.install?.dependencyCatalog ?? {}
     );
     const pluginResolvers = plugins.flatMap((plugin) => plugin.install?.dependencyResolvers ?? []);
+    const packOptimize = normalizePackOptimize(raw.pack?.optimize);
+    const copyOptimize = normalizePackOptimize(raw.copy?.optimize);
 
     return {
         root: raw.root ?? DEFAULT_CONFIG.root,
@@ -464,10 +532,12 @@ export function normalizeConfig(
             ...(raw.copy?.name ? { name: raw.copy.name } : {}),
             ...(raw.copy?.include ? { include: raw.copy.include } : {}),
             targets: raw.copy?.targets ?? {},
+            ...(copyOptimize ? { optimize: copyOptimize } : {}),
         },
         pack: {
             name: raw.pack?.name ?? DEFAULT_CONFIG.pack.name,
             outDir: raw.pack?.outDir ?? DEFAULT_CONFIG.pack.outDir,
+            ...(packOptimize ? { optimize: packOptimize } : {}),
         },
         hooks: mergeHooks(plugins, raw.hooks),
     };

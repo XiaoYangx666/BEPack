@@ -114,6 +114,10 @@ common(cli.command("build", "Build project"))
     .option("--skip-copy", "Skip copy")
     .option("--pack", "Pack after build")
     .option("--skip-pack", "Skip pack")
+    .option(
+        "--optimize",
+        "Optimize packed/copied output into __brarchive archives (--no-optimize to disable)"
+    )
     .option("--typecheck", "Run typecheck")
     .option("--skip-typecheck", "Skip typecheck")
     .option("--preserve-modules", "Preserve module output")
@@ -126,9 +130,11 @@ common(cli.command("build", "Build project"))
 common(cli.command("copy", "Copy packs"))
     .option("--target <target>", "Copy target")
     .option("--all", "Copy to all targets")
+    .option("--optimize", "Optimize the copied packs into __brarchive archives (--no-optimize to disable)")
     .action((options: any) => run("copy", commandCopy, options));
 common(cli.command("pack", "Pack mcpack/mcaddon"))
     .option("--name <name>", "Output name")
+    .option("--optimize", "Bundle loose files into __brarchive archives (--no-optimize to disable)")
     .action((options: any) => run("pack", commandPack, options));
 common(cli.command("dev", "Watch project"))
     .option("--mode <value>", "Execution mode (passed to hooks)")
@@ -138,6 +144,7 @@ common(cli.command("dev", "Watch project"))
     .option("--typecheck", "Run typecheck")
     .option("--skip-typecheck", "Skip typecheck")
     .option("--rolldown-config <path>", "Custom rolldown config file (overrides bepack.config)")
+    .option("--optimize", "Optimize packed/copied output into __brarchive archives (--no-optimize to disable)")
     .option("--timing", "Show per-step timing")
     .action((options: any) => run("dev", commandDev, options));
 common(cli.command("config", "Show resolved config"))

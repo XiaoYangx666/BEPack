@@ -6,6 +6,14 @@ import { BePackError } from "../errors/BePackError.js";
 import { copyDir, pathExists } from "../utils/fs.js";
 import { containsPath, packRoot, projectRoot, getBpIncludeItems } from "../utils/path.js";
 import { DEFAULT_RP_INCLUDES } from "../constants/copyIncludes.js";
+import { PACK_OPTIMIZE_DEFAULTS } from "../config/defaultConfig.js";
+import {
+    collectDirFiles,
+    collectSelectedFiles,
+    transformFiles,
+    writeFileMap,
+} from "../pack/fileMap.js";
+import { createPackOptimizer } from "../pack/optimizePack.js";
 import { resolveCopyTarget } from "./resolveCopyTarget.js";
 import type { Logger } from "../logger/logger.js";
 import pc from "picocolors";
@@ -88,6 +96,15 @@ function getPackIncludeItems(config: ResolvedConfig, packType: PackType): string
     return effectiveUser.length > 0 ? [...DEFAULT_RP_INCLUDES, ...effectiveUser] : [];
 }
 
+/** Read a pack's manifest for the optimization engine-version check. */
+async function readManifestBytes(source: string): Promise<Uint8Array | undefined> {
+    try {
+        return new Uint8Array(await fs.readFile(path.join(source, "manifest.json")));
+    } catch {
+        return undefined;
+    }
+}
+
 async function copyOnePack(
     packType: PackType,
     source: string,
@@ -95,14 +112,52 @@ async function copyOnePack(
     folderName: string,
     config: ResolvedConfig,
     dryRun: boolean,
-    logger?: Logger
+    logger?: Logger,
+    optimize?: boolean
 ): Promise<string> {
     const includes = getPackIncludeItems(config, packType);
     const to = resolveSafeCopyDestination(targetDir, folderName);
     assertSafeCopyDestination(source, to);
 
+    // `copy.optimize` mirrors the packaged artifact in the dev folder, so an optimized
+    // pack can be tested in-game before it ships.
+    const optimizeOptions =
+        optimize === undefined
+            ? config.copy.optimize
+            : optimize
+              ? (config.copy.optimize ?? PACK_OPTIMIZE_DEFAULTS)
+              : undefined;
+
     if (!dryRun) {
-        if (packType === "bp" || includes.length > 0) {
+        if (optimizeOptions) {
+            const selective = packType === "bp" || includes.length > 0;
+            const collected = selective
+                ? await collectSelectedFiles(source, includes)
+                : await collectDirFiles(source);
+            const transform = createPackOptimizer(
+                optimizeOptions,
+                logger,
+                await readManifestBytes(source)
+            );
+            try {
+                await writeFileMap(to, await transformFiles(collected, transform));
+            } catch (error) {
+                // Report optimization failures under the copy command's own error code.
+                if (error instanceof BePackError) {
+                    throw new BePackError(
+                        error.code === "PACK_FAILED" ? "COPY_FAILED" : error.code,
+                        error.message,
+                        {
+                            ...(error.details !== undefined ? { details: error.details } : {}),
+                            ...(error.suggestions !== undefined
+                                ? { suggestions: error.suggestions }
+                                : {}),
+                        }
+                    );
+                }
+                throw error;
+            }
+        } else if (packType === "bp" || includes.length > 0) {
             // BP is always selective; RP is selective only when includes are configured
             await copySelectedItems(source, to, includes);
         } else {
@@ -118,12 +173,22 @@ async function copyOnePack(
     return to;
 }
 
+export type CopyPacksOptions = {
+    /**
+     * CLI `--optimize` override for the copied dev folder. `true` forces optimization
+     * (using `copy.optimize` options when configured), `false` forces it off,
+     * `undefined` follows the config.
+     */
+    optimize?: boolean;
+};
+
 export async function copyPacks(
     cwd: string,
     config: ResolvedConfig,
     targetName?: string,
     dryRun = false,
-    logger?: Logger
+    logger?: Logger,
+    options: CopyPacksOptions = {}
 ) {
     const { name: targetNameResolved, target, names } = resolveCopyTarget(config, targetName);
     const copied: string[] = [];
@@ -150,7 +215,8 @@ export async function copyPacks(
             folderName,
             config,
             dryRun,
-            logger
+            logger,
+            options.optimize
         );
         copied.push(dest);
     }

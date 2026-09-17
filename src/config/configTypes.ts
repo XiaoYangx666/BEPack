@@ -284,6 +284,64 @@ export type CacheResolved = {
 };
 
 /**
+ * `pack.optimize` options. All fields are optional; omitted ones fall back to
+ * Mojang-compatible defaults (see `PACK_OPTIMIZE_DEFAULTS`).
+ */
+export type PackOptimizeOptions = {
+    /**
+     * Also keep the original loose files inside the artifact. Default: `false`,
+     * matching Minecraft's pack optimizer, which stores everything in `__brarchive/`.
+     *
+     * Useful when the pack should also load in clients that predate `__brarchive/`
+     * support: those clients ignore the archives and read the loose files.
+     */
+    keepLooseFiles?: boolean;
+
+    /**
+     * Folders that keep a loose copy **in addition to** their archive, per pack type.
+     *
+     * Defaults mirror Minecraft's own packs, which keep path-addressed folders loose:
+     * behavior packs `functions`, `loot_tables`, `structures`, `texts`; resource packs
+     * `font`, `materials`, `sounds`, `texts`, `textures`. Entries are appended to that
+     * list — pass `false` to keep nothing extra (smallest artifact).
+     */
+    keepLoose?: string[] | false;
+
+    /** Extra top-level folders to leave as loose files, on top of the built-in list. */
+    exclude?: string[];
+
+    /** Minify JSON entries. Default: `true` (Mojang's optimizer always minifies). */
+    minifyJson?: boolean;
+
+    /**
+     * Value written to `header.pack_optimization_version` in the packaged manifest —
+     * this field is what makes the engine read content from `__brarchive/`.
+     *
+     * Default: `"0.1.0"` (verified working on 1.26.40+; game-version values such as
+     * `"1.26.40"` are ignored by the engine). It is written to the artifact only, the
+     * pack's own `manifest.json` on disk is left untouched.
+     */
+    packOptimizationVersion?: string;
+
+    /**
+     * Silence the warning emitted when `header.min_engine_version` is below 1.26.40.
+     * Optimization still runs either way — the field does not block loading, but older
+     * clients cannot read the archives. Default: `false`.
+     */
+    allowUnsupportedTarget?: boolean;
+};
+
+/** Resolved `pack.optimize` options with defaults filled. */
+export type PackOptimizeResolved = {
+    keepLooseFiles: boolean;
+    keepLoose: string[] | false;
+    exclude: string[];
+    minifyJson: boolean;
+    packOptimizationVersion: string;
+    allowUnsupportedTarget: boolean;
+};
+
+/**
  * Context handed to a `compile.rolldown` customization function.
  *
  * All paths are absolute so custom options (alias, plugins, ...) can use them directly.
@@ -545,6 +603,13 @@ export type UserConfig = {
 
         /** Custom copy targets. */
         targets?: Record<string, CopyTarget & { name?: string | CopyTargetNames }>;
+
+        /**
+         * Optimize the copied development folder into `__brarchive/` archives, so the
+         * exact shape that ships can be tested in-game. Off by default; requires the
+         * same `header.min_engine_version >= 1.26.40` as `pack.optimize`.
+         */
+        optimize?: boolean | PackOptimizeOptions;
     };
 
     pack?: {
@@ -553,6 +618,16 @@ export type UserConfig = {
 
         /** Output directory for .mcpack/.mcaddon, relative to `root` unless absolute. */
         outDir?: string;
+
+        /**
+         * Bundle the packs' loose files into `__brarchive/` archives inside the produced
+         * `.mcpack` / `.mcaddon`, the way Minecraft's pack optimizer does.
+         *
+         * Off by default: optimized packs require a `header.min_engine_version` of
+         * 1.26.40 or later and do not load in older clients. Copying to a development
+         * folder stays unoptimized unless `copy.optimize` is enabled.
+         */
+        optimize?: boolean | PackOptimizeOptions;
     };
 
     /** Lifecycle hooks. */
@@ -646,10 +721,14 @@ export type ResolvedConfig = {
             rp?: string[];
         };
         targets: Record<string, CopyTarget & { name?: string | CopyTargetNames }>;
+        /** Present only when `copy.optimize` is enabled. */
+        optimize?: PackOptimizeResolved;
     };
     pack: {
         name: string;
         outDir: string;
+        /** Present only when `pack.optimize` is enabled. */
+        optimize?: PackOptimizeResolved;
     };
 };
 

@@ -33,6 +33,8 @@ export async function commandDev(options: any) {
     const cache = compile?.cache.dev ?? true;
     const dryRun = Boolean(options.dryRun);
     const quiet = Boolean(options.json || options.silent);
+    const copyOptions =
+        options.optimize !== undefined ? { optimize: Boolean(options.optimize) } : {};
 
     // Initial build: let TypeScript manage cache freshness.
     // Do not delete .tsbuildinfo — that would defeat incremental caching.
@@ -51,7 +53,7 @@ export async function commandDev(options: any) {
 
     // Initial copy (if configured)
     if (copy) {
-        await copyPacks(cwd, config, copyTarget, dryRun, logger);
+        await copyPacks(cwd, config, copyTarget, dryRun, logger, copyOptions);
     }
 
     logger.done("dev", `initial build complete in ${logger.formatDuration(Date.now() - start)}`);
@@ -60,6 +62,7 @@ export async function commandDev(options: any) {
         mode: options.mode,
         ...(copyTarget ? { copyTarget } : {}),
         ...(options.rolldownConfig ? { rolldownConfig: options.rolldownConfig } : {}),
+        ...copyOptions,
         typecheck: Boolean(typecheck),
         cache,
         dryRun,

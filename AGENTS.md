@@ -61,6 +61,20 @@ The build pipeline is manifest patching, `beforeBuild`, typecheck, Rolldown, the
 
 Crafting custom Rolldown options goes through `src/build/rolldownOptions.ts`: BePack generates the base input/output options, user options are merged on top, and `input` plus the output location fields are validated and rejected with `CONFIG_INVALID` when a customization tries to move them.
 
+### Pack optimization (`__brarchive`)
+
+`pack.optimize` / `copy.optimize` (CLI: `bepack pack --optimize`, `bepack copy --optimize`, `bepack dev --optimize`, `bepack build --pack|--copy --optimize`) bundle a pack's loose files into `__brarchive/` archives, matching Minecraft's pack optimizer (Bedrock 1.26.40+). The writer lives in `src/pack/brarchive.ts` (format version 1, 256-byte entries, no compression — do not add a dependency for it), the transformation in `src/pack/optimizePack.ts`, and the shared FileMap collection in `src/pack/fileMap.ts` (used by both `src/pack/zip.ts` and `src/copy/copyPacks.ts`).
+
+Verified against a real 1.26.40 client and Mojang's own packs (`Content/data/behavior_packs|resource_packs/*/__brarchive`):
+
+- **`header.pack_optimization_version` is the switch** that makes the engine read archives. BePack writes `"0.1.0"` (game-version values like `"1.26.40"` are ignored). Without it, archived `blocks/`/`items/`/`entities/` silently never register.
+- `header.min_engine_version` is irrelevant to archive support (vanilla ships `[1,13,0]` with archives) — only warn, never fail.
+- Registry folders (`entities`, `items`, `recipes`, `shapes`, `models`, `ui`, ...) are archived in full and their loose files dropped. `scripts` is archived by default too — Mojang's own `behavior_packs/editor` ships it that way, so do not add it to the keep-loose list.
+- Path-addressed folders (BP `functions`/`loot_tables`/`structures`/`texts`; RP `font`/`materials`/`sounds`/`texts`/`textures`) keep the real loose files and get **0-byte name-stub entries** in the archive, mirroring Mojang's `structures/`, `sounds/` and `texts/`.
+- Optimization only changes what is written out; pack folders on disk are never modified, and both options default to off.
+- In-game verified with an embedded `@minecraft/server` probe (1.26.40): archived `blocks`/`items`/`entities`/`recipes` register (`BlockTypes/ItemTypes/EntityTypes.get`, `spawnEntity`), and `functions`/`loot_tables` resolve through loose + stub. `structures` could not be positively verified via `/place structure` (vanilla control needs a quoted name).
+- Watch out for duplicate module UUIDs: a hand-written `data` module that reuses `packs.bp.moduleUuid` silently drops the script module in-game.
+
 ## Conventions
 
 - Use typed `BePackError` codes from `src/errors/codes.ts` for user-facing failures.

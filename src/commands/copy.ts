@@ -14,9 +14,12 @@ export async function commandCopy(options: any) {
     const targets = options.all
         ? ["win", "winold", ...Object.keys(config.copy.targets)]
         : [options.target ?? config.copy.defaultTarget];
+    const copyOptions = {
+        ...(options.optimize !== undefined ? { optimize: Boolean(options.optimize) } : {}),
+    };
     const results = [];
     for (const target of targets)
-        results.push(await copyPacks(cwd, config, target, options.dryRun, logger));
+        results.push(await copyPacks(cwd, config, target, options.dryRun, logger, copyOptions));
     await runHook("afterCopy", "copy", cwd, config, logger);
     const durationMs = Date.now() - start;
     logger.done(
