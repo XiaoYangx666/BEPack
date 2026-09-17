@@ -29,6 +29,15 @@ function stripUndefined<T extends Record<string, unknown>>(value: T | undefined)
     ) as Partial<T>;
 }
 
+/** Short, human-readable description of a config value for error messages. */
+function describeValue(value: unknown): string {
+    if (value === null) return "null";
+    if (Array.isArray(value)) return "array";
+    if (typeof value === "function") return "function";
+    if (typeof value === "object") return "object";
+    return typeof value === "string" ? JSON.stringify(value) : String(value);
+}
+
 function mergeUserConfig(config: UserConfig, overrides: Partial<UserConfig>): UserConfig {
     const packs: UserConfig["packs"] = {};
     if (config.packs?.bp || overrides.packs?.bp) {
@@ -211,7 +220,38 @@ function normalizeCompile(
         minify: compile?.minify ?? defs.minify,
         cache: normalizeCache(compile?.cache),
         scriptOutputDir: normalizedDir,
+        ...(compile?.rolldown !== undefined
+            ? { rolldown: normalizeRolldownOverrides(compile.rolldown) }
+            : {}),
+        ...(compile?.rolldownConfig !== undefined
+            ? { rolldownConfig: normalizeRolldownConfigPath(compile.rolldownConfig) }
+            : {}),
     };
+
+    function normalizeRolldownOverrides(
+        overrides: NonNullable<typeof compile>["rolldown"]
+    ): NonNullable<BpCompileResolved["rolldown"]> {
+        if (typeof overrides === "function") return overrides;
+        if (overrides && typeof overrides === "object" && !Array.isArray(overrides)) {
+            return overrides;
+        }
+        throw new BePackError(
+            "CONFIG_INVALID",
+            "packs.bp.compile.rolldown must be a rolldown options object or a function " +
+                `(options, context) => options, got: ${describeValue(overrides)}.`
+        );
+    }
+
+    function normalizeRolldownConfigPath(value: unknown): string {
+        if (typeof value !== "string" || value.trim() === "") {
+            throw new BePackError(
+                "CONFIG_INVALID",
+                "packs.bp.compile.rolldownConfig must be a non-empty path string, " +
+                    `got: ${describeValue(value)}.`
+            );
+        }
+        return value;
+    }
 
     function normalizeCache(cache: CacheOptions | undefined): CacheResolved {
         const defs = CACHE_DEFAULTS;

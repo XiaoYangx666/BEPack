@@ -13,6 +13,10 @@ export type RunBuildOptions = {
     logger: Logger;
     /** Execution mode passed to hooks. */
     mode?: string;
+    /** Command running this build; exposed to rolldown customization functions. */
+    command?: "build" | "dev";
+    /** CLI `--rolldown-config` path, overriding `packs.bp.compile.rolldownConfig`. */
+    rolldownConfig?: string;
     /** Force typecheck (overrides config). Default: config.packs.bp.compile.typecheck */
     typecheck?: boolean;
     /** Enable TypeScript incremental compilation cache. */
@@ -90,7 +94,14 @@ export async function runBuild(options: RunBuildOptions) {
     if (compile && !options.dryRun) {
         await timed(
             "rolldown",
-            () => runRolldown(options.cwd, options.config, options.logger),
+            () =>
+                runRolldown(options.cwd, options.config, options.logger, {
+                    ...(options.command !== undefined ? { command: options.command } : {}),
+                    ...(options.mode !== undefined ? { mode: options.mode } : {}),
+                    ...(options.rolldownConfig !== undefined
+                        ? { rolldownConfig: options.rolldownConfig }
+                        : {}),
+                }),
             options.logger,
             timing
         );

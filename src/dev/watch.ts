@@ -24,7 +24,17 @@ export type DevWatchOptions = {
     dryRun: boolean;
     quiet?: boolean;
     mode?: string;
+    /** CLI `--rolldown-config` path, kept for every rebuild. */
+    rolldownConfig?: string;
 };
+
+/**
+ * Rolldown's config loader bundles `.ts` config files to
+ * `rolldown.config.<hash>.js` next to the config file before importing them.
+ * Those transient files must never trigger a rebuild (they would loop forever
+ * when the config lives inside a watched source directory).
+ */
+const ROLLDOWN_TEMP_CONFIG = /[/\\]rolldown\.config\.[A-Za-z0-9_-]+\.js$/;
 
 function relativeTo(cwd: string, p: string): string {
     return slash(path.relative(cwd, p));
@@ -88,7 +98,7 @@ export function watchProject(
 
     const watcher = chokidar.watch(dedupedRoots, {
         cwd,
-        ignored,
+        ignored: [...ignored, ROLLDOWN_TEMP_CONFIG],
         ignoreInitial: true,
     });
 
@@ -114,11 +124,15 @@ export function watchProject(
                 cwd,
                 config,
                 logger,
+                command: "dev",
                 typecheck: options.typecheck,
                 cache: options.cache,
                 dryRun: options.dryRun,
                 quiet: Boolean(options.quiet),
                 ...(options.mode === undefined ? {} : { mode: options.mode }),
+                ...(options.rolldownConfig === undefined
+                    ? {}
+                    : { rolldownConfig: options.rolldownConfig }),
             });
         } else {
             const { patchManifest } = await import("../manifest/patchManifest.js");

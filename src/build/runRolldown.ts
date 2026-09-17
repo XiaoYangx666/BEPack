@@ -17,24 +17,7 @@ import {
     projectRoot,
     containsPath,
 } from "../utils/path.js";
-import { createDependencyCatalog } from "../install/dependencyCatalog.js";
-import { createReplacePlugins } from "./replace.js";
-import { createDefineTransform } from "./define.js";
-
-function buildExternal(config: ResolvedConfig): (string | RegExp)[] {
-    if (!config.packs.bp?.compile) return [];
-    const external = [...config.packs.bp.compile.external];
-    const existingStrings = new Set(
-        external.filter((item): item is string => typeof item === "string")
-    );
-    for (const [packageName, entry] of Object.entries(createDependencyCatalog(config))) {
-        if (entry.manifest && !existingStrings.has(packageName)) {
-            external.push(packageName);
-            existingStrings.add(packageName);
-        }
-    }
-    return external;
-}
+import { resolveRolldownOptions } from "./rolldownOptions.js";
 
 function formatSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -133,10 +116,20 @@ export function assertSafeScriptOutputPath(
     assertNoSymlinkInOutputPath(bpRootDir, outDir);
 }
 
+export type RunRolldownOptions = {
+    /** Command running the build. Exposed to customization functions. */
+    command?: "build" | "dev";
+    /** CLI `--mode` value. Exposed to customization functions. */
+    mode?: string;
+    /** CLI `--rolldown-config` path, overriding `packs.bp.compile.rolldownConfig`. */
+    rolldownConfig?: string;
+};
+
 export async function runRolldown(
     cwd: string,
     config: ResolvedConfig,
-    logger?: Logger
+    logger?: Logger,
+    options: RunRolldownOptions = {}
 ): Promise<void> {
     if (!hasBpCompile(config)) {
         throw new BePackError(
@@ -156,41 +149,29 @@ export async function runRolldown(
     }
 
     try {
+        // Resolve and validate custom options BEFORE emptying the output directory,
+        // so an invalid rolldown config never destroys the previous build output.
+        const { inputOptions, outputOptions } = await resolveRolldownOptions({
+            cwd,
+            config,
+            ...(options.command !== undefined ? { command: options.command } : {}),
+            ...(options.mode !== undefined ? { mode: options.mode } : {}),
+            ...(options.rolldownConfig !== undefined ? { configPath: options.rolldownConfig } : {}),
+        });
+
         assertSafeScriptOutputPath(cwd, config, entry, outDir);
         await emptyDir(outDir);
-        const define = config.packs.bp!.compile!.define;
-        const bundle = await rolldown({
-            input: entry,
-            external: buildExternal(config),
-            plugins: createReplacePlugins(config),
-            ...(createDefineTransform(define) ?? {}),
-            onwarn(warning, warn) {
-                if (warning.code === "CIRCULAR_DEPENDENCY") return;
-                warn(warning);
-            },
-            experimental: {
-                attachDebugInfo: config.packs.bp!.compile!.preserveModules ? "none" : "simple",
-            },
-        });
-        if (config.packs.bp!.compile!.preserveModules) {
-            await bundle.write({
-                dir: outDir,
-                format: "esm",
-                preserveModules: true,
-                preserveModulesRoot: path.dirname(entry),
-                entryFileNames: "[name].js",
-                minify: config.packs.bp!.compile!.minify,
-            });
-        } else {
-            await bundle.write({
-                file: outFile,
-                format: "esm",
-                minify: config.packs.bp!.compile!.minify,
-            });
+
+        const bundle = await rolldown(inputOptions);
+        try {
+            await bundle.write(outputOptions);
+        } finally {
+            await bundle.close();
         }
-        await bundle.close();
         await printStats(outDir, logger);
     } catch (cause) {
+        // Keep specific BePack diagnostics (CONFIG_INVALID, BUILD_FAILED, ...) intact.
+        if (cause instanceof BePackError) throw cause;
         throw new BePackError(
             "BUILD_FAILED",
             `rolldown failed: ${cause instanceof Error ? cause.message : String(cause)}`

@@ -1,3 +1,4 @@
+import type { RolldownOptions } from "rolldown";
 import type { NpmRegistryClient } from "../utils/npmRegistry.js";
 
 export type CommandName =
@@ -282,6 +283,42 @@ export type CacheResolved = {
     file: string;
 };
 
+/**
+ * Context handed to a `compile.rolldown` customization function.
+ *
+ * All paths are absolute so custom options (alias, plugins, ...) can use them directly.
+ */
+export type RolldownCustomizeContext = {
+    /** Command currently running: `"build"` (`bepack build`) or `"dev"` (`bepack dev`). */
+    command: "build" | "dev";
+    /** CLI `--mode` value, when provided. */
+    mode?: string;
+    /** Minecraft target version (`config.target`). */
+    target: string;
+    /** Absolute path of the compile entry file. */
+    entry: string;
+    /** Absolute path of the script output directory. */
+    outDir: string;
+    /** Absolute path of the single-file output (informational in preserve-modules mode). */
+    outFile: string;
+    /** Whether modules are preserved instead of being bundled into one file. */
+    preserveModules: boolean;
+};
+
+/**
+ * Function form of `compile.rolldown`: receives the fully merged options built by
+ * BePack (plus context) and returns options that are merged on top of them.
+ *
+ * Returning `undefined` (or nothing) leaves the current options unchanged.
+ */
+export type RolldownCustomizeFunction = (
+    options: RolldownOptions,
+    context: RolldownCustomizeContext
+) => RolldownOptions | undefined | void | Promise<RolldownOptions | undefined | void>;
+
+/** User-supplied rolldown customization: an options object or a function. */
+export type RolldownOverrides = RolldownOptions | RolldownCustomizeFunction;
+
 /** BP compile configuration. Only available on behavior packs. */
 export type BpCompileOptions = {
     /** Script entry file, relative to project root. Default: "src/main.ts". */
@@ -323,6 +360,28 @@ export type BpCompileOptions = {
 
     /** Output directory for compiled scripts, relative to BP root. Default: "scripts". */
     scriptOutputDir?: string;
+
+    /**
+     * Extra rolldown options (object) or a customization function, merged on top of the
+     * options BePack generates.
+     *
+     * BePack-managed fields (`input`, `output.file` / `output.dir` / `output.format` /
+     * `output.preserveModules` / `output.preserveModulesRoot` / `output.entryFileNames`)
+     * cannot be overridden — configure `entry`, `scriptOutputDir` and `preserveModules`
+     * instead.
+     */
+    rolldown?: RolldownOverrides;
+
+    /**
+     * Path to a rolldown config file (relative to the project root, or absolute).
+     * The file is loaded with rolldown's own loader, so `.ts` / `.mts` / `.js` / `.mjs`
+     * are all supported, and the default export may be an options object, a single-element
+     * array, or a function.
+     *
+     * Takes precedence over the inline `rolldown` field. `bepack build --rolldown-config`
+     * overrides this path.
+     */
+    rolldownConfig?: string;
 };
 
 export type BpConfig = PackConfig & {
@@ -512,6 +571,8 @@ export type BpCompileResolved = {
     minify: boolean;
     cache: CacheResolved;
     scriptOutputDir: string;
+    rolldown?: RolldownOverrides;
+    rolldownConfig?: string;
 };
 
 export type ResolvedConfig = {

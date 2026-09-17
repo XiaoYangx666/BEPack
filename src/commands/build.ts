@@ -67,6 +67,8 @@ export async function commandBuild(options: any) {
         config,
         logger,
         mode: options.mode,
+        command: "build",
+        ...(options.rolldownConfig ? { rolldownConfig: options.rolldownConfig } : {}),
         typecheck: Boolean(typecheck),
         cache: Boolean(cache),
         dryRun: Boolean(options.dryRun),
