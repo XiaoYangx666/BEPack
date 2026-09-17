@@ -312,6 +312,8 @@ All commands accept `--cwd <project-dir>` and `--config <path>` when the current
 
 This README covers the common path: create or import a project, configure packs, build, copy, and package. For complete configuration fields, custom copy targets, inclusion rules, dependency-resolution extensions, plugins, hooks, and replacement tokens, read [the reference guide](./reference.md).
 
+Maintainers cutting a release should follow [CONTRIBUTING.md](./CONTRIBUTING.md).
+
 ## License
 
 MIT
