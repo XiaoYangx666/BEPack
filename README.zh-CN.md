@@ -78,7 +78,9 @@ bepack init --from-bp bp/manifest.json
 bepack init --from-bp bp/manifest.json --from-rp rp/manifest.json
 ```
 
-该命令会根据读取到的包根目录、名称、UUID、版本、manifest 格式和受支持的 Script API 依赖创建 `bepack.config.ts`。如果 BP 存在脚本模块，也会在可行时生成对应的 TypeScript 构建配置。
+该命令会根据读取到的包根目录、名称、UUID、版本、manifest 格式和受支持的 Script API 依赖创建 `bepack.config.ts`。只有当确实存在匹配的源文件（`src/<入口>.ts`、`.mts`、`.js` 或 `.mjs`）时，脚本模块才会生成 TypeScript 构建配置——脚本已经在包里的项目会保持编译关闭，而不是生成一个首次构建就会失败的入口。存在 TypeScript 源码但缺少 `tsconfig.json` 时会给出提示，并在生成的配置里关闭类型检查。
+
+`--dry-run` 只打印将要创建的文件，不写盘。
 
 常用变体：
 
@@ -160,12 +162,14 @@ bepack build
 # 开发时监听文件并自动重建
 bepack dev
 
-# 生成发布压缩包
+# 生成发布压缩包（会先构建）
 bepack pack
 
 # 一次完成构建和打包
 bepack build --pack
 ```
+
+`bepack pack` 默认先构建再打包，因此单独执行 `pack` 不会再把旧的 `scripts/*.js` 打进产物；想直接压缩磁盘上的包目录时用 `bepack pack --no-build`。
 
 如果只想更新受管理的依赖和 manifest，可单独执行 `bepack install`。可以在配置中设置 `target`，也可以在安装并构建时临时指定目标 Minecraft 版本：
 
@@ -177,6 +181,8 @@ bepack build --install --target 1.21.120
 > **类型检查默认开启。** 每次 `bepack build` / `bepack dev` 都会先用 `tsc --noEmit` 检查源码，再交给 Rolldown 打包。检查失败会以 `TYPECHECK_FAILED` 终止构建，而不是产出一个损坏的包。可用 `--skip-typecheck` 跳过，或设置 `packs.bp.compile.typecheck: false`。这与自定义 Rolldown 选项无关——加了自定义选项**不会**关闭类型检查。
 
 受支持的 `@minecraft/*` 依赖可使用 `stable`、`beta`、`preview` 或精确版本。BePack 会先把如 `stable` 这样的选择器解析为具体包版本，再更新 `package.json` 和 BP manifest。
+
+写入 `manifest.json` 的版本按这个优先级决定：配置里的精确版本（`"@minecraft/server": "2.10.0"`，永远优先）→ `bepack install` / `build --install` 联网解析的结果 → manifest 里已有的版本（`build` / `dev` / `manifest` **不联网**，频道说明符离线时复用旧值）。每次写入都会打印来源：`manifest @minecraft/server: 2.0.0 -> 2.10.0 (specifier "stable", install)` 或 `... kept from manifest ... — run \`bepack install\` to refresh`，不会再出现"版本被悄悄写死"的情况。
 
 ## 自定义 Rolldown 构建
 
@@ -260,6 +266,7 @@ export default defineConfig({
 ```bash
 bepack pack
 bepack pack --name my-addon-preview
+bepack pack --no-build      # 不构建，直接压缩磁盘上的包目录
 ```
 
 | 已配置的包 | 输出       |
@@ -267,6 +274,8 @@ bepack pack --name my-addon-preview
 | 仅 BP      | `.mcpack`  |
 | 仅 RP      | `.mcpack`  |
 | BP 和 RP   | `.mcaddon` |
+
+选择性打包时（BP 始终如此，RP 在设置了 `packs.rp.include` 之后如此），BePack 会列出被 include 列表跳过的顶层条目，并提示把它们加到 `packs.bp.include` / `packs.rp.include`——像 `manifest.json` 旁边的 `README_中文.md` 不会再被无声丢弃。
 
 ### Pack 优化（`__brarchive`）
 
@@ -303,7 +312,7 @@ copy: { defaultTarget: "minecraft", optimize: true }
 | `bepack build`            | 修补 manifest，用 `tsc` 类型检查，再编译已配置的 BP 源码。    |
 | `bepack dev`              | 先构建一次，随后监听并重建（类型检查默认开启）。              |
 | `bepack copy`             | 复制已配置的包到开发目标。                                    |
-| `bepack pack`             | 生成 `.mcpack` 或 `.mcaddon`。                                |
+| `bepack pack`             | 先构建，再生成 `.mcpack` 或 `.mcaddon`（`--no-build` 跳过构建）。 |
 | `bepack config --summary` | 查看解析后的配置摘要。                                        |
 
 所有命令都支持 `--cwd <项目目录>` 和 `--config <路径>`，可用于在非项目目录执行或使用不同的配置文件名。对于会写入文件的命令，可添加 `--dry-run` 预览；如需机器可读输出，可添加 `--json`。使用 `bepack <命令> --help` 查看每个命令的全部参数。

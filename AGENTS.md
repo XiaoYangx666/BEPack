@@ -36,6 +36,12 @@ BePack builds Minecraft Bedrock Script API add-ons. It loads configuration, reso
 
 Packs are configured in `packs.bp` / `packs.rp`; BP compilation options belong in `packs.bp.compile`, not top-level `build`.
 
+`bepack pack` builds before packing (opt out with `--no-build`/`--skip-build`); `bepack dev` fails with `DEV_NO_WATCH_TARGETS` when nothing is watchable instead of exiting silently; `bepack init --dry-run` must not write.
+
+Hooks are wired by step, not by command: every manifest write goes through `src/manifest/runManifest.ts` (`beforeManifest`/`afterManifest`) and every copy through `src/copy/runCopy.ts` (`beforeCopy`/`afterCopy`), so `build`, `dev`, `install` and `pack` fire them too. `HookContext` carries `dryRun`. Keep the firing matrix in `reference.md` in sync when adding a step.
+
+`PackageManager` strips an inherited `npm_config_allow_scripts` before spawning: npm 12 rejects that flag in project-scoped installs (`EALLOWSCRIPTS`) and `npm run` exports it from a `.npmrc` `allow-scripts` setting.
+
 ### Dependencies
 
 `DependencyService` uses `DependencyResolverRegistry`, then built-in resolvers, to convert configured specifiers into concrete npm versions. Catalog entries decide whether a package is written into `manifest.json` and externalized during build.
@@ -57,7 +63,9 @@ Plugin resolvers must not silently mutate user dependency declarations. `sapiPro
 
 ### Build and manifests
 
-The build pipeline is manifest patching, `beforeBuild`, typecheck, Rolldown, then `afterBuild`. Manifest code lives in `src/manifest/`; it must preserve user-owned fields and respect format-version-specific version formats.
+The build pipeline is manifest patching (`beforeManifest`/`afterManifest`), `beforeBuild`, typecheck, Rolldown, then `afterBuild`. Manifest code lives in `src/manifest/`; it must preserve user-owned fields and respect format-version-specific version formats.
+
+Managed dependency versions are written in this order: an exact config specifier, then the version resolved by `install`, then the value already in the manifest (offline commands never touch the network). `ManifestDepManager` reports which source was used and `patchManifest` logs every version it writes — never reintroduce a silent rewrite. `manifest.minEngineVersion` is authoritative in both merge modes.
 
 Crafting custom Rolldown options goes through `src/build/rolldownOptions.ts`: BePack generates the base input/output options, user options are merged on top, and `input` plus the output location fields are validated and rejected with `CONFIG_INVALID` when a customization tries to move them.
 

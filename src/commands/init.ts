@@ -81,13 +81,57 @@ async function assertFileNotExists(file: string, force: boolean): Promise<void> 
             { suggestions: ["Pass --force to overwrite the existing file."] }
         );
     }
-    await ensureDir(path.dirname(file));
 }
 
-async function writeConfig(file: string, content: string, force: boolean): Promise<boolean> {
+async function writeConfig(
+    file: string,
+    content: string,
+    force: boolean,
+    dryRun = false
+): Promise<boolean> {
     await assertFileNotExists(file, force);
+    // A dry run must not create directories either.
+    if (dryRun) return false;
+    await ensureDir(path.dirname(file));
     await fs.writeFile(file, content, "utf8");
     return true;
+}
+
+/** Source file extensions BePack can compile a manifest script entry from. */
+const SOURCE_EXTENSIONS = [".ts", ".mts", ".js", ".mjs"];
+
+/**
+ * Look for a source file backing a manifest script entry (e.g. `scripts/main.js`).
+ *
+ * `init --from-bp` used to emit `compile.entry: "src/main.ts"` unconditionally,
+ * which produced a config that failed on the first build whenever the project kept
+ * its scripts inside the pack and had no `src/` or `tsconfig.json`.
+ */
+async function findSourceEntry(
+    cwd: string,
+    outputBasename: string
+): Promise<{ entry: string; typecheckable: boolean; searched: string[] } | undefined> {
+    const bases = outputBasename === "main" ? ["main"] : [outputBasename, "main"];
+    const candidates = bases.flatMap((base) => SOURCE_EXTENSIONS.map((ext) => `src/${base}${ext}`));
+    for (const candidate of candidates) {
+        if (await pathExists(path.join(cwd, candidate))) {
+            const ext = path.extname(candidate);
+            return {
+                entry: candidate,
+                typecheckable: ext === ".ts" || ext === ".mts",
+                searched: candidates,
+            };
+        }
+    }
+    return undefined;
+}
+
+/** Human-readable candidate list for the "no source file found" warning. */
+function basesForMessage(outputBasename: string): string {
+    const bases = outputBasename === "main" ? ["main"] : [outputBasename, "main"];
+    return bases
+        .map((base) => `src/${base}.{${SOURCE_EXTENSIONS.join(",").replace(/\./g, "")}}`)
+        .join(" or ");
 }
 
 function formatConfig(config: Record<string, unknown>): string {
@@ -131,13 +175,14 @@ export function parseVersionToTuple(v: unknown): [number, number, number] | unde
 async function initFromManifests(
     cwd: string,
     options: any
-): Promise<{ ok: true; command: "init"; filesCreated: number }> {
+): Promise<{ ok: true; command: "init"; dryRun: boolean; filesCreated: number; files: string[] }> {
     const format = options.format ?? "ts";
     if (!["ts", "js", "mjs"].includes(format)) {
         throw new BePackError("CONFIG_INVALID", "init --format must be ts, js, or mjs.");
     }
     const configFile = path.join(cwd, `bepack.config.${format}`);
     const force = Boolean(options.force);
+    const dryRun = Boolean(options.dryRun);
     const logger = new Logger({ silent: options.silent, verbose: options.verbose });
 
     const hasBp = Boolean(options.fromBp);
@@ -326,6 +371,10 @@ async function initFromManifests(
             // e.g. "scripts/main.js" → entry: "src/main.ts", scriptOutputDir: "scripts"
             // e.g. "custom_out/index.js" → entry: "src/index.ts", scriptOutputDir: "custom"
             // e.g. "nested/output/index.js" → entry: "src/index.ts", scriptOutputDir: "nested/output"
+            //
+            // Only enable compile when a matching source file actually exists: a pack
+            // whose scripts are already compiled in place has nothing to build, and
+            // enabling compile would make the first `bepack build` fail.
             if (bpInfo.scriptEntry) {
                 const validatedEntry = validateScriptEntry(bpInfo.scriptEntry, "BP");
                 const outputDir = path.posix.dirname(validatedEntry);
@@ -341,12 +390,39 @@ async function initFromManifests(
                             `entry in your manifest.json (e.g. "scripts/main.js"), then rerun init.`
                     );
                 }
-                bp.compile = {
-                    entry: `src/${outputBasename}.ts`,
-                    scriptOutputDir: outputDir,
-                };
+                const source = await findSourceEntry(cwd, outputBasename);
+                if (source) {
+                    const hasTsconfig = await pathExists(path.join(cwd, "tsconfig.json"));
+                    const typecheck = source.typecheckable && hasTsconfig;
+                    bp.compile = {
+                        entry: source.entry,
+                        scriptOutputDir: outputDir,
+                        ...(typecheck ? {} : { typecheck: false }),
+                    };
+                    if (!typecheck) {
+                        logger.warn(
+                            `Detected script entry "${bpInfo.scriptEntry}" with source "${source.entry}", ` +
+                                `but ${source.typecheckable ? "tsconfig.json is missing" : "the source is JavaScript"}. ` +
+                                `Generated config sets compile.typecheck: false.` +
+                                (source.typecheckable
+                                    ? " Add tsconfig.json and remove that flag to enable typechecking."
+                                    : "")
+                        );
+                    }
+                } else {
+                    logger.warn(
+                        `BP manifest declares script entry "${bpInfo.scriptEntry}" but no matching source file exists ` +
+                            `(looked for ${basesForMessage(outputBasename)}). Leaving packs.bp.compile unset: ` +
+                            `the existing "${outputDir}" folder is copied/packed as-is. ` +
+                            `Set packs.bp.compile manually once you add sources.`
+                    );
+                }
             } else {
-                bp.compile = { entry: "src/main.ts" };
+                logger.warn(
+                    "BP manifest has a script module but no `entry` field, so the script output " +
+                        "directory cannot be derived. Leaving packs.bp.compile unset; add it manually " +
+                        "to compile TypeScript into the pack."
+                );
             }
         }
         if (bpName) bp.name = bpName;
@@ -376,8 +452,15 @@ async function initFromManifests(
     }
 
     const content = formatConfig(config);
-    const files = [await writeConfig(configFile, content, force)];
-    return { ok: true, command: "init", filesCreated: files.filter(Boolean).length };
+    const written = await writeConfig(configFile, content, force, dryRun);
+    if (dryRun) logger.info(`init dry-run: would create ${configFile}`);
+    return {
+        ok: true,
+        command: "init",
+        dryRun,
+        filesCreated: written ? 1 : 0,
+        files: [configFile],
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -420,6 +503,17 @@ export async function commandInit(options: any) {
     if (!["ts", "js", "mjs"].includes(format))
         throw new BePackError("CONFIG_INVALID", "init --format must be ts, js, or mjs.");
     const configFile = path.join(cwd, `bepack.config.${format}`);
-    const files = [await writeConfig(configFile, scaffoldConfig(), Boolean(options.force))];
-    return { ok: true, command: "init", filesCreated: files.filter(Boolean).length };
+    const dryRun = Boolean(options.dryRun);
+    const written = await writeConfig(configFile, scaffoldConfig(), Boolean(options.force), dryRun);
+    if (dryRun) {
+        const logger = new Logger({ silent: options.silent, verbose: options.verbose });
+        logger.info(`init dry-run: would create ${configFile}`);
+    }
+    return {
+        ok: true,
+        command: "init",
+        dryRun,
+        filesCreated: written ? 1 : 0,
+        files: [configFile],
+    };
 }

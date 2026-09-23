@@ -232,7 +232,6 @@ type UserConfig = {
         copy?: false | true | string;
         watch?: {
             include?: string[];
-            include?: string[];
         };
     };
 
@@ -366,6 +365,25 @@ dependencies: {
 
 当清单依赖中使用 `preview` 或 `beta` 说明符而未先运行 `bepack install` 时，BePack 会抛出 `DEPENDENCY_REQUIRES_INSTALL`。这与 `stable` 的行为相同——说明符本身永远不会直接写入 `manifest.json`。
 
+### manifest 依赖版本的权威来源与日志
+
+写入 `manifest.json` 的受管依赖版本按以下优先级决定（高 → 低）：
+
+1. **配置里的精确版本**：`packs.bp.dependencies` 写成 `"2.10.0"` 时，它就是最终值。`bepack install` 的结果（包括注册表解析结果）与现有 manifest 里的旧值都**不会**覆盖它。
+2. **`bepack install` / `build --install` 解析出的版本**：仅用于 `stable` / `beta` / `preview` 这类频道说明符。
+3. **现有 manifest 中已写入的版本**：`bepack build` / `bepack manifest` / `bepack dev` **不访问网络**，频道说明符在离线时会复用 manifest 里已有的具体版本。
+
+第 3 条曾经是最大的排查陷阱：`build` 会静默沿用旧版本，看起来像是"版本被写死"。现在每条受管依赖的最终版本都会打印出来：
+
+```txt
+manifest   @minecraft/server: 2.0.0 -> 2.10.0 (specifier "stable", install)
+manifest   @minecraft/server-ui 2.0.0 kept from manifest (specifier "stable") — run `bepack install` to refresh
+```
+
+`bepack manifest --json` / `bepack build --json` 的 `files.bpManifest.dependencies` 也会返回 `{ module_name, specifier, version, source, previous }`，其中 `source` 是 `"config"`、`"install"` 或 `"manifest"`，可直接用于判断版本是谁写的。
+
+所以：**要刷新频道依赖的具体版本，必须联网执行 `bepack install`（或 `bepack build --install`）**；只想固定某个版本，就在配置里写精确版本号。
+
 ### 安装日志
 
 常规安装日志显示简洁的进度：
@@ -377,6 +395,19 @@ dependencies: {
 ```
 
 使用 `--verbose` 可查看更底层的详细信息，如缓存命中、版本数量和推断过程。
+
+### npm 12 与 `--allow-scripts`
+
+npm 12 会把 `--allow-scripts` 当作 CLI 层策略，并**拒绝在项目级安装中使用**：
+
+```txt
+npm error code EALLOWSCRIPTS
+npm error --allow-scripts is not allowed in project-scoped installs.
+```
+
+`npm run <script>` 会把解析出的 npm 配置导出成 `npm_config_*` 环境变量，所以只要用户级/全局 `.npmrc` 里写了 `allow-scripts=...`，这个值就会泄漏到 `bepack install` 子进程里，让它调用的 `npm install` 直接失败。BePack 在启动包管理器前会剔除继承来的 `npm_config_allow_scripts` 并打印一条提示；允许列表本身仍然通过 `.npmrc` 或 `package.json` 的 `allowScripts` 字段生效（这正是 npm 报错里建议的做法）。其它 npm 配置（registry、认证等）不受影响，仍会传给子进程。
+
+需要完全跳过包管理器时用 `install.runPackageManager: false`，或 CLI `bepack install --skip-pm`。
 
 ### 依赖目录与解析器扩展点
 
@@ -508,14 +539,16 @@ RP 清单受控字段：
 | 条目来源 | `merge: "preserve"`（默认） | `merge: "clean"` |
 | -------- | --------------------------- | ---------------- |
 | `header.name` / `description` / `uuid` / `version` | config | config |
-| `header.min_engine_version` | 保留旧文件值 | config（缺省用默认值，可用 `minEngineVersion` 显式指定） |
+| `header.min_engine_version` | 保留旧文件值；配置了 `minEngineVersion` 时以配置为准 | config（缺省用默认值，可用 `minEngineVersion` 显式指定） |
 | managed 依赖 / module | 重建 | 重建 |
 | 非 managed 条目（手写依赖、额外 module、capabilities 等） | **保留** | **丢弃**，改用 `extra*` 字段显式声明 |
 | 其他 config 的残留（双配置交替构建） | 保留 → 污染 | **清除** |
 
+`minEngineVersion` 在两种模式下都生效：`preserve` 下它覆盖 manifest 里已有的值（不改配置就继续保留旧值），`clean` 下它就是生成值。
+
 `clean` 模式下可用的补充字段：
 
-- `minEngineVersion`：写 `header.min_engine_version`。SemVer 字符串（如 `"1.21.80"`），format 2 自动转 `[1, 21, 80]`。
+- `minEngineVersion`：写 `header.min_engine_version`。SemVer 字符串（如 `"1.21.80"`），format 2 自动转 `[1, 21, 80]`。两种 merge 模式都可用。
 - `extraDependencies`：原样追加到 `dependencies`（非 catalog 依赖）。
 - `extraModules`：原样追加到 `modules`（如自定义 script 模块）。
 - `extraHeader`：合并进 `header`（如 `pack_scope`）。
@@ -541,13 +574,13 @@ client 侧保持默认 `preserve`（尊重手写 manifest），server 侧 `clean
 `bepack build` 执行以下步骤：
 
 ```txt
-清单修补
+清单修补（hooks.beforeManifest / afterManifest）
 hooks.beforeBuild
 类型检查（tsc --noEmit，默认开启）
 Rolldown 构建
 hooks.afterBuild
-可选复制
-可选打包
+可选复制（hooks.beforeCopy / afterCopy）
+可选打包（hooks.beforePack / afterPack）
 ```
 
 > **默认会运行 TypeScript 类型检查。** 只要配置了 `packs.bp.compile`，`bepack build` 与 `bepack dev` 都会在 Rolldown 打包**之前**执行 `tsc --noEmit`；检查失败会以 `TYPECHECK_FAILED` 终止本次构建，不会产出残缺脚本。跳过方式：CLI `--skip-typecheck`，或 `packs.bp.compile.typecheck: false`。注意类型检查与打包是两件独立的事——自定义 Rolldown 选项、替换 `rolldown` 配置都不会关闭它，要关只能显式配置。
@@ -788,6 +821,8 @@ BePack 默认 `preserveModules: true`，Rolldown 仍会做 tree-shaking：
 - 每次更改时清空终端输出，显示每次更新的耗时。
 - 构建锁：构建过程中来的其他文件变化会排队，构建结束后统一处理一次，不会并发构建。
 - src 文件变化触发重建 + 复制，非 src 文件变化只触发复制。不涉及的文件不触发任何操作。
+- 自动复制同样会触发 `beforeCopy` / `afterCopy`，重建会触发 `beforeManifest` / `afterManifest` / `beforeBuild` / `afterBuild`（`ctx.command === "dev"`）。
+- 如果最终没有任何可监听路径（没配 compile、复制关闭、`dev.watch.include` 为空），`bepack dev` 会直接以 `DEV_NO_WATCH_TARGETS` 报错，而不是打印一行空的 "watching" 后静默退出。
 
 BP 的监听范围精确匹配 copy 的 include 规则，编辑不会被复制的文件不会触发重构建。
 可通过 `dev.watch.include` 添加额外监听路径：
@@ -906,10 +941,10 @@ copy: {
 
 复制 BP 时，默认只复制以下文件/文件夹：
 
-```
+```txt
 scripts  manifest.json  animation_controllers  animations  biomes
-blocks  entities  functions  items  loot_tables  pack_icon.png
-recipes  shapes  spawn_rules  structures  texts  trading
+blocks  cameras  dialogue  entities  functions  items  loot_tables
+pack_icon.png  recipes  shapes  spawn_rules  structures  texts  trading
 feature_rules  features  worldgen
 ```
 
@@ -936,6 +971,15 @@ packs: {
 ```
 
 复制项不存在时会被静默跳过，不会报错。
+
+**不在 include 列表里的顶层条目会被跳过，并且现在会打印警告**（复制和打包都会）：
+
+```txt
+behavior pack pack only includes 20 configured item(s); 2 entries in "bp" are skipped:
+README_中文.md, custom_data. Add them to packs.bp.include to include them.
+```
+
+BP 与 RP 的默认行为不对称（BP 是白名单收，RP 默认整目录），但只要有条目被跳过就会有上面这条警告，不会再无声丢文件。隐藏条目（`.` 开头）和 `node_modules` 不计入警告，避免噪音。
 
 Dev 模式使用相同的 include 规则来决定监听哪些文件，详见「开发模式」章节。
 
@@ -983,9 +1027,32 @@ bepack dev --optimize                # dev 的每次自动复制也生成归档
 - 仅配置 BP 时创建 `.mcpack`。
 - 同时配置 BP 和 RP 时创建 `.mcaddon`。
 
+**`bepack pack` 默认先构建再打包**：打包只是把磁盘上的文件收进压缩包，不重新编译，所以单独执行 `pack` 曾经可能把旧的 `scripts/*.js` 打进产物。现在它会先跑一次完整的构建（manifest 修补、类型检查、Rolldown），再打包，因此下面两条命令等价：
+
+```bash
+bepack pack
+bepack build --pack
+```
+
+需要"只压缩当前目录、不要构建"时用 `--no-build`（或 `--skip-build`）：
+
+```bash
+bepack pack --no-build
+```
+
+因为多了一次构建，`pack` 也会触发构建与清单钩子：`beforeManifest` / `afterManifest` / `beforeBuild` / `afterBuild`（`ctx.command === "build"`），随后是 `beforePack` / `afterPack`（`ctx.command === "pack"`）。`--no-build` 时只触发打包钩子。
+
+`--dry-run` 只汇报将要产出的文件，不写盘：
+
+```txt
+√ pack dry-run: would pack dist/my-addon-1.0.0.mcpack (no file written)
+```
+
 **BP 始终使用选择性打包**：只打包默认 include 列表（`scripts`、`manifest.json`、`animation_controllers` 等）和 `packs.bp.include` 中配置的额外文件。即使 `bp.root = "."`（项目根目录即行为包），也不会将整个项目打包进去。
 
 RP 默认打包整个目录；如果配置了 `packs.rp.include`，则改用选择性打包。
+
+两种模式下被跳过的顶层条目都会打印警告，详见「选择性复制」一节。
 
 输出文件名默认为：
 
@@ -1088,14 +1155,40 @@ hooks: {
 }
 ```
 
+### 每个命令实际触发哪些钩子
+
+钩子不是"配置了就一定会在每条命令里跑"，而是挂在具体的步骤上。当前实现（`ctx.command` 标明是谁触发的）：
+
+| 命令 | 触发的钩子（按顺序） |
+| --- | --- |
+| `manifest` | beforeManifest, afterManifest |
+| `install` | beforeInstall, afterInstall；`install.updateManifest` 为真时中间还有 beforeManifest, afterManifest |
+| `copy` | beforeCopy, afterCopy |
+| `pack` | beforeManifest, afterManifest, beforeBuild, afterBuild（来自先构建的步骤）→ beforePack, afterPack |
+| `pack --no-build` | beforePack, afterPack |
+| `build` | beforeManifest, afterManifest, beforeBuild, afterBuild |
+| `build --copy` | 上面 4 个 + beforeCopy, afterCopy |
+| `build --pack` | 上面 4 个 + beforePack, afterPack |
+| `build --copy --pack` | 上面 4 个 + beforeCopy, afterCopy + beforePack, afterPack |
+| `build --install` | beforeInstall, afterInstall（含 manifest 钩子）→ 再走 build 的完整流程 |
+| `dev`（首次构建、src 变化重建） | beforeManifest, afterManifest, beforeBuild, afterBuild；自动复制时还有 beforeCopy, afterCopy |
+| `dev`（非 src 变化，仅刷新包） | beforeManifest, afterManifest；自动复制时还有 beforeCopy, afterCopy |
+
+规则总结：
+
+- **任何会改写 `manifest.json` 的命令都会触发 `beforeManifest` / `afterManifest`**，包括 `build`、`dev`、`install` 和先构建的 `pack`——不再是只有 `manifest` 命令。
+- **`build --copy` 与 `dev` 的自动复制都会触发 `beforeCopy` / `afterCopy`**，因此"复制前改文件"的钩子对所有复制路径都有效。
+- 打包钩子只由 `runPack` 触发，所以 `build --pack`、`pack` 都会走。
+
 钩子上下文类型：
 
 ```ts
 type HookContext = {
-    command: CommandName; // "build" | "dev" | "install" | ...
+    command: CommandName; // "build" | "dev" | "install" | "pack" | ...
     cwd: string;
     mode?: string; // 通过 --mode <value> 传入的执行模式
     target: string;
+    dryRun: boolean; // 本次命令是否 --dry-run（此时不会写任何文件）
     config: ResolvedConfig;
     paths: {
         dist: string;
@@ -1110,6 +1203,8 @@ type HookContext = {
     logger: LoggerLike;
 };
 ```
+
+`dryRun` 由命令的 `--dry-run` 决定，钩子内可直接 `if (ctx.dryRun) return;`，不必再读 `process.argv`。
 
 钩子可以是同步或异步的。在钩子中抛出异常会导致命令失败，返回 `HOOK_FAILED`。
 
@@ -1169,6 +1264,7 @@ DEPENDENCY_REQUIRES_INSTALL
 SAPI_VERSION_NOT_FOUND
 TYPECHECK_FAILED
 BUILD_FAILED
+DEV_NO_WATCH_TARGETS
 COPY_TARGET_NOT_FOUND
 COPY_FAILED
 PACK_FAILED
@@ -1213,9 +1309,11 @@ bepack init --from-bp ./bp/manifest.json --from-rp ./rp/manifest.json
 | UUID           | 直接读取 manifest 中的值，不重新生成                                                                                                                                                                     |
 | 版本           | 从 manifest header 读取（支持数组 `[1,0,0]` 和字符串 `"1.0.0"`）。两个包版本不同时取最高者，并给出警告                                                                                                   |
 | 依赖           | manifest 中的 `module_name` 依赖如果在 BePack 内置 catalog 中，自动写入配置                                                                                                                              |
-| 编译脚本       | manifest 中有 script 模块时自动开启 compile。根据模块 `entry` 推断源入口和输出目录：`"scripts/main.js"` → `entry: "src/main.ts"`；`"custom/app.js"` → `entry: "src/app.ts"`, `scriptOutputDir: "custom"` |
+| 编译脚本       | 只有在磁盘上确实存在匹配源文件（`src/<入口>.ts` / `.mts` / `.js` / `.mjs`）时才开启 compile，并根据模块 `entry` 推断输出目录：`"scripts/main.js"` → `entry: "src/main.ts"`, `scriptOutputDir: "scripts"`；`"custom/app.js"` → `entry: "src/app.ts"`, `scriptOutputDir: "custom"`。源文件存在但没有 `tsconfig.json` 时生成 `typecheck: false` 并警告；脚本已在包内且没有源文件时不生成 `compile`（包内 `scripts/` 原样复制/打包），避免生成首次构建就失败的配置 |
 | Windows        | 自动添加 `copy: { defaultTarget: "win" }"                                                                                                                                                                |
 
 manifest 路径必须在当前目录内，否则报错。
 
 如果配置文件已存在，init 会报错提示使用 `--force` 覆盖。
+
+`--dry-run` 只打印将要创建的文件（`init dry-run: would create …`），既不写文件也不创建目录。

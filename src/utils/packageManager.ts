@@ -1,13 +1,45 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import type { PackageManager as PackageManagerType } from "../config/configTypes.js";
+import type { LoggerLike, PackageManager as PackageManagerType } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { pathExists, readJsonFile } from "./fs.js";
+
+/**
+ * npm 12 resolves `--allow-scripts` from a *CLI/env* layer and rejects it for
+ * project-scoped installs with `EALLOWSCRIPTS`.
+ *
+ * `npm run <script>` exports every resolved npm config value as `npm_config_*`,
+ * so a user/global `.npmrc` containing `allow-scripts=...` leaks into the child
+ * environment of `bepack install` and makes the nested `npm install` fail:
+ *
+ *   npm error code EALLOWSCRIPTS
+ *   npm error --allow-scripts is not allowed in project-scoped installs.
+ *
+ * The value is honoured anyway through `.npmrc` / `package.json#allowScripts`,
+ * so the inherited env var is dropped before spawning the package manager.
+ */
+export function sanitizePackageManagerEnv(env: NodeJS.ProcessEnv): {
+    env: NodeJS.ProcessEnv;
+    removed: string[];
+} {
+    const removed: string[] = [];
+    const next: NodeJS.ProcessEnv = {};
+    for (const [key, value] of Object.entries(env)) {
+        // npm config keys are case-insensitive (`npm_config_allow_scripts`).
+        if (key.toLowerCase() === "npm_config_allow_scripts") {
+            removed.push(key);
+            continue;
+        }
+        next[key] = value;
+    }
+    return { env: next, removed };
+}
 
 export class PackageManager {
     constructor(
         private readonly cwd: string,
-        private readonly registry?: string
+        private readonly registry?: string,
+        private readonly logger?: LoggerLike
     ) {}
 
     async detect(configured: PackageManagerType): Promise<Exclude<PackageManagerType, "auto">> {
@@ -27,10 +59,18 @@ export class PackageManager {
 
     async install(manager: Exclude<PackageManagerType, "auto">): Promise<number> {
         const { command, args } = this.commandForPlatform(manager, this.installArgs(manager));
+        const { env, removed } = sanitizePackageManagerEnv(process.env);
+        if (removed.length > 0) {
+            this.logger?.warn(
+                `Ignoring inherited ${removed.join(", ")}: npm rejects --allow-scripts for ` +
+                    `project-scoped installs. Declare allowed packages in package.json "allowScripts" ` +
+                    `or in .npmrc instead.`
+            );
+        }
         return await new Promise((resolve, reject) => {
             let child;
             try {
-                child = spawn(command, args, { cwd: this.cwd, stdio: "inherit" });
+                child = spawn(command, args, { cwd: this.cwd, stdio: "inherit", env });
             } catch (cause) {
                 reject(
                     new BePackError("PACKAGE_MANAGER_NOT_FOUND", `${manager} is not available.`, {

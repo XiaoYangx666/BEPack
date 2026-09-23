@@ -6,6 +6,8 @@ export const DEFAULT_BP_INCLUDES = [
     "animations",
     "biomes",
     "blocks",
+    "cameras",
+    "dialogue",
     "entities",
     "functions",
     "items",

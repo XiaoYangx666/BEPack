@@ -47,13 +47,21 @@ function resolvePaths(cwd: string, config: ResolvedConfig): HookContext["paths"]
     return paths;
 }
 
+/** Options forwarded to the hook context. */
+export type RunHookOptions = {
+    /** CLI `--mode` value; forwarded to `HookContext.mode`. */
+    mode?: string;
+    /** Whether the running command is a dry run; forwarded to `HookContext.dryRun`. */
+    dryRun?: boolean;
+};
+
 export async function runHook(
     name: keyof ResolvedConfig["hooks"],
     command: CommandName,
     cwd: string,
     config: ResolvedConfig,
     logger: Logger,
-    mode?: string
+    options: RunHookOptions = {}
 ): Promise<void> {
     const hook = config.hooks[name];
     if (!hook) return;
@@ -61,8 +69,9 @@ export async function runHook(
         const result = await hook({
             command,
             cwd,
-            ...(mode === undefined ? {} : { mode }),
+            ...(options.mode === undefined ? {} : { mode: options.mode }),
             target: config.target,
+            dryRun: Boolean(options.dryRun),
             config,
             paths: resolvePaths(cwd, config),
             logger,

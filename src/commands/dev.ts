@@ -1,7 +1,7 @@
 import path from "node:path";
 import { loadConfig } from "../config/loadConfig.js";
 import { runBuild } from "../build/runBuild.js";
-import { copyPacks } from "../copy/copyPacks.js";
+import { runCopyPacks } from "../copy/runCopy.js";
 import { watchProject } from "../dev/watch.js";
 import { Logger } from "../logger/logger.js";
 
@@ -53,7 +53,16 @@ export async function commandDev(options: any) {
 
     // Initial copy (if configured)
     if (copy) {
-        await copyPacks(cwd, config, copyTarget, dryRun, logger, copyOptions);
+        await runCopyPacks({
+            command: "dev",
+            cwd,
+            config,
+            logger,
+            targetName: copyTarget,
+            dryRun,
+            ...(options.mode === undefined ? {} : { mode: options.mode }),
+            ...copyOptions,
+        });
     }
 
     logger.done("dev", `initial build complete in ${logger.formatDuration(Date.now() - start)}`);

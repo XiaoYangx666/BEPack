@@ -15,6 +15,7 @@ import {
 } from "../pack/fileMap.js";
 import { createPackOptimizer } from "../pack/optimizePack.js";
 import { resolveCopyTarget } from "./resolveCopyTarget.js";
+import { warnUnincludedPackEntries, packAuditIgnoreList } from "../utils/packIncludeAudit.js";
 import type { Logger } from "../logger/logger.js";
 import pc from "picocolors";
 
@@ -112,12 +113,28 @@ async function copyOnePack(
     folderName: string,
     config: ResolvedConfig,
     dryRun: boolean,
+    cwd: string,
     logger?: Logger,
     optimize?: boolean
 ): Promise<string> {
     const includes = getPackIncludeItems(config, packType);
     const to = resolveSafeCopyDestination(targetDir, folderName);
     assertSafeCopyDestination(source, to);
+
+    // BP is always selective (RP only when includes are configured): report what
+    // the include list leaves behind instead of dropping it silently.
+    const selective = packType === "bp" || includes.length > 0;
+    if (selective) {
+        await warnUnincludedPackEntries({
+            ...(logger ? { logger } : {}),
+            packType,
+            root: source,
+            items: includes,
+            action: "copy",
+            cwd,
+            ignore: packAuditIgnoreList(cwd, config, packType),
+        });
+    }
 
     // `copy.optimize` mirrors the packaged artifact in the dev folder, so an optimized
     // pack can be tested in-game before it ships.
@@ -130,7 +147,6 @@ async function copyOnePack(
 
     if (!dryRun) {
         if (optimizeOptions) {
-            const selective = packType === "bp" || includes.length > 0;
             const collected = selective
                 ? await collectSelectedFiles(source, includes)
                 : await collectDirFiles(source);
@@ -157,7 +173,7 @@ async function copyOnePack(
                 }
                 throw error;
             }
-        } else if (packType === "bp" || includes.length > 0) {
+        } else if (selective) {
             // BP is always selective; RP is selective only when includes are configured
             await copySelectedItems(source, to, includes);
         } else {
@@ -215,6 +231,7 @@ export async function copyPacks(
             folderName,
             config,
             dryRun,
+            cwd,
             logger,
             options.optimize
         );

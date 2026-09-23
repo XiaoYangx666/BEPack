@@ -78,7 +78,9 @@ bepack init --from-bp bp/manifest.json
 bepack init --from-bp bp/manifest.json --from-rp rp/manifest.json
 ```
 
-This creates `bepack.config.ts` from the pack roots, names, UUIDs, versions, manifest format, and supported Script API dependencies it finds. A BP script module is also converted into a TypeScript build configuration when possible.
+This creates `bepack.config.ts` from the pack roots, names, UUIDs, versions, manifest format, and supported Script API dependencies it finds. A BP script module becomes a TypeScript build configuration only when a matching source file (`src/<entry>.ts`, `.mts`, `.js` or `.mjs`) actually exists — a pack whose scripts already live inside it keeps compilation disabled instead of generating an entry that would fail the first build. Missing `tsconfig.json` (when a TypeScript source exists) is reported and disables type checking in the generated config.
+
+`--dry-run` prints what would be created without writing anything.
 
 Useful variations:
 
@@ -160,12 +162,14 @@ bepack build
 # Watch files and rebuild during development
 bepack dev
 
-# Create a distributable archive
+# Create a distributable archive (builds first)
 bepack pack
 
 # Build and package in one command
 bepack build --pack
 ```
+
+`bepack pack` builds first, so a bare `pack` can never ship stale `scripts/*.js` output; use `bepack pack --no-build` to zip the pack folders exactly as they are on disk.
 
 Use `bepack install` on its own when you only want to update managed dependencies and manifests. Set `target` in the config, or temporarily override it while installing and building:
 
@@ -177,6 +181,8 @@ bepack build --install --target 1.21.120
 > **Type checking runs by default.** Every `bepack build` and `bepack dev` executes `tsc --noEmit` before Rolldown bundles your source. A failing check stops the build with `TYPECHECK_FAILED` instead of emitting a broken pack. Skip it with `--skip-typecheck`, or set `packs.bp.compile.typecheck: false`. This is independent of any custom Rolldown options — adding them does **not** turn the type check off.
 
 `stable`, `beta`, `preview`, and exact versions can be used for the supported `@minecraft/*` dependency entries. BePack resolves selectors such as `stable` to concrete package versions before updating `package.json` and the BP manifest.
+
+The version written to `manifest.json` comes from, in order: an exact version in your config (`"@minecraft/server": "2.10.0"` — always wins), the version resolved by `bepack install` / `build --install` (online), then the version already stored in the manifest (offline `build` / `dev` / `manifest` never touch the network). Every write is logged — `manifest @minecraft/server: 2.0.0 -> 2.10.0 (specifier "stable", install)` or `... kept from manifest ... — run \`bepack install\` to refresh` — so a stale channel version is never silent again.
 
 ## Customize the Rolldown build
 
@@ -260,6 +266,7 @@ export default defineConfig({
 ```bash
 bepack pack
 bepack pack --name my-addon-preview
+bepack pack --no-build      # zip the pack folders as-is, without building first
 ```
 
 | Configured packs | Output     |
@@ -267,6 +274,8 @@ bepack pack --name my-addon-preview
 | BP only          | `.mcpack`  |
 | RP only          | `.mcpack`  |
 | BP and RP        | `.mcaddon` |
+
+When a pack is packed selectively (always for BP, and for RP once `packs.rp.include` is set), BePack lists the top-level entries the include list leaves out and tells you to add them to `packs.bp.include` / `packs.rp.include` — files such as a `README_中文.md` next to `manifest.json` are no longer dropped silently.
 
 ### Pack optimization (`__brarchive`)
 
@@ -303,7 +312,7 @@ copy: { defaultTarget: "minecraft", optimize: true }
 | `bepack build`            | Patch manifests, type-check with `tsc`, then compile the configured BP source.    |
 | `bepack dev`              | Build once, then watch and rebuild (type checking on by default).                 |
 | `bepack copy`             | Copy configured packs to a development target.                                    |
-| `bepack pack`             | Create a `.mcpack` or `.mcaddon`.                                                 |
+| `bepack pack`             | Build, then create a `.mcpack` or `.mcaddon` (`--no-build` to skip).              |
 | `bepack config --summary` | Inspect the resolved configuration.                                               |
 
 All commands accept `--cwd <project-dir>` and `--config <path>` when the current directory or config filename is different. Add `--dry-run` to preview file-writing commands, or `--json` for machine-readable output. Run `bepack <command> --help` for every command option.

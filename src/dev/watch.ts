@@ -1,9 +1,11 @@
 import chokidar from "chokidar";
 import path from "node:path";
 import { runBuild } from "../build/runBuild.js";
+import { runManifestPatch } from "../manifest/runManifest.js";
+import { runCopyPacks } from "../copy/runCopy.js";
+import { BePackError } from "../errors/BePackError.js";
 import type { PackType, ResolvedConfig } from "../config/configTypes.js";
 import { getConfiguredPacks } from "../config/configTypes.js";
-import { copyPacks } from "../copy/copyPacks.js";
 import type { Logger } from "../logger/logger.js";
 import {
     distRoot,
@@ -80,6 +82,23 @@ export function watchProject(
         relativeTo(cwd, p)
     );
 
+    // Chokidar with no roots registers no watchers, which leaves the event loop
+    // empty: `bepack dev` used to print "watching" and exit 0 immediately.
+    // Fail loudly with the reason instead of exiting silently.
+    if (dedupedRoots.length === 0) {
+        throw new BePackError(
+            "DEV_NO_WATCH_TARGETS",
+            "Nothing to watch: no compile entry, no copy-enabled pack directories and no dev.watch.include paths.",
+            {
+                suggestions: [
+                    "Configure packs.bp.compile.entry to watch TypeScript sources.",
+                    "Enable copying (packs.rp/bp, dev.copy or `bepack dev --copy`) to watch pack folders.",
+                    "Add paths explicitly with dev.watch.include.",
+                ],
+            }
+        );
+    }
+
     // Build ignored paths list
     const ignored: string[] = ["node_modules", ".git", relativeTo(cwd, distRoot(cwd, config))];
 
@@ -110,15 +129,28 @@ export function watchProject(
 
     const copyIfEnabled = async () => {
         if (options.copy) {
-            await copyPacks(cwd, config, options.copyTarget, options.dryRun, logger, {
+            await runCopyPacks({
+                command: "dev",
+                cwd,
+                config,
+                logger,
+                targetName: options.copyTarget,
+                dryRun: options.dryRun,
+                ...(options.mode === undefined ? {} : { mode: options.mode }),
                 ...(options.optimize === undefined ? {} : { optimize: options.optimize }),
             });
         }
     };
 
     const refreshPacks = async () => {
-        const { patchManifest } = await import("../manifest/patchManifest.js");
-        await patchManifest({ cwd, config, dryRun: options.dryRun, logger });
+        await runManifestPatch({
+            cwd,
+            config,
+            command: "dev",
+            dryRun: options.dryRun,
+            logger,
+            ...(options.mode === undefined ? {} : { mode: options.mode }),
+        });
         await copyIfEnabled();
     };
 
@@ -139,8 +171,14 @@ export function watchProject(
                     : { rolldownConfig: options.rolldownConfig }),
             });
         } else {
-            const { patchManifest } = await import("../manifest/patchManifest.js");
-            await patchManifest({ cwd, config, dryRun: options.dryRun, logger });
+            await runManifestPatch({
+                cwd,
+                config,
+                command: "dev",
+                dryRun: options.dryRun,
+                logger,
+                ...(options.mode === undefined ? {} : { mode: options.mode }),
+            });
         }
         await copyIfEnabled();
     };

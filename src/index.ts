@@ -1,6 +1,12 @@
 export { defineConfig } from "./config/defaultConfig.js";
 export { loadConfig } from "./config/loadConfig.js";
 export { patchManifest } from "./manifest/patchManifest.js";
+export type {
+    PatchManifestOptions,
+    PatchManifestResult,
+    PatchedManifestDependency,
+    PatchedManifestFile,
+} from "./manifest/patchManifest.js";
 export { DependencyService, resolveDependencies } from "./install/DependencyService.js";
 export {
     MinecraftPackageResolver,

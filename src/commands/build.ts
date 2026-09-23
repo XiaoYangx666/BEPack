@@ -1,6 +1,6 @@
 import { loadConfig } from "../config/loadConfig.js";
 import { runBuild } from "../build/runBuild.js";
-import { copyPacks } from "../copy/copyPacks.js";
+import { runCopyPacks } from "../copy/runCopy.js";
 import { runPack } from "./pack.js";
 import { commandInstall } from "./install.js";
 import { Logger } from "../logger/logger.js";
@@ -83,14 +83,17 @@ export async function commandBuild(options: any) {
           ? true
           : config.build.copy;
     if (shouldCopy)
-        copy = await copyPacks(
+        copy = await runCopyPacks({
+            command: "build",
             cwd,
             config,
-            options.copyTarget ?? (typeof shouldCopy === "string" ? shouldCopy : undefined),
-            options.dryRun,
             logger,
-            options.optimize !== undefined ? { optimize: Boolean(options.optimize) } : {}
-        );
+            ...(options.mode === undefined ? {} : { mode: options.mode }),
+            targetName:
+                options.copyTarget ?? (typeof shouldCopy === "string" ? shouldCopy : undefined),
+            dryRun: Boolean(options.dryRun),
+            ...(options.optimize !== undefined ? { optimize: Boolean(options.optimize) } : {}),
+        });
     let packResult = null;
     if (!options.skipPack && options.pack)
         packResult = await runPack(cwd, config, logger, {

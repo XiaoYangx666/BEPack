@@ -130,11 +130,19 @@ common(cli.command("build", "Build project"))
 common(cli.command("copy", "Copy packs"))
     .option("--target <target>", "Copy target")
     .option("--all", "Copy to all targets")
-    .option("--optimize", "Optimize the copied packs into __brarchive archives (--no-optimize to disable)")
+    .option(
+        "--optimize",
+        "Optimize the copied packs into __brarchive archives (--no-optimize to disable)"
+    )
     .action((options: any) => run("copy", commandCopy, options));
-common(cli.command("pack", "Pack mcpack/mcaddon"))
+common(cli.command("pack", "Build and pack mcpack/mcaddon"))
     .option("--name <name>", "Output name")
     .option("--optimize", "Bundle loose files into __brarchive archives (--no-optimize to disable)")
+    .option("--build", "Build before packing (default; --no-build to skip)")
+    .option("--skip-build", "Pack the current pack folders without building first")
+    .option("--typecheck", "Run typecheck before packing")
+    .option("--skip-typecheck", "Skip typecheck before packing")
+    .option("--rolldown-config <path>", "Custom rolldown config file (overrides bepack.config)")
     .action((options: any) => run("pack", commandPack, options));
 common(cli.command("dev", "Watch project"))
     .option("--mode <value>", "Execution mode (passed to hooks)")
@@ -144,7 +152,10 @@ common(cli.command("dev", "Watch project"))
     .option("--typecheck", "Run typecheck")
     .option("--skip-typecheck", "Skip typecheck")
     .option("--rolldown-config <path>", "Custom rolldown config file (overrides bepack.config)")
-    .option("--optimize", "Optimize packed/copied output into __brarchive archives (--no-optimize to disable)")
+    .option(
+        "--optimize",
+        "Optimize packed/copied output into __brarchive archives (--no-optimize to disable)"
+    )
     .option("--timing", "Show per-step timing")
     .action((options: any) => run("dev", commandDev, options));
 common(cli.command("config", "Show resolved config"))
@@ -178,20 +189,13 @@ export async function runCLI(argv: string[]): Promise<void> {
         // consumes the next token as its value, so cli.args may be empty.
         // Fall back to raw argv to find non-option tokens.
         const unknown =
-            cli.args[0] ??
-            cli.rawArgs.slice(2).find((a) => a !== "--" && !a.startsWith("-"));
+            cli.args[0] ?? cli.rawArgs.slice(2).find((a) => a !== "--" && !a.startsWith("-"));
         if (unknown) {
             reportError(
                 "cli",
-                new BePackError(
-                    "UNKNOWN_COMMAND",
-                    `Unknown command: ${unknown}`,
-                    {
-                        suggestions: [
-                            "Run `bepack --help` to see available commands.",
-                        ],
-                    }
-                ),
+                new BePackError("UNKNOWN_COMMAND", `Unknown command: ${unknown}`, {
+                    suggestions: ["Run `bepack --help` to see available commands."],
+                }),
                 Boolean(cli.options.json)
             );
             return;

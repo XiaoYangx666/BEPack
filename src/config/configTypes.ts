@@ -120,6 +120,8 @@ export type HookContext = {
     cwd: string;
     mode?: string;
     target: string;
+    /** Whether the running command was started with `--dry-run` (no files are written). */
+    dryRun: boolean;
     config: ResolvedConfig;
     /** Convenience resolved paths. Only includes paths for packs that are configured. */
     paths: {
@@ -244,8 +246,12 @@ export type PackManifestOptions = {
      */
     merge?: "preserve" | "clean";
 
-    /** `header.min_engine_version` in clean mode. Accepts a SemVer string (e.g. `"1.21.0"`),
-     *  converted to `[n, n, n]` for format 2 manifests. Ignored in preserve mode. */
+    /** `header.min_engine_version` written to the manifest. Accepts a SemVer string
+     *  (e.g. `"1.21.0"`), converted to `[n, n, n]` for format 2 manifests.
+     *
+     *  When set it is authoritative in both merge modes: `preserve` overrides the
+     *  value already stored in the manifest, `clean` uses it as the generated value.
+     *  When omitted, `preserve` keeps the existing value and `clean` uses the default. */
     minEngineVersion?: string;
 
     /** Dependencies appended verbatim to manifest `dependencies` in clean mode. */

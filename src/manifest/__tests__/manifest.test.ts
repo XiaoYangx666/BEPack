@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ManifestBuilder } from "../ManifestBuilder.js";
 import { ManifestDepManager } from "../ManifestDepManager.js";
+import type { DependencyVersionSources } from "../ManifestDepManager.js";
 import { validateManifest } from "../validate.js";
 import { createDependencyCatalog } from "../../install/dependencyCatalog.js";
 import type { Manifest, ManifestVersion } from "../types.js";
@@ -74,10 +75,10 @@ function bp(overrides?: Partial<ResolvedConfig>): ManifestBuilder {
 
 function createBuilder(
     config: ResolvedConfig,
-    resolvedDeps?: Record<string, string>
+    sources?: DependencyVersionSources
 ): ManifestBuilder {
     const catalog = createDependencyCatalog(config);
-    const depManager = new ManifestDepManager(config, catalog, resolvedDeps);
+    const depManager = new ManifestDepManager(config, catalog, sources);
     return new ManifestBuilder(config, depManager);
 }
 

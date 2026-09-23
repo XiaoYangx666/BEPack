@@ -2,6 +2,7 @@ import path from "node:path";
 import { loadConfig } from "../config/loadConfig.js";
 import { getConfiguredPacks } from "../config/configTypes.js";
 import type { PackType } from "../config/configTypes.js";
+import { runBuild } from "../build/runBuild.js";
 import { zipSelectedItems, zipAddonSelected, zipAddonHybrid } from "../pack/zip.js";
 import type { FilesTransform } from "../pack/zip.js";
 import { createPackOptimizer } from "../pack/optimizePack.js";
@@ -10,6 +11,7 @@ import { runHook } from "../hooks/runHook.js";
 import { Logger } from "../logger/logger.js";
 import { packRoot, projectRoot, distRoot, getBpIncludeItems } from "../utils/path.js";
 import { DEFAULT_RP_INCLUDES } from "../constants/copyIncludes.js";
+import { warnUnincludedPackEntries, packAuditIgnoreList } from "../utils/packIncludeAudit.js";
 import { pathExists } from "../utils/fs.js";
 import { BePackError } from "../errors/BePackError.js";
 
@@ -125,6 +127,33 @@ export async function packProject(cwd: string, config: LoadedConfig, options: Pa
         : undefined;
     const bpInfo = bp ? getPackItems(config, "bp") : undefined;
 
+    // Report entries the selective include lists leave out of the artifact.
+    if (bp && bpInfo?.selective) {
+        await warnUnincludedPackEntries({
+            ...(options.logger ? { logger: options.logger } : {}),
+            packType: "bp",
+            root: bp.root,
+            items: bpInfo.items,
+            action: "pack",
+            cwd,
+            ignore: packAuditIgnoreList(cwd, config, "bp"),
+        });
+    }
+    if (rp) {
+        const rpInfo = getPackItems(config, "rp");
+        if (rpInfo.selective) {
+            await warnUnincludedPackEntries({
+                ...(options.logger ? { logger: options.logger } : {}),
+                packType: "rp",
+                root: rp.root,
+                items: rpInfo.items,
+                action: "pack",
+                cwd,
+                ignore: packAuditIgnoreList(cwd, config, "rp"),
+            });
+        }
+    }
+
     if (bp && rp) {
         if (!bpInfo) throw new BePackError("PACK_FAILED", "BP pack configuration is missing.");
         // BP + RP → .mcaddon
@@ -203,12 +232,21 @@ export async function runPack(
     options: PackRunOptions = {}
 ) {
     const start = Date.now();
-    await runHook("beforePack", "pack", cwd, config, logger);
+    await runHook("beforePack", "pack", cwd, config, logger, {
+        dryRun: Boolean(options.dryRun),
+    });
     const output = await packProject(cwd, config, { ...options, logger });
-    await runHook("afterPack", "pack", cwd, config, logger);
+    await runHook("afterPack", "pack", cwd, config, logger, {
+        dryRun: Boolean(options.dryRun),
+    });
     const durationMs = Date.now() - start;
-    logger.done("pack", `packed ${output} in ${logger.formatDuration(durationMs)}`);
-    return { output, durationMs };
+    logger.done(
+        "pack",
+        options.dryRun
+            ? `dry-run: would pack ${output} (no file written)`
+            : `packed ${output} in ${logger.formatDuration(durationMs)}`
+    );
+    return { output, durationMs, dryRun: Boolean(options.dryRun) };
 }
 
 export async function commandPack(options: any) {
@@ -218,10 +256,40 @@ export async function commandPack(options: any) {
         configPath: options.config,
     });
     const { cwd, config } = loaded;
+
+    // Packaging reads whatever is on disk, so build first by default: a bare
+    // `bepack pack` must never ship stale `scripts/*.js` output.
+    // `--no-build` / `--skip-build` keeps the old "just zip the folder" behavior.
+    const skipBuild = options.build === false || Boolean(options.skipBuild);
+    let build = null;
+    if (!skipBuild) {
+        // Typecheck/cache overrides mirror `bepack build`; defaults come from the config.
+        const typecheck = options.skipTypecheck
+            ? false
+            : options.typecheck
+              ? true
+              : config.packs.bp?.compile?.typecheck;
+        const cache =
+            options.cache !== undefined
+                ? Boolean(options.cache)
+                : (config.packs.bp?.compile?.cache.build ?? false);
+        build = await runBuild({
+            cwd,
+            config,
+            logger,
+            command: "build",
+            ...(typecheck === undefined ? {} : { typecheck }),
+            ...(options.cache !== undefined ? { cache } : {}),
+            dryRun: Boolean(options.dryRun),
+            quiet: Boolean(options.json || options.silent),
+            ...(options.rolldownConfig ? { rolldownConfig: options.rolldownConfig } : {}),
+        });
+    }
+
     const { output, durationMs } = await runPack(cwd, config, logger, {
         name: options.name,
         dryRun: options.dryRun,
         ...(options.optimize !== undefined ? { optimize: Boolean(options.optimize) } : {}),
     });
-    return { ok: true, command: "pack", durationMs, output };
+    return { ok: true, command: "pack", durationMs, output, built: !skipBuild, build };
 }

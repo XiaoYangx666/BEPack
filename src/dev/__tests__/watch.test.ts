@@ -64,4 +64,37 @@ describe("watchProject", () => {
         expect(mocks.copyPacks).not.toHaveBeenCalled();
         expect(mocks.runBuild).not.toHaveBeenCalled();
     });
+
+    it("fails loudly instead of exiting silently when nothing is watchable", () => {
+        const cwd = "/tmp/bepack-watch-project";
+        const config = normalizeConfig(
+            {
+                name: "test",
+                packs: { bp: { root: "bp", uuid: "a" } },
+                dev: { copy: false },
+            },
+            {},
+            cwd
+        );
+        const logger = {
+            clear: vi.fn(),
+            bepack: vi.fn(),
+            done: vi.fn(),
+            error: vi.fn(),
+            progress: vi.fn(),
+            formatDuration: vi.fn(() => "0ms"),
+        } as unknown as Logger;
+
+        // No compile entry, copy disabled and no dev.watch.include: chokidar would
+        // register no watchers and the process would exit 0 right after "watching".
+        expect(() =>
+            watchProject(cwd, config, logger, {
+                copy: false,
+                typecheck: false,
+                cache: false,
+                dryRun: false,
+            })
+        ).toThrowError(/Nothing to watch/);
+        expect(mocks.watch).not.toHaveBeenCalled();
+    });
 });

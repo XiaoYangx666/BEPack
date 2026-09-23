@@ -1,7 +1,7 @@
 import { loadConfig } from "../config/loadConfig.js";
 import { DependencyService } from "../install/DependencyService.js";
 import { patchPackageJson } from "../install/patchPackageJson.js";
-import { patchManifest } from "../manifest/patchManifest.js";
+import { runManifestPatch } from "../manifest/runManifest.js";
 import { PackageManager } from "../utils/packageManager.js";
 import { runHook } from "../hooks/runHook.js";
 import { Logger } from "../logger/logger.js";
@@ -31,7 +31,9 @@ export async function commandInstall(options: any) {
         configPath: options.config,
         overrides,
     });
-    await runHook("beforeInstall", "install", cwd, config, logger);
+    await runHook("beforeInstall", "install", cwd, config, logger, {
+        dryRun: Boolean(options.dryRun),
+    });
     const resolved = await new DependencyService(config, logger).resolveAll();
     const resolvedManifestVersions = Object.fromEntries(
         Object.entries(resolved)
@@ -44,15 +46,16 @@ export async function commandInstall(options: any) {
     if (config.install.updateManifest)
         Object.assign(
             files,
-            await patchManifest({
+            await runManifestPatch({
                 cwd,
                 config,
+                command: "install",
                 dryRun: options.dryRun,
                 logger,
                 resolvedDeps: resolvedManifestVersions,
             })
         );
-    const pm = new PackageManager(cwd, config.install.registry);
+    const pm = new PackageManager(cwd, config.install.registry, logger);
     const manager = await pm.detect(config.install.packageManager);
     let packageInstall = { ran: false, manager, exitCode: null as number | null };
     if (!options.dryRun && config.install.runPackageManager) {
@@ -62,7 +65,9 @@ export async function commandInstall(options: any) {
         );
         packageInstall = { ran: true, manager, exitCode: await pm.install(manager) };
     }
-    await runHook("afterInstall", "install", cwd, config, logger);
+    await runHook("afterInstall", "install", cwd, config, logger, {
+        dryRun: Boolean(options.dryRun),
+    });
     logger.success("Install", "done");
     return {
         ok: true,

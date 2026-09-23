@@ -1,11 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import path from "node:path";
 import os from "node:os";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { unzipSync } from "fflate";
 import { normalizeConfig } from "../../config/normalizeConfig.js";
 import { parseBrarchive } from "../../pack/brarchive.js";
-import { packProject } from "../pack.js";
+import { packProject, runPack, commandPack } from "../pack.js";
+import type { Logger } from "../../logger/logger.js";
 
 function manifest(minEngineVersion: number[] | string): string {
     return JSON.stringify({
@@ -196,6 +197,140 @@ describe("packProject with pack.optimize", () => {
             const keys = Object.keys(unzipSync(new Uint8Array(readFileSync(output))));
             expect(keys).toContain("entities/zombie.json");
             expect(keys).not.toContain("__brarchive/entities.brarchive");
+        } finally {
+            rmSync(temp, { recursive: true, force: true });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// `bepack pack` builds before packing
+// ---------------------------------------------------------------------------
+
+/** Project with a real config file, TS source and a stale compiled script on disk. */
+function makeBuildableProject(): string {
+    const temp = mkdtempSync(path.join(os.tmpdir(), "bepack-pack-build-"));
+    mkdirSync(path.join(temp, "bp", "scripts"), { recursive: true });
+    mkdirSync(path.join(temp, "src"), { recursive: true });
+    writeFileSync(
+        path.join(temp, "bp", "manifest.json"),
+        JSON.stringify({
+            format_version: 2,
+            header: {
+                name: "Buildable",
+                description: "",
+                uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                version: [1, 0, 0],
+                min_engine_version: [1, 21, 0],
+            },
+            modules: [
+                {
+                    type: "script",
+                    language: "javascript",
+                    uuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                    version: [1, 0, 0],
+                    entry: "scripts/main.js",
+                },
+            ],
+        })
+    );
+    writeFileSync(path.join(temp, "bp", "scripts", "main.js"), "console.warn('STALE');");
+    writeFileSync(path.join(temp, "src", "main.ts"), "console.warn('FRESH');\n");
+    writeFileSync(
+        path.join(temp, "bepack.config.mjs"),
+        `export default {
+            name: "addon",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                    compile: { entry: "src/main.ts", typecheck: false },
+                },
+            },
+            pack: { outDir: "dist" },
+        };\n`
+    );
+    return temp;
+}
+
+function packedScript(temp: string): string {
+    const zip = unzipSync(
+        new Uint8Array(readFileSync(path.join(temp, "dist", "addon-1.0.0.mcpack")))
+    );
+    return new TextDecoder().decode(zip["scripts/main.js"]!);
+}
+
+describe("commandPack", () => {
+    it("builds before packing so stale scripts never ship", async () => {
+        const temp = makeBuildableProject();
+        try {
+            await commandPack({ cwd: temp, json: true });
+
+            expect(packedScript(temp)).toContain("FRESH");
+            expect(packedScript(temp)).not.toContain("STALE");
+        } finally {
+            rmSync(temp, { recursive: true, force: true });
+        }
+    });
+
+    it("packs the folder as-is with --no-build", async () => {
+        const temp = makeBuildableProject();
+        try {
+            await commandPack({ cwd: temp, json: true, build: false });
+
+            expect(packedScript(temp)).toContain("STALE");
+        } finally {
+            rmSync(temp, { recursive: true, force: true });
+        }
+    });
+
+    it("writes no artifact on --dry-run", async () => {
+        const temp = makeBuildableProject();
+        try {
+            const result = await commandPack({ cwd: temp, json: true, dryRun: true });
+
+            expect(existsSync(path.join(temp, "dist", "addon-1.0.0.mcpack"))).toBe(false);
+            expect(result.output).toContain("addon-1.0.0.mcpack");
+        } finally {
+            rmSync(temp, { recursive: true, force: true });
+        }
+    });
+});
+
+describe("runPack", () => {
+    it("reports a dry run instead of claiming it packed a file", async () => {
+        const temp = makeBuildableProject();
+        try {
+            const config = normalizeConfig(
+                {
+                    root: temp,
+                    name: "addon",
+                    packs: { bp: { root: "bp", uuid: "bp-uuid", moduleUuid: "module-uuid" } },
+                    pack: { outDir: "dist" },
+                },
+                {},
+                temp
+            );
+            const logger = {
+                done: vi.fn(),
+                clear: vi.fn(),
+                bepack: vi.fn(),
+                error: vi.fn(),
+                progress: vi.fn(),
+                hook: vi.fn(),
+                warn: vi.fn(),
+                info: vi.fn(),
+                verbose: vi.fn(),
+                formatDuration: vi.fn(() => "0.00s"),
+            } as unknown as Logger;
+
+            await runPack(temp, config, logger, { dryRun: true });
+
+            const message = String((logger.done as any).mock.calls[0]![1]);
+            expect(message).toContain("dry-run");
+            expect(message).toContain("would pack");
+            expect(message).not.toContain("packed ");
         } finally {
             rmSync(temp, { recursive: true, force: true });
         }

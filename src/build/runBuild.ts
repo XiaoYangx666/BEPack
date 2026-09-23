@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { ResolvedConfig } from "../config/configTypes.js";
-import { patchManifest } from "../manifest/patchManifest.js";
+import { runManifestPatch } from "../manifest/runManifest.js";
 import { runTypecheck } from "./runTypecheck.js";
 import { runRolldown } from "./runRolldown.js";
 import { runHook } from "../hooks/runHook.js";
@@ -43,16 +43,23 @@ export async function runBuild(options: RunBuildOptions) {
     const timing = options.config.build.timing;
     const root = projectRoot(options.cwd, options.config);
     const compile = hasBpCompile(options.config);
+    const command = options.command ?? "build";
+    const hookOptions = {
+        ...(options.mode === undefined ? {} : { mode: options.mode }),
+        dryRun: Boolean(options.dryRun),
+    };
 
     // Phase 1: Manifest patching (for all configured packs)
     await timed(
         "manifest",
         () =>
-            patchManifest({
+            runManifestPatch({
                 cwd: options.cwd,
                 config: options.config,
-                dryRun: Boolean(options.dryRun),
+                command,
                 logger: options.logger,
+                dryRun: Boolean(options.dryRun),
+                ...(options.mode === undefined ? {} : { mode: options.mode }),
                 ...(options.resolvedDeps ? { resolvedDeps: options.resolvedDeps } : {}),
             }),
         options.logger,
@@ -61,12 +68,10 @@ export async function runBuild(options: RunBuildOptions) {
     const patchedPacks: string[] = [];
     if (options.config.packs.bp) patchedPacks.push("bp");
     if (options.config.packs.rp) patchedPacks.push("rp");
-    options.logger.manifest(
-        `manifest.json updated (${patchedPacks.join(", ")})`
-    );
+    options.logger.manifest(`manifest.json updated (${patchedPacks.join(", ")})`);
 
     // Phase 2: Compilation (only when BP has compile config)
-    await runHook("beforeBuild", "build", options.cwd, options.config, options.logger, options.mode);
+    await runHook("beforeBuild", command, options.cwd, options.config, options.logger, hookOptions);
 
     let typecheckRan = false;
     if (compile && !options.dryRun && options.typecheck !== false) {
@@ -112,12 +117,10 @@ export async function runBuild(options: RunBuildOptions) {
         );
     }
 
-    await runHook("afterBuild", "build", options.cwd, options.config, options.logger, options.mode);
+    await runHook("afterBuild", command, options.cwd, options.config, options.logger, hookOptions);
     const durationMs = Date.now() - start;
     return {
-        script: compile
-            ? slash(scriptOutFile(options.cwd, options.config)!)
-            : undefined,
+        script: compile ? slash(scriptOutFile(options.cwd, options.config)!) : undefined,
         compiled: compile,
         typecheck: typecheckRan,
         durationMs,

@@ -174,10 +174,10 @@ export class ManifestBuilder {
             ...(bp.description !== undefined ? { description: bp.description } : {}),
             uuid: bp.uuid,
             version: this.getVersionFor(formatVersion),
-            min_engine_version: this.cleanMinEngineVersion(
-                bp.manifest.minEngineVersion,
-                formatVersion
-            ),
+            min_engine_version:
+                bp.manifest.minEngineVersion === undefined
+                    ? this.defaultMinEngineVersion(formatVersion)
+                    : this.configMinEngineVersion(bp.manifest.minEngineVersion, formatVersion),
         };
     }
 
@@ -192,10 +192,10 @@ export class ManifestBuilder {
             uuid: rp.uuid,
             ...(rp.packScope !== undefined ? { pack_scope: rp.packScope } : {}),
             version: this.getVersionFor(formatVersion),
-            min_engine_version: this.cleanMinEngineVersion(
-                rp.manifest.minEngineVersion,
-                formatVersion
-            ),
+            min_engine_version:
+                rp.manifest.minEngineVersion === undefined
+                    ? this.defaultMinEngineVersion(formatVersion)
+                    : this.configMinEngineVersion(rp.manifest.minEngineVersion, formatVersion),
         };
     }
 
@@ -236,7 +236,8 @@ export class ManifestBuilder {
             version: this.getVersionFor(formatVersion),
             min_engine_version: this.normalizeMinEngineVersion(
                 existing.header?.min_engine_version,
-                formatVersion
+                formatVersion,
+                bp.manifest.minEngineVersion
             ),
         };
     }
@@ -255,7 +256,8 @@ export class ManifestBuilder {
             version: this.getVersionFor(formatVersion),
             min_engine_version: this.normalizeMinEngineVersion(
                 existing.header?.min_engine_version,
-                formatVersion
+                formatVersion,
+                rp.manifest.minEngineVersion
             ),
         };
     }
@@ -373,10 +375,21 @@ export class ManifestBuilder {
         return existing.format_version ?? MANIFEST_FORMAT_VERSION;
     }
 
+    /**
+     * Resolve `header.min_engine_version`.
+     *
+     * A configured `manifest.minEngineVersion` always wins — in clean mode as the
+     * generated value, and in preserve mode as an explicit override of the value
+     * already stored in the manifest. Without it, preserve mode keeps the existing
+     * value (converted when the format version changes).
+     */
     private normalizeMinEngineVersion(
         existingValue: unknown,
-        formatVersion: number
+        formatVersion: number,
+        configured?: string
     ): ManifestVersion {
+        if (configured !== undefined) return this.configMinEngineVersion(configured, formatVersion);
+
         if (existingValue === undefined || existingValue === null) {
             return this.defaultMinEngineVersion(formatVersion);
         }
@@ -399,11 +412,10 @@ export class ManifestBuilder {
         return this.defaultMinEngineVersion(formatVersion);
     }
 
-    private cleanMinEngineVersion(
-        minEngineVersion: string | undefined,
+    private configMinEngineVersion(
+        minEngineVersion: string,
         formatVersion: number
     ): ManifestVersion {
-        if (minEngineVersion === undefined) return this.defaultMinEngineVersion(formatVersion);
         if (formatVersion === 3) return minEngineVersion;
         return (
             this.stringToVersionTuple(minEngineVersion) ??

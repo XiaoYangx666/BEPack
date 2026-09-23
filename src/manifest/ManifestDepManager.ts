@@ -4,28 +4,55 @@ import { asArray } from "./ManifestFile.js";
 import type { ResolvedConfig, DependencyCatalogEntry } from "../config/configTypes.js";
 import type { ManifestDependency, ManifestVersion } from "./types.js";
 
+/** 依赖版本来自哪一层，用于诊断输出。 */
+export type DependencyVersionSource = "config" | "install" | "manifest";
+
+/** 一条受管依赖最终写入 manifest 的版本及其来源。 */
+export type ResolvedManifestDependency = {
+    name: string;
+    specifier: string;
+    version: string;
+    source: DependencyVersionSource;
+};
+
+/**
+ * 具体版本的两个来源：
+ * - `install`：`bepack install` / `build --install` 从 registry 解析出的版本。
+ * - `manifest`：现有 manifest 中已经写入的版本（离线构建时复用）。
+ */
+export type DependencyVersionSources = {
+    install?: Record<string, string>;
+    manifest?: Record<string, string>;
+};
+
 /**
  * ManifestDepManager 统一管理 manifest 依赖的：
  * - 校验（语法 + 政策）
  * - 识别（哪些 dep 是 BePack 管理的）
  * - 构建（将 config 中的依赖 specifier 转为 manifest 格式）
  * - 替换（合并用户手写依赖与 BePack 管理依赖）
+ *
+ * 版本优先级（高 → 低）：config 中的具体版本 > install 解析结果 > 现有 manifest 值。
+ * 也就是说，配置里写死 `"2.10.0"` 时任何解析结果都不会覆盖它。
  */
 export class ManifestDepManager {
     private readonly config: ResolvedConfig;
     private readonly catalog: Record<string, DependencyCatalogEntry>;
-    private readonly resolvedDeps: Record<string, string>;
+    private readonly installVersions: Record<string, string>;
+    private readonly manifestVersions: Record<string, string>;
     private readonly version: ManifestVersion;
     private readonly versionStr: string;
+    private readonly dependencyDiagnostics: ResolvedManifestDependency[] = [];
 
     constructor(
         config: ResolvedConfig,
         catalog: Record<string, DependencyCatalogEntry>,
-        resolvedDeps?: Record<string, string>
+        sources: DependencyVersionSources = {}
     ) {
         this.config = config;
         this.catalog = catalog;
-        this.resolvedDeps = resolvedDeps ?? {};
+        this.installVersions = sources.install ?? {};
+        this.manifestVersions = sources.manifest ?? {};
         this.version = parseVersionTuple(config.version);
         this.versionStr = config.version;
     }
@@ -53,11 +80,26 @@ export class ManifestDepManager {
         specifier: string;
         target: string;
         resolvedVersion?: string | undefined;
+        manifestVersion?: string | undefined;
     }): string {
-        const { specifier, target, resolvedVersion } = options;
+        return ManifestDepManager.resolveVersionDetail(options).version;
+    }
+
+    /**
+     * 同 `resolveVersion`，但同时返回版本来源，便于构建日志说明
+     * 「这个版本是谁写的」（config / install / 现有 manifest）。
+     */
+    static resolveVersionDetail(options: {
+        specifier: string;
+        target: string;
+        resolvedVersion?: string | undefined;
+        manifestVersion?: string | undefined;
+    }): { version: string; source: DependencyVersionSource } {
+        const { specifier, target, resolvedVersion, manifestVersion } = options;
 
         if (specifier === "stable") {
-            if (resolvedVersion) return resolvedVersion;
+            if (resolvedVersion) return { version: resolvedVersion, source: "install" };
+            if (manifestVersion) return { version: manifestVersion, source: "manifest" };
             throw new BePackError(
                 "DEPENDENCY_REQUIRES_INSTALL",
                 "Run `bepack install` to resolve stable manifest dependencies.",
@@ -66,8 +108,10 @@ export class ManifestDepManager {
         }
 
         if (specifier === "beta") {
-            if (targetSupportsChannelDependency(target)) return "beta";
-            if (resolvedVersion) return resolvedVersion;
+            if (targetSupportsChannelDependency(target))
+                return { version: "beta", source: "config" };
+            if (resolvedVersion) return { version: resolvedVersion, source: "install" };
+            if (manifestVersion) return { version: manifestVersion, source: "manifest" };
             throw new BePackError(
                 "DEPENDENCY_REQUIRES_INSTALL",
                 `Run \`bepack install\` to resolve manifest dependencies for target ${target}.`,
@@ -76,7 +120,8 @@ export class ManifestDepManager {
         }
 
         if (specifier === "preview") {
-            if (resolvedVersion) return resolvedVersion;
+            if (resolvedVersion) return { version: resolvedVersion, source: "install" };
+            if (manifestVersion) return { version: manifestVersion, source: "manifest" };
             throw new BePackError(
                 "DEPENDENCY_REQUIRES_INSTALL",
                 `Run \`bepack install\` to resolve preview manifest dependencies for target ${target}.`,
@@ -84,8 +129,8 @@ export class ManifestDepManager {
             );
         }
 
-        // 具体版本号，原样返回
-        return specifier;
+        // 具体版本号：config 是权威来源，任何解析结果都不会覆盖它
+        return { version: specifier, source: "config" };
     }
 
     // -----------------------------------------------------------------------
@@ -170,6 +215,8 @@ export class ManifestDepManager {
 
     /** 构建 catalog 中 manifest=true 的 module_name 依赖列表。 */
     private buildManagedDependencies(): ManifestDependency[] {
+        // Rebuilt from scratch on every call (buildBp + buildRp), so reset diagnostics.
+        this.dependencyDiagnostics.length = 0;
         if (!this.config.packs.bp) return [];
 
         const deps: ManifestDependency[] = [];
@@ -178,17 +225,30 @@ export class ManifestDepManager {
             const entry = this.catalog[name];
             if (!entry?.manifest) continue;
 
+            const detail = ManifestDepManager.resolveVersionDetail({
+                specifier,
+                target: this.config.target,
+                resolvedVersion: this.installVersions[name],
+                manifestVersion: this.manifestVersions[name],
+            });
             deps.push({
                 module_name: name,
-                version: ManifestDepManager.resolveVersion({
-                    specifier,
-                    target: this.config.target,
-                    resolvedVersion: this.resolvedDeps[name],
-                }),
+                version: detail.version,
+            });
+            this.dependencyDiagnostics.push({
+                name,
+                specifier,
+                version: detail.version,
+                source: detail.source,
             });
         }
 
         return deps;
+    }
+
+    /** 最近一次构建中每条受管依赖最终写入的版本及其来源。 */
+    getDependencyDiagnostics(): readonly ResolvedManifestDependency[] {
+        return this.dependencyDiagnostics;
     }
 
     // -----------------------------------------------------------------------
