@@ -625,6 +625,99 @@ describe("PBR capability", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Achievement（metadata.product_type）
+// ---------------------------------------------------------------------------
+
+describe("achievement", () => {
+    const SERVER = "@minecraft/server";
+
+    function achievementConfig(
+        achievement: boolean | undefined,
+        deps: Record<string, string> = { [SERVER]: "2.6.0" },
+        merge: "preserve" | "clean" = "preserve"
+    ): ResolvedConfig {
+        return baseConfig({
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    moduleUuid: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                    name: "Test BP",
+                    manifest: { ...DEFAULT_MANIFEST, merge },
+                    dependencies: deps,
+                    ...(achievement !== undefined ? { achievement } : {}),
+                    include: [],
+                },
+            },
+        });
+    }
+
+    it("achievement + beta 抛出", () => {
+        expect(() =>
+            createBuilder(achievementConfig(true, { [SERVER]: "beta" })).buildBp()
+        ).toThrow("achievement requires stable");
+    });
+
+    it("achievement + preview 抛出", () => {
+        expect(() =>
+            createBuilder(achievementConfig(true, { [SERVER]: "preview" })).buildBp()
+        ).toThrow("achievement requires stable");
+    });
+
+    it("achievement + stable 写入 product_type", () => {
+        const builder = createBuilder(achievementConfig(true, { [SERVER]: "stable" }), {
+            install: { [SERVER]: "2.6.0" },
+        });
+        expect(builder.buildBp().metadata).toMatchObject({ product_type: "addon" });
+    });
+
+    it("achievement + 具体版本写入 product_type", () => {
+        const manifest = createBuilder(achievementConfig(true)).buildBp();
+        expect(manifest.metadata).toMatchObject({ product_type: "addon" });
+    });
+
+    it("achievement=true 保留已有 metadata 其他字段", () => {
+        const manifest = createBuilder(achievementConfig(true)).buildBp({
+            metadata: { authors: ["me"] },
+        } as Manifest);
+        expect(manifest.metadata).toEqual({ authors: ["me"], product_type: "addon" });
+    });
+
+    it("未配置 achievement 时不写 product_type", () => {
+        const manifest = createBuilder(achievementConfig(undefined)).buildBp();
+        expect(manifest.metadata).toBeUndefined();
+    });
+
+    it("未配置 achievement 时保留已有 metadata", () => {
+        const manifest = createBuilder(achievementConfig(undefined)).buildBp({
+            metadata: { product_type: "addon" },
+        } as Manifest);
+        expect(manifest.metadata).toEqual({ product_type: "addon" });
+    });
+
+    it("achievement=false 删除 product_type 并保留其他 metadata", () => {
+        const manifest = createBuilder(achievementConfig(false)).buildBp({
+            metadata: { product_type: "addon", authors: ["me"] },
+        } as Manifest);
+        expect(manifest.metadata).toEqual({ authors: ["me"] });
+    });
+
+    it("achievement=false 且 metadata 只剩 product_type 时删除整个 metadata", () => {
+        const manifest = createBuilder(achievementConfig(false)).buildBp({
+            metadata: { product_type: "addon" },
+        } as Manifest);
+        expect(manifest.metadata).toBeUndefined();
+    });
+
+    it("clean 模式下 achievement 同样生效", () => {
+        const manifest = createBuilder(achievementConfig(true, undefined, "clean")).buildBp({
+            metadata: { authors: ["me"], product_type: "addon" },
+        } as Manifest);
+        expect(manifest.metadata).toEqual({ product_type: "addon" });
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Clean 模式（manifest.merge: "clean"）
 // ---------------------------------------------------------------------------
 
@@ -1013,4 +1106,13 @@ describe("ManifestDepManager.isAllowedSpecifier", () => {
     it.each(["", "abc", "latest"])("拒绝 '%s'", (v) => {
         expect(ManifestDepManager.isAllowedSpecifier(v)).toBe(false);
     });
+});
+
+describe("ManifestDepManager.isAchievementCompatible", () => {
+    it("stable 通过", () =>
+        expect(ManifestDepManager.isAchievementCompatible("stable")).toBe(true));
+    it("版本号通过", () => expect(ManifestDepManager.isAchievementCompatible("2.6.0")).toBe(true));
+    it("beta 拒绝", () => expect(ManifestDepManager.isAchievementCompatible("beta")).toBe(false));
+    it("preview 拒绝", () =>
+        expect(ManifestDepManager.isAchievementCompatible("preview")).toBe(false));
 });

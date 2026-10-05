@@ -7,7 +7,7 @@ import {
 } from "../constants/manifest.js";
 import { parseVersionTuple } from "../utils/semver.js";
 import type { ResolvedConfig } from "../config/configTypes.js";
-import { normalizeManifest, asArray } from "./ManifestFile.js";
+import { normalizeManifest, asArray, removeEmptyObject } from "./ManifestFile.js";
 import type { ManifestDepManager } from "./ManifestDepManager.js";
 import type {
     Manifest,
@@ -57,9 +57,13 @@ export class ManifestBuilder {
 
         const effectiveFormat = this.getWriteFormatVersion(existing);
 
-        return bp.manifest.merge === "clean"
-            ? this.buildCleanBp(bp, effectiveFormat)
-            : this.buildPreserveBp(existing, bp, effectiveFormat);
+        const manifest: Manifest =
+            bp.manifest.merge === "clean"
+                ? this.buildCleanBp(bp, effectiveFormat)
+                : this.buildPreserveBp(existing, bp, effectiveFormat);
+
+        this.applyAchievementMetadata(manifest, bp);
+        return manifest;
     }
 
     /**
@@ -337,8 +341,27 @@ export class ManifestBuilder {
     }
 
     // -----------------------------------------------------------------------
-    // PBR
+    // Achievement / PBR
     // -----------------------------------------------------------------------
+
+    /**
+     * 三态语义：`undefined` 不干预，`true` 写入 `metadata.product_type = "addon"`，
+     * `false` 删除该字段（metadata 变空时整个删除）。
+     */
+    private applyAchievementMetadata(
+        manifest: Manifest,
+        bp: NonNullable<ResolvedConfig["packs"]["bp"]>
+    ): void {
+        if (bp.achievement === true) {
+            manifest.metadata = { ...(manifest.metadata ?? {}), product_type: "addon" };
+        } else if (bp.achievement === false && manifest.metadata) {
+            const meta = { ...manifest.metadata };
+            delete meta.product_type;
+            const cleaned = removeEmptyObject(meta);
+            if (cleaned) manifest.metadata = cleaned;
+            else delete manifest.metadata;
+        }
+    }
 
     private applyPbrCapability(
         manifest: Manifest,
