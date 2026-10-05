@@ -50,6 +50,8 @@ List available templates:
 npm create mcbe@latest -- --list-templates
 ```
 
+BePack templates generate a `dev` script that copies into the Minecraft development folder. On Windows the generated `bepack.config.ts` sets `copy: { defaultTarget: "win" }` (the same default `bepack init` writes), so `npm run dev` works immediately. BePack's built-in copy targets are Windows-only paths, so on macOS and Linux no copy target is written and the `--copy` flag is dropped from the script — add `copy.targets` (plus `--copy`) once you have a destination.
+
 ## Common options
 
 - `--template <id>`: Select a template.

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createProject } from '../src/createProject.js';
 import { parseCliOptions } from '../src/parseCliOptions.js';
+import { defaultCopyTarget, dropDevCopyFlag } from '../src/templates/prepare.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true }))); });
@@ -84,5 +85,57 @@ describe('createProject', () => {
   it('rejects dangerous project names', async () => {
     const cwd = await temp();
     await expect(createProject(parseCliOptions(['.', '--template', 'behavior-pack', '--force', '--cwd', cwd]))).rejects.toThrow('relative child directory');
+  });
+
+  it('only defaults a copy target on Windows', () => {
+    expect(defaultCopyTarget('win32')).toBe('win');
+    // BePack's built-in copy targets are Windows-only paths.
+    expect(defaultCopyTarget('darwin')).toBeUndefined();
+    expect(defaultCopyTarget('linux')).toBeUndefined();
+  });
+
+  it('keeps the shipped dev --copy flag and the generated copy config in agreement', async () => {
+    const cwd = await temp();
+    await createProject(parseCliOptions(['demo', '--template', 'bepack-behavior', '--yes', '--cwd', cwd]));
+    const root = path.join(cwd, 'demo');
+    const config = await fs.readFile(path.join(root, 'bepack.config.ts'), 'utf8');
+    const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+    if (defaultCopyTarget()) {
+      // `bepack dev --copy` needs copy.defaultTarget, otherwise it fails with COPY_TARGET_NOT_FOUND.
+      expect(config).toContain('defaultTarget: "win"');
+      expect(pkg.scripts.dev).toContain('--copy');
+    } else {
+      expect(config).not.toContain('copy:');
+      expect(pkg.scripts.dev).not.toContain('--copy');
+    }
+  });
+
+  it('writes no copy target and no --copy flag on Linux', async () => {
+    const cwd = await temp();
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { ...platform, value: 'linux' });
+    try {
+      await createProject(parseCliOptions(['demo', '--template', 'bepack-behavior', '--yes', '--cwd', cwd]));
+    } finally {
+      Object.defineProperty(process, 'platform', platform);
+    }
+    const root = path.join(cwd, 'demo');
+    const config = await fs.readFile(path.join(root, 'bepack.config.ts'), 'utf8');
+    const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+    // No built-in target exists there, so `bepack dev --copy` must not be shipped either.
+    expect(config).not.toContain('copy:');
+    expect(config).not.toContain('defaultTarget');
+    expect(pkg.scripts.dev).toBe('bepack dev');
+  });
+
+  it('drops the --copy flag when no copy target can resolve', async () => {
+    const cwd = await temp();
+    await createProject(parseCliOptions(['demo', '--template', 'bepack-addon', '--yes', '--cwd', cwd]));
+    const root = path.join(cwd, 'demo');
+    const pkgPath = path.join(root, 'package.json');
+    // The templates ship `bepack dev --copy`; without a target it must not survive scaffolding.
+    expect(JSON.parse(await fs.readFile(pkgPath, 'utf8')).scripts.dev).toBe('bepack dev --copy');
+    await dropDevCopyFlag(root);
+    expect(JSON.parse(await fs.readFile(pkgPath, 'utf8')).scripts.dev).toBe('bepack dev');
   });
 });

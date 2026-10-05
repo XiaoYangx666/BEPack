@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { CreateContext } from '../types.js';
 import { pathExists } from '../utils/files.js';
 import { patchJson } from '../utils/json.js';
+import { patchPackageJson } from '../utils/packageJson.js';
 import { toNamespace } from '../utils/names.js';
 
 type Manifest = { header: Record<string, any>; modules?: Array<Record<string, any>> };
@@ -23,6 +24,14 @@ export async function preparePackIdentity(ctx: CreateContext): Promise<void> {
       for (const module of manifest.modules ?? []) module.uuid = crypto.randomUUID();
     });
   }
+}
+
+/**
+ * Built-in copy target for the current platform, mirroring `bepack init`.
+ * BePack's built-in targets (`win`, `winold`) are Windows-only, so other platforms get none.
+ */
+export function defaultCopyTarget(platform: NodeJS.Platform = process.platform): string | undefined {
+  return platform === 'win32' ? 'win' : undefined;
 }
 
 export interface BepackPrepareOptions {
@@ -45,6 +54,7 @@ export async function prepareBepack(ctx: CreateContext, options: BepackPrepareOp
   if (options.namespace) {
     await replaceNamespacePlaceholder(ctx, toNamespace(ctx.projectName));
   }
+  const copyTarget = defaultCopyTarget();
   const config = {
     name: ctx.packageName,
     version: '1.0.0',
@@ -63,6 +73,7 @@ export async function prepareBepack(ctx: CreateContext, options: BepackPrepareOp
       } : {}),
     },
     pack: { outDir: 'dist' },
+    ...(copyTarget ? { copy: { defaultTarget: copyTarget } } : {}),
     ...(options.replaceBuiltins ? {
       replace: { builtins: { NAME: true, DESCRIPTION: true, VERSION: true, UUID: true } },
     } : {}),
@@ -72,6 +83,22 @@ export async function prepareBepack(ctx: CreateContext, options: BepackPrepareOp
     formatConfig(config, options.plugin, ctx.installBepack),
     'utf8',
   );
+  // The templates' `dev` script passes `--copy`, so the generated config must carry a
+  // resolvable target. Where none exists (non-Windows), drop the flag instead of shipping
+  // a script whose first run dies with COPY_TARGET_NOT_FOUND.
+  if (!copyTarget) await dropDevCopyFlag(ctx.root);
+}
+
+/** Remove `--copy` from the generated `dev` script when no copy target can resolve. */
+export async function dropDevCopyFlag(root: string): Promise<void> {
+  const file = path.join(root, 'package.json');
+  if (!(await pathExists(file))) return;
+  await patchPackageJson(root, (pkg) => {
+    const dev = pkg.scripts?.dev;
+    if (!dev) return;
+    const next = dev.replace(/\s*--copy\b/, '').trim();
+    if (next && next !== dev) pkg.scripts!.dev = next;
+  });
 }
 
 async function replaceNamespacePlaceholder(ctx: CreateContext, namespace: string): Promise<void> {
