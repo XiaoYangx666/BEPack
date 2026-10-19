@@ -13,7 +13,6 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: read
-            id-token: write
         steps:
             - uses: actions/checkout@v6
             - uses: actions/setup-node@v6
@@ -33,7 +32,18 @@ jobs:
                     echo "Tag version $version must match @bepack/cli ($cli_version) and create-mcbe ($scaffolder_version)." >&2
                     exit 1
                   fi
+            # Run package code before exposing the publish token.
+            - run: npm run check
+            - run: npm test
+            - run: npm run build
+            - run: npm run typecheck --workspace=create-mcbe
+            - run: npm test --workspace=create-mcbe
+            - run: npm run build --workspace=create-mcbe
             - name: Publish @bepack/cli
-              run: npm publish --tag beta --access public
+              run: npm publish --ignore-scripts --tag beta --access public
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
             - name: Publish create-mcbe
-              run: npm publish --workspace=packages/create-mcbe --tag beta
+              run: npm publish --workspace=packages/create-mcbe --ignore-scripts --tag beta
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
