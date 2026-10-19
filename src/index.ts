@@ -27,6 +27,14 @@ export { exactVersionResolver } from "./install/resolvers/exact.js";
 export { sapiPro } from "./plugins/sapiPro.js";
 export { BUILTIN_PLUGINS } from "./plugins/builtins.js";
 export { BePackError } from "./errors/BePackError.js";
+export { analyzeCpuProfile, loadCpuProfile } from "./profile/analyze.js";
+export type {
+    Burst,
+    CpuProfile,
+    CpuProfileAnalysis,
+    CpuProfileOptions,
+    ProfileSample,
+} from "./profile/types.js";
 export type {
     UserConfig,
     ResolvedConfig,

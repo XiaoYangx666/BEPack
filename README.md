@@ -31,6 +31,7 @@ BePack is a build tool for Minecraft Bedrock add-ons. It keeps behavior-pack and
 - Resolve supported `@minecraft/*` dependencies and write their concrete versions to your project.
 - Keep `manifest.json` in sync with a `preserve` (incremental) or `clean` (config-generated) merge strategy.
 - Copy packs into a Minecraft development folder and create release archives.
+- Inspect Bedrock `.cpuprofile` captures without counting idle tick gaps as CPU work.
 
 ## Requirements
 
@@ -249,6 +250,26 @@ bepack copy --target minecraft
 
 `gameRoot` writes behavior packs to `development_behavior_packs` and resource packs to `development_resource_packs`. You can also use a custom target when your BP and RP need separate destination paths. See the reference guide for the full target syntax.
 
+## Inspect Bedrock CPU profiles
+
+`/script profiler stop` writes a standard V8 `.cpuprofile`, but Bedrock does not sample idle time. The gap between ticks arrives as a large `timeDeltas` value on the first sample of the next tick, so treating deltas as CPU time makes `tick` look like the hottest function. `bepack profile` treats deltas above `--gap` (default `5` ms) as idle gaps and ranks functions by active samples.
+
+```bash
+# Overview, with bursts sorted by busy time
+bepack profile summary bedrock.cpuprofile
+
+# Spikes in time order, including intervals and top stacks
+bepack profile bursts bedrock.cpuprofile
+
+# Self or inclusive functions inside a time window
+bepack profile top bedrock.cpuprofile --from 2900 --to 2950 --by total
+
+# Compare two captures; falls back to whole active samples if one side has no burst
+bepack profile diff before.cpuprofile after.cpuprofile
+```
+
+Use `--json` for machine-readable output and `--root <dir>` to shorten source paths. A burst needs at least `--min-samples` active samples (default `20`). The command does not require a `bepack.config` file.
+
 ## Package releases
 
 Set an output name and directory with `pack`. `{name}` and `{version}` are replaced from the top-level config:
@@ -313,9 +334,10 @@ copy: { defaultTarget: "minecraft", optimize: true }
 | `bepack dev`              | Build once, then watch and rebuild (type checking on by default).                 |
 | `bepack copy`             | Copy configured packs to a development target.                                    |
 | `bepack pack`             | Build, then create a `.mcpack` or `.mcaddon` (`--no-build` to skip).              |
+| `bepack profile summary`  | Inspect Bedrock `.cpuprofile` captures and locate slow ticks. |
 | `bepack config --summary` | Inspect the resolved configuration.                                               |
 
-All commands accept `--cwd <project-dir>` and `--config <path>` when the current directory or config filename is different. Add `--dry-run` to preview file-writing commands, or `--json` for machine-readable output. Run `bepack <command> --help` for every command option.
+All project commands accept `--cwd <project-dir>` and `--config <path>` when the current directory or config filename is different. Add `--dry-run` to preview file-writing commands, or `--json` for machine-readable output. `bepack profile` accepts `--cwd` and `--root` but does not load a config. Run `bepack <command> --help` for every command option.
 
 ## More documentation
 

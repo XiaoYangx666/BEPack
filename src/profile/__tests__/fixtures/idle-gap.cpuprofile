@@ -1,0 +1,70 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "callFrame": {
+        "functionName": "(root)",
+        "scriptId": "0",
+        "url": "",
+        "lineNumber": -1,
+        "columnNumber": 0
+      },
+      "children": [
+        2
+      ]
+    },
+    {
+      "id": 2,
+      "callFrame": {
+        "functionName": "tick",
+        "scriptId": "1",
+        "url": "bedrock://script",
+        "lineNumber": 0,
+        "columnNumber": 0
+      },
+      "children": [
+        3
+      ]
+    },
+    {
+      "id": 3,
+      "callFrame": {
+        "functionName": "doWork",
+        "scriptId": "10",
+        "url": "/project/scripts/main.js",
+        "lineNumber": 9,
+        "columnNumber": 0
+      }
+    }
+  ],
+  "samples": [
+    2,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    2
+  ],
+  "timeDeltas": [
+    50000,
+    1000,
+    1000,
+    1000,
+    1000,
+    1000,
+    1000,
+    1000,
+    1000,
+    1000,
+    1000,
+    50000
+  ],
+  "startTime": 1000000,
+  "endTime": 1110000
+}

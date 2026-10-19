@@ -19,9 +19,13 @@ bepack dev
 bepack copy
 bepack pack
 bepack config
+bepack profile summary <profile>
+bepack profile bursts <profile>
+bepack profile top <profile>
+bepack profile diff <before> <after>
 ```
 
-通用命令选项：
+项目命令的通用选项：
 
 ```bash
 --cwd <path>
@@ -32,7 +36,7 @@ bepack config
 --verbose
 ```
 
-JSON 模式会抑制常规日志，并返回机器可读的成功/错误输出。
+JSON 模式会抑制常规日志，并返回机器可读的成功/错误输出。`bepack profile` 是独立的分析命令，不使用 `--config` / `--dry-run`，参数见[性能分析](#性能分析cpuprofile)。
 
 ### 配置加载
 
@@ -848,6 +852,74 @@ export default defineConfig({
 });
 ```
 
+## 性能分析（.cpuprofile）
+
+`bepack profile` 读取 BDS `/script profiler stop` 生成的 V8 `.cpuprofile`，不加载 `bepack.config`，也不修改项目文件。
+
+### BDS 的 idle gap
+
+Bedrock 的 profiler 在脚本 tick 之间不采样。50 ms 的 tick 间隔会作为一条很大的 `timeDeltas`，挂在下一个 tick 的第一个采样点上。如果直接把 `timeDeltas` 当 CPU 时间：
+
+- `tick` 会因为“拥有”整段空闲时间而排到最热函数；
+- burst / 峰值检测会被 tick 边界拉长；
+- 两次 profile 的 busy 时间不可比。
+
+因此工具只把 `delta <= --gap`（默认 `5` ms）的连续采样视为 active。函数排名使用 active sample 数；窗口或 burst 内的毫秒数按 active 采样比例分摊。
+
+### 子命令
+
+```bash
+bepack profile summary <profile>
+bepack profile bursts <profile>
+bepack profile top <profile> [--from MS] [--to MS] [--by self|total] [-n 15]
+bepack profile diff <before> <after> [-n 15]
+```
+
+| 子命令    | 行为                                                                                                                                     |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `summary` | 输出总时长、active/gap 采样、busy/idle 时间；burst 按 busy 时间**倒序**，每个 burst 打印 self 热点函数。                                  |
+| `bursts`  | 按时间顺序输出 burst，包含 sample 数、span、busy、top self、top stacks；多于一个 burst 时打印相邻 burst 的 interval。                   |
+| `top`     | 按函数统计采样；`--from/--to` 以 profile 起始为 0 ms。窗口边缘的 50 ms gap 会因 `delta > --gap` 被排除，不会计入 `tick`。                  |
+| `diff`    | 对比两侧最大 burst 的 self 采样数；任一侧没有 burst 时，该侧回退到整体 active 采样，避免拿空 burst 比较。按变化量绝对值排序。             |
+
+### 参数
+
+| 参数                 | 默认值 | 说明                                                     |
+| -------------------- | ------ | -------------------------------------------------------- |
+| `--gap <ms>`         | `5`    | 大于该值的 delta 视为 tick 空闲 gap，不参与函数统计。     |
+| `--min-samples <n>`  | `20`   | 连续 active 采样达到该数量才视为一个 burst。              |
+| `--from <ms>`        | 起点   | `top` 窗口起点，相对 profile 起始时间。                   |
+| `--to <ms>`          | 终点   | `top` 窗口终点，相对 profile 起始时间。                   |
+| `--by <mode>`        | `self` | `self` 只统计栈顶；`total` 统计整条栈（同一栈内去重）。    |
+| `-n, --limit <n>`    | `15`   | 输出或返回的函数行数。                                    |
+| `--stacks <n>`       | `5`    | 每个 burst 输出的调用栈数量。                             |
+| `--root <dir>`       | 当前目录 | 将位于该目录下的源码路径显示为相对路径。                 |
+| `--cwd <dir>`        | 当前目录 | profile 文件路径的解析基准；`--root` 的默认值也来自它。    |
+| `--json`             | 关闭   | 输出 `{ ok, command: "profile", mode, ... }` 结构。       |
+
+### 示例
+
+```bash
+# 找出 20-30 ms 峰值：先看概览
+bepack profile summary bedrock.cpuprofile
+
+# 按时间顺序确认周期性峰值与间隔
+bepack profile bursts bedrock.cpuprofile --stacks 10
+
+# 把窗口限制在峰值内，并查看 inclusive 栈
+bepack profile top bedrock.cpuprofile --from 2910 --to 2950 --by total
+
+# 对比修复前后；输出路径相对仓库根目录
+bepack profile diff before.cpuprofile after.cpuprofile --root .
+```
+
+### 注意
+
+- profile 里可能同时存在多份 trace 副本（例如顶层 trace 与嵌套 trace）。工具按原始采样逐条统计，不按时间戳或栈签名去重；重复出现的采样会保留。
+- 函数行按 `functionName + url + lineNumber` 聚合，这是 V8 `.cpuprofile` 中定位函数的稳定键。
+- 非法 JSON、缺少 `nodes` / `samples` / `timeDeltas`、采样引用不存在的节点、数组长度不一致等会返回 `PROFILE_INVALID`；文件读取失败返回 `PROFILE_READ_FAILED`。
+- `top --from/--to` 的窗口边界按采样时间过滤，窗口内第一条采样如果带着 tick gap，仍会被 gap 规则排除。
+
 ## 复制
 
 `bepack copy` 将 BP/RP 复制到配置的目标路径。
@@ -1280,7 +1352,10 @@ COPY_TARGET_NOT_FOUND
 COPY_FAILED
 PACK_FAILED
 HOOK_FAILED
+CLI_ARGUMENT_INVALID
 CLI_ARGUMENT_CONFLICT
+PROFILE_INVALID
+PROFILE_READ_FAILED
 ```
 
 ## 初始化

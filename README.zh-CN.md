@@ -31,6 +31,7 @@ BePack 是 Minecraft 基岩版附加包的构建工具。它将行为包和资�
 - 解析受支持的 `@minecraft/*` 依赖，并将具体版本写入项目。
 - 以 `preserve`（增量）或 `clean`（从配置生成）策略同步 `manifest.json`。
 - 将包复制到 Minecraft 开发目录，并生成发布压缩包。
+- 分析 Bedrock `.cpuprofile`，避免把 tick 之间的空闲 gap 当成 CPU 工作。
 
 ## 环境要求
 
@@ -249,6 +250,26 @@ bepack copy --target minecraft
 
 `gameRoot` 会将行为包复制到 `development_behavior_packs`，将资源包复制到 `development_resource_packs`。如果 BP 和 RP 需要不同的目标路径，可使用自定义目标；完整写法请见参考文档。
 
+## 分析 Bedrock CPU profile
+
+`/script profiler stop` 生成标准 V8 `.cpuprofile`，但 Bedrock 不为空闲时间采样。tick 之间的间隔会作为较大的 `timeDeltas` 挂在下一个 tick 的第一个采样点上，因此直接把 delta 当成 CPU 时间会让 `tick` 看起来是最热函数。`bepack profile` 会把大于 `--gap`（默认 `5` ms）的 delta 视为空闲 gap，并按 active 采样统计函数。
+
+```bash
+# 概览；burst 按 busy 时间倒序
+bepack profile summary bedrock.cpuprofile
+
+# 按时间顺序列出峰值、间隔和主要调用栈
+bepack profile bursts bedrock.cpuprofile
+
+# 查看时间窗口内的 self 或 inclusive 函数
+bepack profile top bedrock.cpuprofile --from 2900 --to 2950 --by total
+
+# 对比两次抓取；一侧没有 burst 时回退到整体 active 统计
+bepack profile diff before.cpuprofile after.cpuprofile
+```
+
+使用 `--json` 获取机器可读输出，使用 `--root <目录>` 缩短源码路径。burst 至少需要 `--min-samples` 个 active 采样（默认 `20`）。该命令不依赖 `bepack.config`。
+
 ## 打包发布
 
 通过 `pack` 设置输出名称和目录。`{name}` 和 `{version}` 会替换为顶层配置中的值：
@@ -313,9 +334,10 @@ copy: { defaultTarget: "minecraft", optimize: true }
 | `bepack dev`              | 先构建一次，随后监听并重建（类型检查默认开启）。              |
 | `bepack copy`             | 复制已配置的包到开发目标。                                    |
 | `bepack pack`             | 先构建，再生成 `.mcpack` 或 `.mcaddon`（`--no-build` 跳过构建）。 |
+| `bepack profile summary`  | 分析 Bedrock `.cpuprofile`，定位慢 tick。 |
 | `bepack config --summary` | 查看解析后的配置摘要。                                        |
 
-所有命令都支持 `--cwd <项目目录>` 和 `--config <路径>`，可用于在非项目目录执行或使用不同的配置文件名。对于会写入文件的命令，可添加 `--dry-run` 预览；如需机器可读输出，可添加 `--json`。使用 `bepack <命令> --help` 查看每个命令的全部参数。
+项目命令都支持 `--cwd <项目目录>` 和 `--config <路径>`，可用于在非项目目录执行或使用不同的配置文件名。对于会写入文件的命令，可添加 `--dry-run` 预览；如需机器可读输出，可添加 `--json`。`bepack profile` 支持 `--cwd` 和 `--root`，但不加载配置。使用 `bepack <命令> --help` 查看每个命令的全部参数。
 
 ## 更多文档
 

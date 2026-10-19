@@ -10,6 +10,7 @@ import { commandCopy } from "./commands/copy.js";
 import { commandPack } from "./commands/pack.js";
 import { commandDev } from "./commands/dev.js";
 import { commandConfig } from "./commands/config.js";
+import { commandProfile } from "./commands/profile.js";
 import { formatError } from "./errors/formatError.js";
 import { writeJson } from "./logger/jsonOutput.js";
 import { BePackError } from "./errors/BePackError.js";
@@ -161,6 +162,30 @@ common(cli.command("dev", "Watch project"))
 common(cli.command("config", "Show resolved config"))
     .option("--summary", "Show brief summary instead of full config")
     .action((options: any) => run("config", commandConfig, options));
+
+cli.command(
+    "profile <command> [...profiles]",
+    "Analyze Bedrock .cpuprofile captures (summary|bursts|top|diff)"
+)
+    .option("--cwd <path>", "Working directory for profile paths")
+    .option("--gap <ms>", "Deltas above this are idle gaps (default: 5)")
+    .option("--min-samples <count>", "Minimum active samples in a burst (default: 20)")
+    .option("--from <ms>", "Restrict top to samples at or after this time")
+    .option("--to <ms>", "Restrict top to samples at or before this time")
+    .option("--by <mode>", "Count self or total samples (default: self)")
+    .option("-n, --limit <count>", "Rows to print or return (default: 15)")
+    .option("--stacks <count>", "Stacks per burst (default: 5)")
+    .option("--root <dir>", "Make source paths relative to this directory")
+    .option("--json", "JSON output")
+    .option("--silent", "Silent output")
+    .option("--verbose", "Verbose output")
+    .example("bepack profile summary bedrock.cpuprofile")
+    .example("bepack profile bursts bedrock.cpuprofile --stacks 10")
+    .example("bepack profile top bedrock.cpuprofile --from 2900 --to 2950 --by total")
+    .example("bepack profile diff before.cpuprofile after.cpuprofile")
+    .action((command: string, profiles: string[] | undefined, options: any) =>
+        run("profile", (opts) => commandProfile(command, profiles ?? [], opts), options)
+    );
 
 cli.help();
 cli.version(pkgVersion);
