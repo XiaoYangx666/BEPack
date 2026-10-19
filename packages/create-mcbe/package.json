@@ -1,18 +1,18 @@
 {
   "name": "create-mcbe",
-  "version": "0.1.0-beta.4",
+  "version": "0.1.0-beta.5",
   "description": "A small, extensible scaffolder for Minecraft Bedrock Edition projects.",
   "author": "XiaoYangx666",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/XiaoYangx666/BEPack.git",
+    "url": "git+https://github.com/XiaoYangx666/BEPack.git",
     "directory": "packages/create-mcbe"
   },
   "homepage": "https://github.com/XiaoYangx666/BEPack/tree/main/packages/create-mcbe#readme",
   "type": "module",
   "bin": {
-    "create-mcbe": "./dist/index.js"
+    "create-mcbe": "dist/index.js"
   },
   "files": [
     "dist",

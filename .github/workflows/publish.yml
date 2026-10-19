@@ -1,0 +1,39 @@
+name: Publish to npm
+
+on:
+    push:
+        tags:
+            - "v*-beta.*"
+
+permissions:
+    contents: read
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write
+        steps:
+            - uses: actions/checkout@v6
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+                  registry-url: https://registry.npmjs.org
+                  package-manager-cache: false
+            - run: npm install --global npm@11.18.0
+            - run: npm ci
+            - name: Verify release versions match the tag
+              shell: bash
+              run: |
+                  version="${GITHUB_REF_NAME#v}"
+                  cli_version="$(node -p "require('./package.json').version")"
+                  scaffolder_version="$(node -p "require('./packages/create-mcbe/package.json').version")"
+                  if [[ "$version" != "$cli_version" || "$version" != "$scaffolder_version" ]]; then
+                    echo "Tag version $version must match @bepack/cli ($cli_version) and create-mcbe ($scaffolder_version)." >&2
+                    exit 1
+                  fi
+            - name: Publish @bepack/cli
+              run: npm publish --tag beta --access public
+            - name: Publish create-mcbe
+              run: npm publish --workspace=packages/create-mcbe --tag beta
