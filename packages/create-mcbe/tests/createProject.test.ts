@@ -25,6 +25,32 @@ describe('createProject', () => {
     expect(pkg.devDependencies['@bepack/cli']).toBeDefined();
   });
 
+  it('creates a BEGame gameplay starter with BEPack-managed BP and RP', async () => {
+    const cwd = await temp();
+    const result = await createProject(parseCliOptions(['my-game', '--template', 'begame', '--yes', '--cwd', cwd]));
+    const root = path.join(cwd, 'my-game');
+    expect(result.template).toBe('begame');
+    const config = await fs.readFile(path.join(root, 'bepack.config.ts'), 'utf8');
+    expect(config).toContain('root: "bp"');
+    expect(config).toContain('root: "rp"');
+    expect(config).toContain('"@minecraft/server": "stable"');
+    const source = await fs.readFile(path.join(root, 'src', 'main.ts'), 'utf8');
+    expect(source).toContain('world.afterEvents.playerSpawn.subscribe');
+    expect(source).toContain('player.sendMessage');
+    const bp = JSON.parse(await fs.readFile(path.join(root, 'bp', 'manifest.json'), 'utf8'));
+    const rp = JSON.parse(await fs.readFile(path.join(root, 'rp', 'manifest.json'), 'utf8'));
+    const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('my-game');
+    expect(bp.header.name).toBe('my-game BP');
+    expect(rp.header.name).toBe('my-game RP');
+    expect(new Set([
+      bp.header.uuid,
+      bp.modules[0].uuid,
+      rp.header.uuid,
+      rp.modules[0].uuid,
+    ]).size).toBe(4);
+  });
+
   it('uses the project root as the BEPack BP root', async () => {
     const cwd = await temp();
     await createProject(parseCliOptions(['demo', '--template', 'bepack-behavior', '--yes', '--cwd', cwd]));

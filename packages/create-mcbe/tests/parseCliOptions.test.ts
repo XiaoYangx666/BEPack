@@ -10,6 +10,12 @@ describe('parseCliOptions', () => {
     expect(cli.yes).toBe(true);
   });
 
+  it('accepts begame as a template option', () => {
+    const cli = parseCliOptions(['my-game', '--template', 'begame', '--yes']);
+    expect(cli.projectName).toBe('my-game');
+    expect(cli.template).toBe('begame');
+  });
+
   it('rejects unknown package managers', () => {
     expect(() => parseCliOptions(['demo', '--pm', 'bad'])).toThrow('Unknown package manager');
   });

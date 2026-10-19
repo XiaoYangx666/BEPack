@@ -34,6 +34,12 @@ Use `--json` when an agent needs machine-readable output:
 npm create mcbe@latest my-addon -- --template bepack-addon --yes --install --json
 ```
 
+Create a gameplay-ready behavior pack and resource pack with a player-join starter:
+
+```bash
+npm create mcbe@latest my-game -- --template begame --yes
+```
+
 ## Templates
 
 | Template | Description |
@@ -41,6 +47,7 @@ npm create mcbe@latest my-addon -- --template bepack-addon --yes --install --jso
 | `sapi-pro` | SAPI-Pro behavior pack with the built-in `sapi-pro` BePack plugin |
 | `bepack-behavior` | TypeScript behavior pack managed by BePack |
 | `bepack-addon` | TypeScript behavior pack and resource pack managed by BePack |
+| `begame` | Gameplay-ready TypeScript add-on with behavior and resource packs managed by BePack |
 | `behavior-pack` | Data-only behavior pack without scripts or build tools |
 | `resource-pack` | Data-only resource pack without scripts or build tools |
 

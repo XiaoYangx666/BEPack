@@ -34,6 +34,14 @@ export const templates: TemplateDefinition[] = [
     bpRoot: 'bp',
     rpRoot: 'rp',
   }),
+  createBepackTemplate({
+    id: 'begame',
+    title: 'BEGame (BP + RP)',
+    description: 'Gameplay-ready TypeScript add-on with behavior and resource packs, managed by BEPack.',
+    templateDir: 'begame',
+    bpRoot: 'bp',
+    rpRoot: 'rp',
+  }),
   {
     id: 'behavior-pack',
     title: 'Behavior Pack',
