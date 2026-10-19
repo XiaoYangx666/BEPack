@@ -41,6 +41,20 @@ jobs:
             - run: npm test --workspace=create-mcbe
             - run: npm run build --workspace=create-mcbe
             - name: Publish @bepack/cli
-              run: npm publish --ignore-scripts --tag beta --access public
+              shell: bash
+              run: |
+                  version="${GITHUB_REF_NAME#v}"
+                  if npm view "@bepack/cli@$version" version >/dev/null 2>&1; then
+                    echo "@bepack/cli@$version is already published; skipping."
+                  else
+                    npm publish --ignore-scripts --tag beta --access public
+                  fi
             - name: Publish create-mcbe
-              run: npm publish --workspace=packages/create-mcbe --ignore-scripts --tag beta
+              shell: bash
+              run: |
+                  version="${GITHUB_REF_NAME#v}"
+                  if npm view "create-mcbe@$version" version >/dev/null 2>&1; then
+                    echo "create-mcbe@$version is already published; skipping."
+                  else
+                    npm publish --workspace=packages/create-mcbe --ignore-scripts --tag beta
+                  fi
