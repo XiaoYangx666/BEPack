@@ -508,6 +508,169 @@ describe("compile 配置", () => {
         expect(config.packs.bp!.compile!.useNpx).toBe(false);
     });
 
+    it("compile.typecheckCommand 与 typecheckArgs 保留并解析默认值", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    compile: {
+                        entry: "src/main.ts",
+                        typecheckCommand: "bun check",
+                        typecheckArgs: ["--pretty"],
+                    },
+                },
+            },
+        });
+        expect(config.packs.bp!.compile!.typecheck).toBe(true);
+        expect(config.packs.bp!.compile!.typecheckCommand).toBe("bun check");
+        expect(config.packs.bp!.compile!.typecheckArgs).toEqual(["--pretty"]);
+    });
+
+    it("compile.typecheck 缺省时不设置 command，由运行期用 tsc 默认值", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    compile: { entry: "src/main.ts" },
+                },
+            },
+        });
+        expect(config.packs.bp!.compile!.typecheck).toBe(true);
+        expect(config.packs.bp!.compile!.typecheckCommand).toBeUndefined();
+        expect(config.packs.bp!.compile!.typecheckArgs).toEqual([]);
+    });
+
+    it("compile.typecheck 对象形式同时控制开关与命令", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    compile: {
+                        entry: "src/main.ts",
+                        typecheck: { command: "bun check", args: ["--strict"] },
+                    },
+                },
+            },
+        });
+        expect(config.packs.bp!.compile!.typecheck).toBe(true);
+        expect(config.packs.bp!.compile!.typecheckCommand).toBe("bun check");
+        expect(config.packs.bp!.compile!.typecheckArgs).toEqual(["--strict"]);
+    });
+
+    it("compile.typecheck 对象形式可关闭检查并让顶层字段作为回退", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    compile: {
+                        entry: "src/main.ts",
+                        typecheckCommand: "tsc --noEmit",
+                        typecheckArgs: ["--pretty"],
+                        typecheck: { enabled: false },
+                    },
+                },
+            },
+        });
+        expect(config.packs.bp!.compile!.typecheck).toBe(false);
+        expect(config.packs.bp!.compile!.typecheckCommand).toBe("tsc --noEmit");
+        expect(config.packs.bp!.compile!.typecheckArgs).toEqual(["--pretty"]);
+    });
+
+    it("对象形式的 args/command 覆盖顶层字段", () => {
+        const config = normalizeConfig({
+            name: "test",
+            packs: {
+                bp: {
+                    root: "bp",
+                    uuid: "a",
+                    moduleUuid: "b",
+                    compile: {
+                        entry: "src/main.ts",
+                        typecheckCommand: "tsc --noEmit",
+                        typecheckArgs: ["--top"],
+                        typecheck: { command: "bun check", args: ["--object"] },
+                    },
+                },
+            },
+        });
+        expect(config.packs.bp!.compile!.typecheckCommand).toBe("bun check");
+        expect(config.packs.bp!.compile!.typecheckArgs).toEqual(["--object"]);
+    });
+
+    it("compile.typecheck 非法类型抛出 CONFIG_INVALID", () => {
+        const build = (typecheck: unknown) =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    bp: {
+                        root: "bp",
+                        uuid: "a",
+                        moduleUuid: "b",
+                        compile: { entry: "src/main.ts", typecheck: typecheck as never },
+                    },
+                },
+            });
+        expect(() => build("yes")).toThrow(/packs\.bp\.compile\.typecheck must be a boolean/);
+        expect(() => build({ enabled: "no" })).toThrow(/typecheck\.enabled must be a boolean/);
+        expect(() => build({ command: 42 })).toThrow(/typecheck\.command must be a string/);
+        expect(() => build({ command: "   " })).toThrow(/typecheck\.command must be a non-empty/);
+        expect(() => build({ args: "--strict" })).toThrow(/typecheck\.args must be an array/);
+        expect(() => build({ args: [1, 2] })).toThrow(/typecheck\.args entries must be strings/);
+    });
+
+    it("compile.typecheckCommand 非法值抛出 CONFIG_INVALID", () => {
+        const build = (compile: unknown) =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    bp: { root: "bp", uuid: "a", moduleUuid: "b", compile: compile as never },
+                },
+            });
+        expect(() => build({ entry: "src/main.ts", typecheckCommand: "   " })).toThrow(
+            /typecheckCommand must be a non-empty command line/
+        );
+        expect(() => build({ entry: "src/main.ts", typecheckCommand: 42 })).toThrow(
+            /typecheckCommand must be a non-empty command line/
+        );
+        expect(() => build({ entry: "src/main.ts", typecheckArgs: "--x" })).toThrow(
+            /typecheckArgs must be an array of strings/
+        );
+        expect(() => build({ entry: "src/main.ts", typecheckArgs: [1] })).toThrow(
+            /typecheckArgs entries must be strings/
+        );
+    });
+
+    it("旧的 typecheck.typechecker 字段给出迁移提示而不是静默失效", () => {
+        expect(() =>
+            normalizeConfig({
+                name: "test",
+                packs: {
+                    bp: {
+                        root: "bp",
+                        uuid: "a",
+                        moduleUuid: "b",
+                        compile: {
+                            entry: "src/main.ts",
+                            typecheck: { typechecker: "bun" } as never,
+                        },
+                    },
+                },
+            })
+        ).toThrow(/typecheck\.typechecker was replaced by packs\.bp\.compile\.typecheck\.command/);
+    });
+
     it("compile.define 默认空对象", () => {
         const config = normalizeConfig({
             name: "test",

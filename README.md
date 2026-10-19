@@ -179,7 +179,59 @@ bepack install --target 1.21.120
 bepack build --install --target 1.21.120
 ```
 
-> **Type checking runs by default.** Every `bepack build` and `bepack dev` executes `tsc --noEmit` before Rolldown bundles your source. A failing check stops the build with `TYPECHECK_FAILED` instead of emitting a broken pack. Skip it with `--skip-typecheck`, or set `packs.bp.compile.typecheck: false`. This is independent of any custom Rolldown options — adding them does **not** turn the type check off.
+> **Type checking runs by default.** Every `bepack build` and `bepack dev` type-checks your source before Rolldown bundles it, using `tsc --noEmit` unless you pick another checker. A failing check stops the build with `TYPECHECK_FAILED` instead of emitting a broken pack. Skip it with `--skip-typecheck`, or set `packs.bp.compile.typecheck: false`. This is independent of any custom Rolldown options — adding them does **not** turn the type check off.
+
+### Choose your type checker
+
+TypeScript checkers keep getting faster, so the checker is just a command line you supply — there is no preset list to keep up with:
+
+```ts
+export default defineConfig({
+    packs: {
+        bp: {
+            compile: {
+                entry: "src/main.ts",
+                // Anything you can type in a terminal. Default: "tsc --noEmit".
+                typecheckCommand: "bun check",
+                // typecheckCommand: "tsc-rs --noEmit",
+                // typecheckCommand: "npx tsc --noEmit",
+                // Quote-aware; backslash only escapes a quote, so Windows paths
+                // survive as written:
+                // typecheckCommand: 'node "C:\\tools\\my checker.mjs"',
+            },
+        },
+    },
+});
+```
+
+The same thing as an object, or per command from the CLI:
+
+```ts
+compile: {
+    // the switch and the command in one place
+    typecheck: { command: "bun check", args: ["--pretty"] },
+}
+```
+
+```bash
+bepack build --typecheck-command "bun check"
+bepack dev   --typecheck-command "tsc-rs --noEmit"
+bepack pack  --typecheck-command "npx tsc --noEmit"
+```
+
+Common choices, and what BePack runs:
+
+| You want | `typecheckCommand` |
+| --- | --- |
+| the default | *(leave it unset)* → `tsc --noEmit --project <tsconfig>` |
+| your project's TypeScript | `"npx tsc --noEmit"` |
+| Bun's fast checker | `"bun check"` (uses Bun's bundled TypeScript, not your pinned `typescript`) |
+| native TS port (Rust) | `"tsc-rs --noEmit"` |
+| Vue / Svelte | `"vue-tsc --noEmit"` / `"svelte-check"` |
+
+**Only the unset default (and deprecated `useNpx` compatibility settings) gets arguments added by BePack** (`--project <tsconfig>`, plus `--incremental`/`--tsBuildInfoFile` under `--cache`). Once you write a `command`, BePack adds nothing — spell out the tsconfig flag yourself if the tool needs one. `typecheck.args` is appended after your command.
+
+Precedence: CLI `--typecheck-command` > CLI `--use-npx` > `compile.typecheck.command` > `compile.typecheckCommand` > deprecated `compile.useNpx` > the `tsc` default. A CLI command replaces the configured `typecheckArgs` too, since args are usually command-specific. The deprecated `useNpx` settings keep the old behavior of passing the configured tsconfig and cache flags; writing `typecheckCommand: "npx tsc --noEmit"` is an explicit custom command and receives no automatic flags. Switching checkers does not disable checking — only `typecheck: false` or `--skip-typecheck` does.
 
 `stable`, `beta`, `preview`, and exact versions can be used for the supported `@minecraft/*` dependency entries. BePack resolves selectors such as `stable` to concrete package versions before updating `package.json` and the BP manifest.
 

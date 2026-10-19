@@ -77,6 +77,7 @@ export const BP_COMPILE_DEFAULTS: BpCompileResolved = {
     define: {},
     tsconfig: "tsconfig.json",
     typecheck: true,
+    typecheckArgs: [],
     preserveModules: true,
     external: [/^@minecraft\/server.*/],
     useNpx: false,

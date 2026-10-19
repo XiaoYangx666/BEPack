@@ -383,6 +383,25 @@ export type RolldownCustomizeFunction = (
 /** User-supplied rolldown customization: an options object or a function. */
 export type RolldownOverrides = RolldownOptions | RolldownCustomizeFunction;
 
+/**
+ * A typecheck command line, e.g. `"bun check"`, `"tsc-rs --noEmit"` or
+ * `'node "./tools/my checker.mjs"'`.
+ *
+ * Tokenized quote-aware and spawned with an argument array, so the quotes are never
+ * interpreted twice. Backslash escapes only a quote, so Windows paths survive as written.
+ */
+export type TypecheckCommandSetting = string;
+
+/** Object form of `packs.bp.compile.typecheck`: the enable switch plus the checker. */
+export type TypecheckConfig = {
+    /** Whether type checking runs. Default: `true`. */
+    enabled?: boolean;
+    /** Full command line to run. Default: `"tsc --noEmit"`. */
+    command?: TypecheckCommandSetting;
+    /** Additional arguments appended to `command`. */
+    args?: string[];
+};
+
 /** BP compile configuration. Only available on behavior packs. */
 export type BpCompileOptions = {
     /** Script entry file, relative to project root. Default: "src/main.ts". */
@@ -398,11 +417,36 @@ export type BpCompileOptions = {
      */
     define?: Record<string, string>;
 
-    /** Path to tsconfig.json relative to project root. Default: "tsconfig.json". */
+    /**
+     * Path to tsconfig.json relative to project root. Default: "tsconfig.json".
+     *
+     * Used by the default `tsc` checker and deprecated `useNpx` compatibility mode,
+     * which receive `--project <tsconfig>`. A custom `typecheck.command` receives exactly
+     * the arguments you write, nothing more.
+     */
     tsconfig?: string;
 
-    /** Whether to run `tsc --noEmit` before rolldown. Default: true. */
-    typecheck?: boolean;
+    /**
+     * Type checking before Rolldown. Default: true.
+     *
+     * - `false` / `true`: toggle the checker.
+     * - object: `{ enabled?, command?, args? }` — the switch plus the checker in one place.
+     *
+     * The checker itself is any command line: `{ command: "bun check" }`,
+     * `{ command: "tsc-rs", args: ["--noEmit", "--project", "tsconfig.json"] }`.
+     * Defaults to `"tsc --noEmit"`.
+     */
+    typecheck?: boolean | TypecheckConfig;
+
+    /**
+     * Full typecheck command line, e.g. `"bun check"` or
+     * `'node "./tools/my checker.mjs"'`. Used as a fallback when
+     * `typecheck.command` is unset. Default: `"tsc --noEmit"`.
+     */
+    typecheckCommand?: TypecheckCommandSetting;
+
+    /** Additional arguments appended to the typecheck command line. */
+    typecheckArgs?: string[];
 
     /** Whether rolldown should preserve module files. Default: true. */
     preserveModules?: boolean;
@@ -410,7 +454,7 @@ export type BpCompileOptions = {
     /** Additional packages/modules that Rolldown should not bundle. */
     external?: BuildExternal[];
 
-    /** Use `npx tsc --noEmit` instead of system `tsc --noEmit`. Default: false. */
+    /** @deprecated Use `typecheckCommand: "npx tsc --noEmit"` instead. */
     useNpx?: boolean;
 
     /** Minify output via rolldown. Default: false. */
@@ -649,6 +693,10 @@ export type BpCompileResolved = {
     define: Record<string, string>;
     tsconfig: string;
     typecheck: boolean;
+    /** Full typecheck command line; `undefined` means the built-in `tsc --noEmit`. */
+    typecheckCommand?: TypecheckCommandSetting;
+    /** Additional arguments appended to the typecheck command line. */
+    typecheckArgs: string[];
     preserveModules: boolean;
     external: BuildExternal[];
     useNpx: boolean;

@@ -68,6 +68,9 @@ export async function commandConfig(options: any) {
             logger.info(`compile.scriptOutputDir: ${c.scriptOutputDir}`);
             logger.info(`compile.preserveModules: ${c.preserveModules}`);
             logger.info(`compile.typecheck: ${c.typecheck}`);
+            if (c.typecheckCommand) logger.info(`compile.typecheckCommand: ${c.typecheckCommand}`);
+            if (c.typecheckArgs.length > 0)
+                logger.info(`compile.typecheckArgs: [${c.typecheckArgs.join(", ")}]`);
             if (c.external.length > 0) {
                 logger.info(
                     `compile.external: [${c.external.map((e) => (typeof e === "string" ? e : e.toString())).join(", ")}]`

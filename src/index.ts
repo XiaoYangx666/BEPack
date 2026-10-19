@@ -52,6 +52,8 @@ export type {
     PackScope,
     BpCompileOptions,
     BpCompileResolved,
+    TypecheckConfig,
+    TypecheckCommandSetting,
     PackOptimizeOptions,
     PackOptimizeResolved,
     RolldownOverrides,
@@ -67,3 +69,12 @@ export type {
     ReplaceOptions,
 } from "./config/configTypes.js";
 export { getConfiguredPacks } from "./config/configTypes.js";
+export {
+    DEFAULT_TYPECHECK_COMMAND,
+    formatTypecheckCommand,
+    resolveTypecheck,
+    tokenizeCommandLine,
+} from "./build/typecheckers.js";
+export type { ResolvedTypecheck } from "./build/typecheckers.js";
+export { runTypecheck } from "./build/runTypecheck.js";
+export type { TypecheckOptions } from "./build/runTypecheck.js";

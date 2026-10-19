@@ -142,11 +142,28 @@ type UserConfig = {
                  * 与顶层 `replace` 并存；同一 key 不能同时配在两者中。
                  */
                 define?: Record<string, string>;
+                /** tsconfig 路径。仅默认的 `tsc` 会用到（自动加 `--project`）。 */
                 tsconfig?: string;
-                /** 打包前是否运行 tsc 类型检查。默认 true（即默认会跑）。 */
-                typecheck?: boolean;
+                /**
+                 * 打包前的类型检查开关。
+                 * - `true` / `false`：开关检查器。
+                 * - 对象 `{ enabled?, command?, args? }`：同一个字段里同时开关并指定命令。
+                 * 默认 true。
+                 */
+                typecheck?: boolean | { enabled?: boolean; command?: string; args?: string[] };
+                /**
+                 * 类型检查命令行，写什么就跑什么。默认 `"tsc --noEmit"`。
+                 * 例：`"bun check"`、`"tsc-rs --noEmit"`、`"npx tsc --noEmit"`、
+                 * `'node "C:\\tools\\my checker.mjs"'`。
+                 * 一旦你写了 command，BePack 不会再附加任何参数（tsconfig 也要自己写进去）。
+                 * 优先于已废弃的 `useNpx`。
+                 */
+                typecheckCommand?: string;
+                /** 追加到类型检查命令行末尾的额外参数。 */
+                typecheckArgs?: string[];
                 preserveModules?: boolean;
                 external?: (string | RegExp)[];
+                /** @deprecated 使用 `typecheckCommand: "npx tsc --noEmit"` 替代。 */
                 useNpx?: boolean;
                 minify?: boolean;
                 cache?: {
@@ -590,27 +607,57 @@ client 侧保持默认 `preserve`（尊重手写 manifest），server 侧 `clean
 ```txt
 清单修补（hooks.beforeManifest / afterManifest）
 hooks.beforeBuild
-类型检查（tsc --noEmit，默认开启）
+类型检查（默认 tsc --noEmit，检查器可配置）
 Rolldown 构建
 hooks.afterBuild
 可选复制（hooks.beforeCopy / afterCopy）
 可选打包（hooks.beforePack / afterPack）
 ```
 
-> **默认会运行 TypeScript 类型检查。** 只要配置了 `packs.bp.compile`，`bepack build` 与 `bepack dev` 都会在 Rolldown 打包**之前**执行 `tsc --noEmit`；检查失败会以 `TYPECHECK_FAILED` 终止本次构建，不会产出残缺脚本。跳过方式：CLI `--skip-typecheck`，或 `packs.bp.compile.typecheck: false`。注意类型检查与打包是两件独立的事——自定义 Rolldown 选项、替换 `rolldown` 配置都不会关闭它，要关只能显式配置。
+> **默认会运行 TypeScript 类型检查。** 只要配置了 `packs.bp.compile`，`bepack build` 与 `bepack dev` 都会在 Rolldown 打包**之前**执行类型检查（默认 `tsc --noEmit`，可通过 `typecheckCommand` 换成 `bun` / `vue-tsc` / 自定义命令）；检查失败会以 `TYPECHECK_FAILED` 终止本次构建，不会产出残缺脚本。跳过方式：CLI `--skip-typecheck`，或 `packs.bp.compile.typecheck: false`。注意类型检查与打包是两件独立的事——自定义 Rolldown 选项、替换 `rolldown` 配置都不会关闭它，要关只能显式配置。检查器与 `tsc` 是两件独立的事——换检查器不等于关掉检查。
 
 CLI 选项：
 
 - `--mode <value>`：执行模式，透传给 Hook 上下文（`HookContext.mode`）。不设则为 `undefined`。Hook 内自行判断是否执行特定逻辑。
 - `--rolldown-config <path>`：临时指定 Rolldown 配置文件，覆盖 `packs.bp.compile.rolldownConfig`（`bepack dev` 同样支持）。
+- `--typecheck-command <command>`：临时替换整条类型检查命令行，覆盖配置里的检查器设置。该值**始终按原样当作命令行**处理，不会被重新解释成某个别名。
 - `--optimize`：与 `--pack` / `--copy` 一起使用时，把产物（或开发目录）优化为 `__brarchive/` 归档（`--no-optimize` 可覆盖配置）。详见《打包》一节的 Pack 优化。
 
 类型检查行为：
 
-- **默认：系统 `tsc --noEmit`（`packs.bp.compile.typecheck` 默认为 `true`）。** 只有显式设置 `typecheck: false` 或传 `--skip-typecheck` 才会跳过。
-- `build.useNpx: true` 或 `--use-npx`：`npx tsc --noEmit`。
-- `packs.bp.compile.cache`：增量编译缓存配置。`cache.dev`（默认 `true`）控制 dev 模式；`cache.build`（默认 `false`）控制 build 模式。`cache.file` 指定 `.tsbuildinfo` 路径。`bepack build --cache` / `--no-cache` 可覆盖 build 模式。`dev` 命令默认启用缓存。
-- 缺少 `tsconfig.json` 会提前失败，返回 `TYPECHECK_FAILED`。
+- **默认：`tsc --noEmit`（`packs.bp.compile.typecheck` 默认为 `true`）。** 只有显式设置 `typecheck: false`（或 `typecheck.enabled: false`）或传 `--skip-typecheck` 才会跳过。
+- **检查器就是一条命令**，没有内置预设表：`packs.bp.compile.typecheck.command`（或顶层 `typecheckCommand`）写什么就跑什么。
+
+  ```ts
+  compile: {
+      // 只要一行，换检查器就是换命令
+      typecheckCommand: "bun check",
+      // 需要参数就自己写全（BePack 不会替你加任何参数）
+      // typecheckCommand: 'tsc-rs --noEmit --project tsconfig.json',
+      // 路径含空格用引号包起来
+      // typecheckCommand: 'node "C:\\tools\\my checker.mjs"',
+  }
+  ```
+
+  常用的几个（自己装好对应的工具）：
+
+  | 想用什么 | 这么写 |
+  | --- | --- |
+  | 默认 | 什么都不配（等价于 `tsc --noEmit`） |
+  | 项目本地 TypeScript | `"npx tsc --noEmit"` |
+  | Bun | `"bun check"` |
+  | 原生 TS 移植（Rust） | `"tsc-rs --noEmit"` |
+  | Vue | `"vue-tsc --noEmit"` |
+  | Svelte | `"svelte-check"` |
+
+- **默认 `tsc` 是唯一会被 BePack 补参数的检查器**：不配 `command` 时，BePack 会加上 `--project <compile.tsconfig>`，以及在 `--cache` / dev 模式下加 `--incremental --tsBuildInfoFile`。你一旦自己写了 `command`，BePack 就一个参数都不加，tsconfig 也得自己写进命令里。已废弃的 `useNpx` 为兼容旧配置仍保留这些自动参数。
+- 命令按引号**分词后以数组方式 spawn**（Windows 上 `.cmd` / `.bat` 垫片才经由 `cmd.exe`，且由 BePack 自己完成 cmd 引号转义，路径含空格、`&`、`^` 等字符都不会被拆开或注入）；反斜杠**只用于转义引号本身**，所以 `C:\tools\check.mjs` 会原样保留。
+- 对象形式可以一次配好开关与命令：`typecheck: { command: "bun check", args: ["--pretty"] }`；`args` 追加在命令之后。对象形式与顶层字段一样严格校验（`command` 必须是非空字符串、`args` 必须是字符串数组，否则 `CONFIG_INVALID`）。
+- 优先级：CLI `--typecheck-command` > CLI `--use-npx` > `compile.typecheck.command` > 顶层 `compile.typecheckCommand` > 已废弃的 `compile.useNpx` > 默认 `tsc --noEmit`。**CLI 指定命令或 `--use-npx` 时，配置里的 `typecheckArgs` 会被丢弃**。
+- `compile.useNpx: true` 或 `bepack build --use-npx`（**已废弃**）：使用 `npx tsc --noEmit`，并为兼容旧行为继续传入 tsconfig / cache 参数。显式写 `typecheckCommand: "npx tsc --noEmit"` 则属于自定义命令，不会自动附加参数。
+- `packs.bp.compile.cache`：增量编译缓存配置。`cache.dev`（默认 `true`）控制 dev 模式；`cache.build`（默认 `false`）控制 build 模式。`cache.file` 指定 `.tsbuildinfo` 路径。`bepack build --cache` / `--no-cache` 可覆盖 build 模式。对默认 `tsc` 和兼容模式的 `useNpx` 生效。
+- 缺少 `tsconfig.json`：默认检查器会提前失败并返回 `TYPECHECK_FAILED`；自定义命令只警告然后照跑（它可能压根不需要 tsconfig）。
+- 可执行文件在启动前按 `PATH` / `PATHEXT` 解析；找不到时报 `TYPECHECK_FAILED` 并给出改 `command` 或 `--skip-typecheck` 的建议，而不是笼统的“命令失败”。
 - 类型检查在 `hooks.beforeBuild` 之后、Rolldown 之前运行；`--dry-run` 会跳过它。
 
 Rolldown 行为：
@@ -647,7 +694,7 @@ timing    rolldown        45 ms
 - `packs.bp.compile.rolldownConfig`：Rolldown 配置文件路径（相对项目根或绝对路径）；
 - CLI：`bepack build --rolldown-config <path>` / `bepack dev --rolldown-config <path>`，临时替换配置文件。
 
-> 自定义 Rolldown 配置**不会**关闭类型检查：`bepack build` / `bepack dev` 依然会先执行 `tsc --noEmit`（默认开启，详见《构建》一节）。
+> 自定义 Rolldown 配置**不会**关闭类型检查：`bepack build` / `bepack dev` 依然会先执行类型检查（默认 `tsc --noEmit`，可配置，详见《构建》一节）。
 
 ### 对象形式
 
@@ -821,6 +868,7 @@ BePack 默认 `preserveModules: true`，Rolldown 仍会做 tree-shaking：
 
 - 在监视前先执行一次初始构建（manifest + 若有 compile 则编译）。
 - 支持 `--skip-typecheck` 跳过类型检查（与 `build` 命令一致）。
+- 支持 `--typecheck-command <command>` 切换检查器，初始构建与后续增量重建都会使用它。
 - 支持 `--mode <value>`，用法与 `build` 命令相同，透传给 Hook 上下文。初始构建和后续增量重建均会传入该值。
 - 支持 `--optimize`：每次自动复制都生成 `__brarchive/` 归档（等价于 `copy.optimize: true`，`--no-optimize` 可覆盖配置）。
 - 默认监视的路径：
@@ -1328,7 +1376,7 @@ BePack 对 `mode` 的取值**不做语义判断**，以下只是社区推荐约�
 ```txt
 [17:30:02] [Install] resolving dependencies for target 1.26.10
 [17:30:05] [Manifest] manifest.json updated
-[17:30:05] [TypeScript] typecheck complete
+[17:30:05] [TypeScript] typecheck complete (tsc)
 [17:30:06] [Rolldown] preserve modules build complete
 ```
 

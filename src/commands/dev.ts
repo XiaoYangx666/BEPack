@@ -20,12 +20,14 @@ export async function commandDev(options: any) {
     logger.progress("dev", "initial build started");
 
     // Resolve CLI overrides once and keep them for the entire dev session.
+    // `normalizeConfig` already reduced the object form of `compile.typecheck` to a boolean.
     const compile = config.packs.bp?.compile;
     const typecheck = options.skipTypecheck
         ? false
         : options.typecheck
           ? true
           : (compile?.typecheck ?? false);
+    const typecheckCommand = options.typecheckCommand;
     const copy =
         !options.skipCopy && Boolean(options.copy || options.copyTarget || config.dev.copy);
     const copyTarget =
@@ -46,6 +48,7 @@ export async function commandDev(options: any) {
         command: "dev",
         ...(options.rolldownConfig ? { rolldownConfig: options.rolldownConfig } : {}),
         typecheck: Boolean(typecheck),
+        ...(typecheckCommand === undefined ? {} : { typecheckCommand }),
         cache,
         dryRun,
         quiet,
@@ -73,6 +76,7 @@ export async function commandDev(options: any) {
         ...(options.rolldownConfig ? { rolldownConfig: options.rolldownConfig } : {}),
         ...copyOptions,
         typecheck: Boolean(typecheck),
+        ...(typecheckCommand === undefined ? {} : { typecheckCommand }),
         cache,
         dryRun,
         quiet,

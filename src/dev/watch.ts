@@ -4,7 +4,7 @@ import { runBuild } from "../build/runBuild.js";
 import { runManifestPatch } from "../manifest/runManifest.js";
 import { runCopyPacks } from "../copy/runCopy.js";
 import { BePackError } from "../errors/BePackError.js";
-import type { PackType, ResolvedConfig } from "../config/configTypes.js";
+import type { PackType, ResolvedConfig, TypecheckCommandSetting } from "../config/configTypes.js";
 import { getConfiguredPacks } from "../config/configTypes.js";
 import type { Logger } from "../logger/logger.js";
 import {
@@ -28,6 +28,8 @@ export type DevWatchOptions = {
     mode?: string;
     /** CLI `--rolldown-config` path, kept for every rebuild. */
     rolldownConfig?: string;
+    /** CLI `--typecheck-command` override, kept for every rebuild. */
+    typecheckCommand?: TypecheckCommandSetting;
     /** CLI `--optimize` override for copied dev folders. */
     optimize?: boolean;
 };
@@ -166,6 +168,10 @@ export function watchProject(
                 dryRun: options.dryRun,
                 quiet: Boolean(options.quiet),
                 ...(options.mode === undefined ? {} : { mode: options.mode }),
+
+                ...(options.typecheckCommand === undefined
+                    ? {}
+                    : { typecheckCommand: options.typecheckCommand }),
                 ...(options.rolldownConfig === undefined
                     ? {}
                     : { rolldownConfig: options.rolldownConfig }),

@@ -11,8 +11,8 @@ npm run test           # vitest run
 npm run test:watch     # Vitest watch mode
 npm run format         # format src/ with Prettier
 
-# Development CLI
-npx tsx src/cli.ts <command>
+# Development CLI (`src/cli.ts` only exports `runCLI`; `src/bin.ts` is the entry)
+npx tsx src/bin.ts <command>
 node dist/cli.js <command>
 ```
 
@@ -20,11 +20,11 @@ Run `npm run check` and `npm run test` for every code change. Run `npm run build
 
 ## Project
 
-BePack builds Minecraft Bedrock Script API add-ons. It loads configuration, resolves npm and Script API dependencies, patches manifests, type-checks the source with `tsc`, builds TypeScript with Rolldown, copies packs to development folders, and packages `.mcpack` / `.mcaddon` files.
+BePack builds Minecraft Bedrock Script API add-ons. It loads configuration, resolves npm and Script API dependencies, patches manifests, type-checks the source with a configurable TypeScript checker (default `tsc`), builds TypeScript with Rolldown, copies packs to development folders, and packages `.mcpack` / `.mcaddon` files.
 
-- **Type checking is on by default.** Any project with `packs.bp.compile` runs `tsc --noEmit` before Rolldown on `bepack build` / `bepack dev`, and fails with `TYPECHECK_FAILED` when it does not pass. Only `packs.bp.compile.typecheck: false` or `--skip-typecheck` skips it — custom Rolldown options (`compile.rolldown` / `compile.rolldownConfig`) do **not**. Never describe `bepack build` as bundle-only.
+- **Type checking is on by default.** Any project with `packs.bp.compile` type-checks before Rolldown on `bepack build` / `bepack dev`, and fails with `TYPECHECK_FAILED` when it does not pass. The checker defaults to `tsc --noEmit` and is otherwise **whatever command line the user supplies**: `packs.bp.compile.typecheckCommand`, the object form `typecheck: { enabled?, command?, args? }`, or CLI `--typecheck-command`. There is deliberately **no preset table** — supporting a new checker means the user writes its command, not that BePack grows an alias. The built-in default (and deprecated `useNpx` compatibility setting) receive BePack's own arguments (`--project <tsconfig>`, and `--incremental`/`--tsBuildInfoFile` under `--cache`); a user-written command gets exactly what it declares. Switching checkers is **not** disabling checking. Only `compile.typecheck: false` / `typecheck: { enabled: false }` or `--skip-typecheck` skips it — custom Rolldown options (`compile.rolldown` / `compile.rolldownConfig`) do **not**. Never describe `bepack build` as bundle-only.
 - TypeScript, Node.js >= 20, native ESM (`"type": "module"`).
-- Public library entry: `src/index.ts`; CLI entry: `src/cli.ts`.
+- Public library entry: `src/index.ts`; CLI entry: `src/bin.ts` (`src/cli.ts` exports `runCLI`).
 - Use `.js` file extensions in TypeScript imports.
 - Prefer async filesystem APIs and preserve `ResolvedConfig` as read-only after normalization.
 
@@ -64,6 +64,8 @@ Plugin resolvers must not silently mutate user dependency declarations. `sapiPro
 ### Build and manifests
 
 The build pipeline is manifest patching (`beforeManifest`/`afterManifest`), `beforeBuild`, typecheck, Rolldown, then `afterBuild`. Manifest code lives in `src/manifest/`; it must preserve user-owned fields and respect format-version-specific version formats.
+
+Typechecking is one pluggable step. `src/build/typecheckers.ts` owns the command-line tokenizer and `resolveTypecheck()`; `src/build/runTypecheck.ts` resolves the executable on `PATH`/`PATHEXT` and spawns it with an argument array. There is no preset table: every checker is a user-supplied command, and only the unset default plus deprecated `useNpx` compatibility path get BePack's `--project`/cache arguments. Only Windows `.cmd`/`.bat` shims go through `cmd.exe`, which cannot take an argument array; there BePack builds and quotes the command line itself (`buildShellCommandLine`/`quoteForCmd`), because Node does not escape an args array for `cmd.exe` — a path with a space or `&` would otherwise be split. The tokenizer treats backslash as escaping only a quote, never a path separator. Do not add aliases or per-tool special cases to the runner; a new checker is a config value, not code.
 
 Managed dependency versions are written in this order: an exact config specifier, then the version resolved by `install`, then the value already in the manifest (offline commands never touch the network). `ManifestDepManager` reports which source was used and `patchManifest` logs every version it writes — never reintroduce a silent rewrite. `manifest.minEngineVersion` is authoritative in both merge modes.
 
