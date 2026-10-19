@@ -174,13 +174,17 @@ describe("shell quoting", () => {
     });
 
     it("joins an executable and its arguments into one command line", () => {
+        const expected =
+            process.platform === "win32"
+                ? 'C:\\bin\\tsc.cmd --noEmit --project "C:\\my project\\tsconfig.json"'
+                : "'C:\\bin\\tsc.cmd' --noEmit --project 'C:\\my project\\tsconfig.json'";
         expect(
             buildShellCommandLine("C:\\bin\\tsc.cmd", [
                 "--noEmit",
                 "--project",
                 "C:\\my project\\tsconfig.json",
             ])
-        ).toBe('C:\\bin\\tsc.cmd --noEmit --project "C:\\my project\\tsconfig.json"');
+        ).toBe(expected);
     });
 
     it("quotes POSIX arguments with single quotes", () => {
