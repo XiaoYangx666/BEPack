@@ -133,8 +133,10 @@ describe('createProject', () => {
     await createProject(parseCliOptions(['demo', '--template', 'bepack-addon', '--yes', '--cwd', cwd]));
     const root = path.join(cwd, 'demo');
     const pkgPath = path.join(root, 'package.json');
-    // The templates ship `bepack dev --copy`; without a target it must not survive scaffolding.
-    expect(JSON.parse(await fs.readFile(pkgPath, 'utf8')).scripts.dev).toBe('bepack dev --copy');
+    // Windows keeps the template's `bepack dev --copy`; other platforms already
+    // remove it during scaffolding because there is no usable copy target.
+    const expectedInitial = defaultCopyTarget() ? 'bepack dev --copy' : 'bepack dev';
+    expect(JSON.parse(await fs.readFile(pkgPath, 'utf8')).scripts.dev).toBe(expectedInitial);
     await dropDevCopyFlag(root);
     expect(JSON.parse(await fs.readFile(pkgPath, 'utf8')).scripts.dev).toBe('bepack dev');
   });
