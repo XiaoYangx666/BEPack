@@ -4,6 +4,17 @@ on:
     push:
         tags:
             - "v*-beta.*"
+    workflow_dispatch:
+        inputs:
+            version:
+                description: Published package version to promote (for example 0.1.0-beta.5)
+                required: true
+                type: string
+            promote_latest:
+                description: Move the latest dist-tag as well as beta
+                required: true
+                default: false
+                type: boolean
 
 permissions:
     contents: read
@@ -24,9 +35,11 @@ jobs:
             - run: npm install --global npm@11.18.0
             - run: npm ci
             - name: Verify release versions match the tag
+              env:
+                  RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
               shell: bash
               run: |
-                  version="${GITHUB_REF_NAME#v}"
+                  version="${RELEASE_VERSION#v}"
                   cli_version="$(node -p "require('./package.json').version")"
                   scaffolder_version="$(node -p "require('./packages/create-mcbe/package.json').version")"
                   if [[ "$version" != "$cli_version" || "$version" != "$scaffolder_version" ]]; then
@@ -41,20 +54,38 @@ jobs:
             - run: npm test --workspace=create-mcbe
             - run: npm run build --workspace=create-mcbe
             - name: Publish @bepack/cli
+              env:
+                  RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
               shell: bash
               run: |
-                  version="${GITHUB_REF_NAME#v}"
+                  version="${RELEASE_VERSION#v}"
                   if npm view "@bepack/cli@$version" version >/dev/null 2>&1; then
                     echo "@bepack/cli@$version is already published; skipping."
                   else
                     npm publish --ignore-scripts --tag beta --access public
                   fi
             - name: Publish create-mcbe
+              env:
+                  RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
               shell: bash
               run: |
-                  version="${GITHUB_REF_NAME#v}"
+                  version="${RELEASE_VERSION#v}"
                   if npm view "create-mcbe@$version" version >/dev/null 2>&1; then
                     echo "create-mcbe@$version is already published; skipping."
                   else
                     npm publish --workspace=packages/create-mcbe --ignore-scripts --tag beta
+                  fi
+            - name: Promote npm dist-tags
+              if: github.event_name == 'workflow_dispatch'
+              env:
+                  RELEASE_VERSION: ${{ inputs.version }}
+                  PROMOTE_LATEST: ${{ inputs.promote_latest }}
+              shell: bash
+              run: |
+                  version="${RELEASE_VERSION#v}"
+                  npm dist-tag add "@bepack/cli@$version" beta
+                  npm dist-tag add "create-mcbe@$version" beta
+                  if [[ "$PROMOTE_LATEST" == "true" ]]; then
+                    npm dist-tag add "@bepack/cli@$version" latest
+                    npm dist-tag add "create-mcbe@$version" latest
                   fi
