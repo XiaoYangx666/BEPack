@@ -32,7 +32,8 @@ jobs:
                   node-version: 24
                   registry-url: https://registry.npmjs.org
                   package-manager-cache: false
-            - run: npm install --global npm@11.18.0
+            # npm 11.21+ is required for OIDC-authenticated `npm dist-tag` operations.
+            - run: npm install --global npm@11.21.0
             - run: npm ci
             - name: Verify release versions match the tag
               env:
