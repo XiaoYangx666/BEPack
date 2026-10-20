@@ -864,7 +864,7 @@ Bedrock 的 profiler 在脚本 tick 之间不采样。50 ms 的 tick 间隔会�
 - burst / 峰值检测会被 tick 边界拉长；
 - 两次 profile 的 busy 时间不可比。
 
-因此工具只把 `delta <= --gap`（默认 `5` ms）的连续采样视为 active。函数排名使用 active sample 数；窗口或 burst 内的毫秒数按 active 采样比例分摊。
+因此工具只把 `delta <= --gap`（默认 `5` ms）的连续采样视为 active。函数行的 `ms` 是该函数在 active 采样中累计的真实时间：`self` 只累加栈顶样本的 `timeDeltas`，`total` 累加整条栈（同一栈内同一函数只计一次）。`share` 是该行 `ms` 占 busy 时间的比例，函数行按 `ms` 降序排列。
 
 ### 子命令
 
@@ -880,7 +880,7 @@ bepack profile diff <before> <after> [-n 15]
 | `summary` | 输出总时长、active/gap 采样、busy/idle 时间；burst 按 busy 时间**倒序**，每个 burst 打印 self 热点函数。                                  |
 | `bursts`  | 按时间顺序输出 burst，包含 sample 数、span、busy、top self、top stacks；多于一个 burst 时打印相邻 burst 的 interval。                   |
 | `top`     | 按函数统计采样；`--from/--to` 以 profile 起始为 0 ms。窗口边缘的 50 ms gap 会因 `delta > --gap` 被排除，不会计入 `tick`。                  |
-| `diff`    | 对比两侧最大 burst 的 self 采样数；任一侧没有 burst 时，该侧回退到整体 active 采样，避免拿空 burst 比较。按变化量绝对值排序。             |
+| `diff`    | 对比两侧 busy 时间最大的 burst 的 self 采样数；任一侧没有 burst 时，该侧回退到整体 active 采样，避免拿空 burst 比较。按变化量绝对值排序。 |
 
 ### 参数
 
@@ -917,6 +917,7 @@ bepack profile diff before.cpuprofile after.cpuprofile --root .
 
 - profile 里可能同时存在多份 trace 副本（例如顶层 trace 与嵌套 trace）。工具按原始采样逐条统计，不按时间戳或栈签名去重；重复出现的采样会保留。
 - 函数行按 `functionName + url + lineNumber` 聚合，这是 V8 `.cpuprofile` 中定位函数的稳定键。
+- `count` 始终是采样数，`ms` / `share` 是按每条采样自己的 `timeDeltas` 累加的真实时间；`diff` 的 `before` / `after` / `delta` 仍是采样数，保持原有 JSON 契约。
 - 非法 JSON、缺少 `nodes` / `samples` / `timeDeltas`、采样引用不存在的节点、数组长度不一致等会返回 `PROFILE_INVALID`；文件读取失败返回 `PROFILE_READ_FAILED`。
 - `top --from/--to` 的窗口边界按采样时间过滤，窗口内第一条采样如果带着 tick gap，仍会被 gap 规则排除。
 

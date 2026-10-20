@@ -351,12 +351,17 @@ export function functionKey(node: CpuProfileNode): string {
  * Deltas above the gap threshold are skipped even when the caller has already
  * selected a time window. This removes the tick gap attached to the first
  * sample inside a `top --from/--to` window.
+ *
+ * Deltas are not uniform, so each active sample contributes its own
+ * `deltaMs` to the row it attributes to rather than an equal share of the
+ * total busy time. `share` is therefore the share of busy time, not of the
+ * sample count.
  */
 export function countFunctions(
     samples: readonly ProfileSample[],
     { by, gapMs }: { by: SortBy; gapMs: number }
 ): FunctionCounts {
-    const counts = new Map<string, { node: CpuProfileNode; count: number }>();
+    const counts = new Map<string, { node: CpuProfileNode; count: number; ms: number }>();
     let active = 0;
     let busyMs = 0;
 
@@ -369,8 +374,9 @@ export function countFunctions(
             const node = sample.stack[0];
             if (!node) continue;
             const key = functionKey(node);
-            const entry = counts.get(key) ?? { node, count: 0 };
+            const entry = counts.get(key) ?? { node, count: 0, ms: 0 };
             entry.count++;
+            entry.ms += sample.deltaMs;
             counts.set(key, entry);
             continue;
         }
@@ -380,8 +386,9 @@ export function countFunctions(
             const key = functionKey(node);
             if (seen.has(key)) continue;
             seen.add(key);
-            const entry = counts.get(key) ?? { node, count: 0 };
+            const entry = counts.get(key) ?? { node, count: 0, ms: 0 };
             entry.count++;
+            entry.ms += sample.deltaMs;
             counts.set(key, entry);
         }
     }
@@ -390,11 +397,12 @@ export function countFunctions(
         .map((entry) => ({
             node: entry.node,
             count: entry.count,
-            share: active === 0 ? 0 : entry.count / active,
-            ms: active === 0 ? 0 : (busyMs * entry.count) / active,
+            share: busyMs === 0 ? 0 : entry.ms / busyMs,
+            ms: entry.ms,
         }))
         .sort(
             (a, b) =>
+                b.ms - a.ms ||
                 b.count - a.count ||
                 a.node.callFrame.functionName.localeCompare(b.node.callFrame.functionName)
         );
@@ -407,35 +415,39 @@ export function stackRows(
     gapMs: number,
     limit: number
 ): StackRow[] {
-    const stacks = new Map<string, { sample: ProfileSample; count: number }>();
-    let active = 0;
+    const stacks = new Map<string, { sample: ProfileSample; count: number; ms: number }>();
     let busyMs = 0;
 
     for (const sample of samples) {
         if (sample.deltaMs > gapMs) continue;
-        active++;
         busyMs += sample.deltaMs;
         const signature = sample.stack.map((node) => functionKey(node)).join("\n");
-        const entry = stacks.get(signature) ?? { sample, count: 0 };
+        const entry = stacks.get(signature) ?? { sample, count: 0, ms: 0 };
         entry.count++;
+        entry.ms += sample.deltaMs;
         stacks.set(signature, entry);
     }
 
     return [...stacks.values()]
-        .sort((a, b) => b.count - a.count)
+        .sort((a, b) => b.ms - a.ms || b.count - a.count)
         .slice(0, limit)
         .map((entry) => ({
             sample: entry.sample,
             count: entry.count,
-            share: active === 0 ? 0 : entry.count / active,
-            ms: active === 0 ? 0 : (busyMs * entry.count) / active,
+            share: busyMs === 0 ? 0 : entry.ms / busyMs,
+            ms: entry.ms,
         }));
 }
 
+/**
+ * Pick the burst with the most busy CPU time, which is the actual slowest
+ * tick. Sample count is only a tie-breaker because uneven `timeDeltas` mean a
+ * burst with fewer samples can still spend more time on the CPU.
+ */
 export function largestBurst(profile: CpuProfileAnalysis): Burst | undefined {
     return profile.bursts.reduce<Burst | undefined>((best, burst) => {
         if (!best) return burst;
-        if (burst.samples !== best.samples) return burst.samples > best.samples ? burst : best;
-        return burst.busyMs > best.busyMs ? burst : best;
+        if (burst.busyMs !== best.busyMs) return burst.busyMs > best.busyMs ? burst : best;
+        return burst.samples > best.samples ? burst : best;
     }, undefined);
 }

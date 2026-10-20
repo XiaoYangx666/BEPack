@@ -1,12 +1,63 @@
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
-import { loadCpuProfile } from "../analyze.js";
+import { analyzeCpuProfile, loadCpuProfile } from "../analyze.js";
 import { burstsReport, diffReport, summaryReport, topReport } from "../report.js";
 
 const root = "/project";
 
 function fixture(name: string): string {
     return fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
+}
+
+function unevenProfile() {
+    return {
+        nodes: [
+            {
+                id: 1,
+                callFrame: {
+                    functionName: "(root)",
+                    scriptId: "0",
+                    url: "",
+                    lineNumber: -1,
+                    columnNumber: 0,
+                },
+                children: [2],
+            },
+            {
+                id: 2,
+                callFrame: {
+                    functionName: "tick",
+                    scriptId: "1",
+                    url: "bedrock://script",
+                    lineNumber: 0,
+                    columnNumber: 0,
+                },
+                children: [3, 4],
+            },
+            {
+                id: 3,
+                callFrame: {
+                    functionName: "shortWork",
+                    scriptId: "3",
+                    url: "/project/short.js",
+                    lineNumber: 0,
+                    columnNumber: 0,
+                },
+            },
+            {
+                id: 4,
+                callFrame: {
+                    functionName: "longWork",
+                    scriptId: "4",
+                    url: "/project/long.js",
+                    lineNumber: 0,
+                    columnNumber: 0,
+                },
+            },
+        ],
+        samples: [3, 3, 4],
+        timeDeltas: [100, 100, 1000],
+    };
 }
 
 describe("profile reports", () => {
@@ -70,6 +121,28 @@ describe("profile reports", () => {
             toMs: 60,
         });
         expect(inclusive.data.profile.rows.map((row) => row.functionName)).toContain("tick");
+    });
+
+    it("weights burst top rows by real time for uneven sample deltas", () => {
+        const profile = analyzeCpuProfile(unevenProfile(), { minSamples: 1 });
+        const report = burstsReport([profile], { limit: 15, stacks: 5, root });
+
+        const burst = report.data.profiles[0]?.bursts[0];
+        expect(burst?.samples).toBe(3);
+        expect(burst?.busyMs).toBeCloseTo(1.2);
+        expect(burst?.topSelf[0]).toMatchObject({
+            functionName: "longWork",
+            url: "long.js",
+            count: 1,
+        });
+        expect(burst?.topSelf[0]?.ms).toBeCloseTo(1);
+        expect(burst?.topSelf[0]?.share).toBeCloseTo(1 / 1.2);
+        expect(burst?.topSelf[1]?.functionName).toBe("shortWork");
+        expect(burst?.topSelf[1]?.ms).toBeCloseTo(0.2);
+
+        expect(burst?.topStacks[0]?.ms).toBeCloseTo(1);
+        expect(burst?.topStacks[0]?.share).toBeCloseTo(1 / 1.2);
+        expect(report.text).toContain("longWork  long.js:1");
     });
 
     it("diffs changes and falls back to whole active samples when one side has no burst", async () => {
