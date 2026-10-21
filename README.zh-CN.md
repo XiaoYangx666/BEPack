@@ -18,88 +18,48 @@
 
 [English](./README.md) | 中文
 
-BePack 是 Minecraft 基岩版附加包的构建工具。它将行为包和资源包的 `manifest.json`、Script API 依赖、TypeScript 构建、本地复制，以及 `.mcpack` / `.mcaddon` 发布包整合到同一套工作流中。
+BePack 用一套工作流管理附加包项目：manifest、Script API 依赖、TypeScript 构建、复制到 Minecraft，以及 `.mcpack` / `.mcaddon` 打包发布。
 
-## 能做什么
+## 功能
 
-- 从零创建 BePack 配置，或从已有 manifest 导入配置。
-- 同步 `manifest.json`，同时保留不由 BePack 管理的字段。
-- 将行为包的 TypeScript Script API 入口构建到 `scripts/` 目录。
-- 打包前用 `tsc --noEmit` 做类型检查——**默认开启**。
-- 通过 `compile.define`（标识符级、typecheck 安全）或 `replace` 标记注入编译期 feature flag。
-- 自定义 Rolldown 构建：内联选项、函数，或独立的 `rolldown.config.ts`。
-- 解析受支持的 `@minecraft/*` 依赖，并将具体版本写入项目。
-- 以 `preserve`（增量）或 `clean`（从配置生成）策略同步 `manifest.json`。
-- 将包复制到 Minecraft 开发目录，并生成发布压缩包。
-- 分析 Bedrock `.cpuprofile`，避免把 tick 之间的空闲 gap 当成 CPU 工作。
+- 支持从零创建配置，也可从现有 BP/RP manifest 导入。
+- 同步 `manifest.json` 时保留 BePack 不管理的字段。
+- 提供 `preserve`（增量）与 `clean`（按配置重建）两种合并策略。
+- 类型检查通过后，将 Script API 源码构建到 `scripts/` 目录。
+- 通过 `compile.define` 或 `replace` 注入编译期开关。
+- 解析 `@minecraft/*` 依赖并写入具体版本。
+- 可将包复制到游戏开发目录，或直接生成发布压缩包。
+- 分析 `.cpuprofile` 时排除空闲 tick，只统计真实 CPU 时间。
 
 ## 环境要求
 
 - Node.js 20 或更高版本。
-- 一个 Minecraft 基岩版行为包、资源包，或两者兼有。
-- 使用受管理的 Script API 依赖时，需要 `package.json`。
+- 行为包、资源包，或两者兼有。
+- 使用 Script API 依赖时需要 `package.json`。
 
-## 创建新项目
+## 创建项目
 
-创建新的行为包项目时，推荐先使用 [create-mcbe](https://www.npmjs.com/package/create-mcbe)：
+新项目建议使用 [create-mcbe](https://www.npmjs.com/package/create-mcbe) 生成，交互选项见该项目文档：
 
 ```bash
 npm create mcbe
 ```
 
-具体交互选项和命令行参数请查看 create-mcbe 项目文档。可以全局安装 BePack：
+也可以自行安装 BePack 后初始化：
 
 ```bash
-npm install -g @bepack/cli
+npm install -D @bepack/cli
+npx bepack init                                              # 全新配置
+npx bepack init --from-bp bp/manifest.json                   # 从现有 BP 导入
+npx bepack init --from-bp bp/manifest.json --from-rp rp/manifest.json
+npx bepack build --install                                   # 首次构建
 ```
 
-也可以使用 `npm install -D @bepack/cli` 安装到项目中；此时使用 `npx bepack` 或 package script。
+`--from-bp` / `--from-rp` 会读取 manifest 中的名称、UUID、版本、格式和 Script API 依赖，无需手动填写；仅在找到对应源文件时启用编译。`--dry-run` 只预览结果、不写入文件，`--format js|mjs` 生成 JavaScript 配置。使用 `npm i -g @bepack/cli` 全局安装后，可省略 `npx`。
 
-如果需要新的 BePack 配置，执行以下命令后再按项目实际情况修改生成的内容：
+## 配置
 
-```bash
-bepack init
-```
-
-初始配置会包含一个 BP、位于 `src/main.ts` 的 TypeScript 入口和自动生成的 UUID。首次构建时安装依赖：
-
-```bash
-bepack build --install
-```
-
-## 接入已有项目
-
-已有包的 manifest 时，不必手动重新填写 UUID 和版本号；直接从 manifest 导入配置最快：
-
-```bash
-# 仅行为包
-bepack init --from-bp bp/manifest.json
-
-# 同时有行为包和资源包
-bepack init --from-bp bp/manifest.json --from-rp rp/manifest.json
-```
-
-该命令会根据读取到的包根目录、名称、UUID、版本、manifest 格式和受支持的 Script API 依赖创建 `bepack.config.ts`。只有当确实存在匹配的源文件（`src/<入口>.ts`、`.mts`、`.js` 或 `.mjs`）时，脚本模块才会生成 TypeScript 构建配置——脚本已经在包里的项目会保持编译关闭，而不是生成一个首次构建就会失败的入口。存在 TypeScript 源码但缺少 `tsconfig.json` 时会给出提示，并在生成的配置里关闭类型检查。
-
-`--dry-run` 只打印将要创建的文件，不写盘。
-
-常用变体：
-
-```bash
-# 生成 JavaScript 或 ESM JavaScript 配置，而非 TypeScript
-bepack init --format js
-bepack init --format mjs
-
-# 在项目目录外执行
-bepack init --cwd path/to/project --from-bp bp/manifest.json
-
-# 明确覆盖已有的生成配置
-bepack init --from-bp bp/manifest.json --force
-```
-
-## 最小配置
-
-BePack 会从项目目录加载 `bepack.config.ts`、`bepack.config.mjs` 或 `bepack.config.js`。以下是常见的 Script API 行为包配置：
+配置文件位于项目根目录，支持 `bepack.config.ts`、`bepack.config.mjs` 或 `bepack.config.js`：
 
 ```ts
 import { defineConfig } from "@bepack/cli";
@@ -130,11 +90,9 @@ export default defineConfig({
 });
 ```
 
-新包请生成新的 UUID，不要复用其他附加包的 UUID。纯数据行为包可省略 `moduleUuid` 和 `compile`。仅资源包项目则配置 `packs.rp`，并提供它的 `root`、头部 `uuid` 和资源模块 `moduleUuid`。
+新包请生成新的 UUID，不要与其他附加包重复。纯数据行为包无需 `moduleUuid` 和 `compile`；仅资源包项目配置 `packs.rp`，填写其 `root`、头部 `uuid` 和资源模块 `moduleUuid`。
 
-## 推荐目录结构
-
-目录名称都可通过配置调整；以下结构对应上面的示例：
+目录名均可配置，上述配置对应以下结构：
 
 ```text
 my-addon/
@@ -149,196 +107,119 @@ my-addon/
 └── dist/                   # .mcpack / .mcaddon 输出
 ```
 
-如需资源包，添加 `rp/` 目录和 `packs.rp` 配置即可。BP 和 RP 同时配置时，BePack 会维护它们在 manifest 中的关联关系。
-
-## 日常工作流
+## 常用命令
 
 ```bash
-# 解析配置的 Script API 依赖、更新 manifest 并构建
-bepack build --install
-
-# 依赖已安装时，只构建一次
-bepack build
-
-# 开发时监听文件并自动重建
-bepack dev
-
-# 生成发布压缩包（会先构建）
-bepack pack
-
-# 一次完成构建和打包
-bepack build --pack
+bepack build --install   # 解析依赖、更新 manifest、构建
+bepack build             # 依赖已就绪，仅构建
+bepack dev               # 监听文件变化并重建
+bepack pack              # 先构建，再打包
+bepack build --pack      # 构建与打包一次完成
 ```
 
-`bepack pack` 默认先构建再打包，因此单独执行 `pack` 不会再把旧的 `scripts/*.js` 打进产物；想直接压缩磁盘上的包目录时用 `bepack pack --no-build`。
-
-如果只想更新受管理的依赖和 manifest，可单独执行 `bepack install`。可以在配置中设置 `target`，也可以在安装并构建时临时指定目标 Minecraft 版本：
+`bepack pack` 默认先构建，避免将过期的 `scripts/*.js` 打进包内；如需直接压缩磁盘上的目录，使用 `--no-build`。仅刷新依赖和 manifest 时，可单独运行 `bepack install`。需要临时切换 Minecraft 版本时，使用 `--target`：
 
 ```bash
 bepack install --target 1.21.120
-bepack build --install --target 1.21.120
 ```
 
-> **类型检查默认开启。** 每次 `bepack build` / `bepack dev` 都会先做类型检查（默认 `tsc --noEmit`，也可换成别的检查器），再交给 Rolldown 打包。检查失败会以 `TYPECHECK_FAILED` 终止构建，而不是产出一个损坏的包。可用 `--skip-typecheck` 跳过，或设置 `packs.bp.compile.typecheck: false`。这与自定义 Rolldown 选项无关——加了自定义选项**不会**关闭类型检查。
+## 类型检查
 
-### 自定义类型检查器
+`bepack build` 和 `bepack dev` 默认先运行 `tsc --noEmit`，通过后再交给 Rolldown；失败会以 `TYPECHECK_FAILED` 终止，不会产出不完整的包。如需跳过，使用 `--skip-typecheck` 或设置 `compile.typecheck: false`。添加自定义 Rolldown 选项不会关闭类型检查。
 
-市面上的 TS 检查器越来越多，所以检查器**就是一条你自己写的命令**，没有需要跟着维护的预设表：
-
-```ts
-export default defineConfig({
-    packs: {
-        bp: {
-            compile: {
-                entry: "src/main.ts",
-                // 终端里能敲的命令都行。默认是 "tsc --noEmit"。
-                typecheckCommand: "bun check",
-                // typecheckCommand: "tsc-rs --noEmit",
-                // typecheckCommand: "npx tsc --noEmit",
-                // 按引号分词；反斜杠只转义引号，所以 Windows 路径可以原样书写：
-                // typecheckCommand: 'node "C:\\tools\\my checker.mjs"',
-            },
-        },
-    },
-});
-```
-
-也可以写成对象形式，或在命令行临时指定：
+检查器可以是任意命令行工具：
 
 ```ts
 compile: {
-    // 一个字段同时控制开关与命令
-    typecheck: { command: "bun check", args: ["--pretty"] },
+    entry: "src/main.ts",
+    typecheckCommand: "bun check",   // 默认："tsc --noEmit"
 }
 ```
 
 ```bash
-bepack build --typecheck-command "bun check"
-bepack dev   --typecheck-command "tsc-rs --noEmit"
-bepack pack  --typecheck-command "npx tsc --noEmit"
+bepack build --typecheck-command "tsc-rs --noEmit"
 ```
 
-常用选择与实际执行的命令：
+BePack 只为自带的 `tsc` 默认命令追加 `--project` 和缓存参数；自定义命令按原样执行。对象写法（`typecheck: { command, args }`）、优先级以及已废弃的 `useNpx` 参见[参考文档](./reference.md)。
 
-| 想用什么 | `typecheckCommand` |
-| --- | --- |
-| 默认 | *不配* → `tsc --noEmit --project <tsconfig>` |
-| 项目本地的 TypeScript | `"npx tsc --noEmit"` |
-| Bun 的快速检查 | `"bun check"`（用的是 Bun 自带的 TypeScript，不是项目里锁定的版本） |
-| 原生 TS 移植（Rust） | `"tsc-rs --noEmit"` |
-| Vue / Svelte | `"vue-tsc --noEmit"` / `"svelte-check"` |
+## Script API 依赖
 
-**只有"不配 command"的默认情况和旧 `useNpx` 兼容配置会被 BePack 附加参数**（`--project <tsconfig>`，以及 `--cache` 时的 `--incremental` / `--tsBuildInfoFile`）。你一旦写了 `command`，BePack 一个参数都不加——工具需要 tsconfig 就自己写进命令里。`typecheck.args` 追加在命令之后。
+`@minecraft/*` 依赖支持 `stable`、`beta`、`preview` 和精确版本。`install`、`build --install` 会联网将选择器解析为具体版本，写入 `package.json` 和 BP manifest；`build`、`dev` 等离线命令沿用 manifest 中的值。配置中指定精确版本时，以配置为准。
 
-优先级：CLI `--typecheck-command` > CLI `--use-npx` > `compile.typecheck.command` > `compile.typecheckCommand` > 已废弃的 `compile.useNpx` > 默认 `tsc`。用 CLI 指定命令时，配置里的 `typecheckArgs` 会被一并丢弃——这些参数通常是某条命令专属的。旧的 `useNpx` 配置仍保留原行为，会传入配置的 tsconfig 和缓存参数；而显式写 `typecheckCommand: "npx tsc --noEmit"` 属于自定义命令，不会自动追加参数。换检查器不等于关掉检查——只有 `typecheck: false` 或 `--skip-typecheck` 才会跳过。
+## 自定义构建
 
-受支持的 `@minecraft/*` 依赖可使用 `stable`、`beta`、`preview` 或精确版本。BePack 会先把如 `stable` 这样的选择器解析为具体包版本，再更新 `package.json` 和 BP manifest。
-
-写入 `manifest.json` 的版本按这个优先级决定：配置里的精确版本（`"@minecraft/server": "2.10.0"`，永远优先）→ `bepack install` / `build --install` 联网解析的结果 → manifest 里已有的版本（`build` / `dev` / `manifest` **不联网**，频道说明符离线时复用旧值）。每次写入都会打印来源：`manifest @minecraft/server: 2.0.0 -> 2.10.0 (specifier "stable", install)` 或 `... kept from manifest ... — run \`bepack install\` to refresh`，不会再出现"版本被悄悄写死"的情况。
-
-## 自定义 Rolldown 构建
-
-`packs.bp.compile` 覆盖了常见场景。需要 Rolldown 的其它能力时（额外插件、`resolve.alias`、`treeshake`、`sourcemap` 等），可以用内联选项、函数或配置文件传入：
+需要插件、alias、sourcemap 等 Rolldown 能力时，可以内联选项、写成函数，或使用独立配置文件：
 
 ```ts
-export default defineConfig({
-    // 此处省略 name、version、packs.bp.root、uuid 等
-    packs: {
-        bp: {
-            compile: {
-                entry: "src/main.ts",
-                // 对象形式，或函数形式 (options, context) => options
-                rolldown: {
-                    resolve: { alias: { "@lib": "./src/lib" } },
-                    output: { sourcemap: true },
-                },
-                // 或使用配置文件（相对项目根）：
-                // rolldownConfig: "rolldown.bp.config.ts",
-            },
-        },
+compile: {
+    entry: "src/main.ts",
+    rolldown: {
+        resolve: { alias: { "@lib": "./src/lib" } },
+        output: { sourcemap: true },
     },
-});
+    // rolldownConfig: "rolldown.bp.config.ts",
+}
 ```
 
 ```bash
-# 临时替换配置里指定的文件
 bepack build --rolldown-config rolldown.staging.mjs
-bepack dev --rolldown-config rolldown.staging.mjs
 ```
 
-自定义选项会合并在 BePack 生成的选项之上：`plugins` 追加，`external` 取并集，`transform` / `resolve` / `output` / `experimental` 一层深合并。`input` 和输出位置字段始终由 BePack 管理，尝试修改会报 `CONFIG_INVALID`。自定义配置文件支持 `.ts` / `.mts` / `.js` / `.mjs`，且只能导出单个配置。完整合并规则与受保护字段见[参考文档](./reference.md)。
+自定义选项会合并到 BePack 生成的配置上：`plugins` 追加，`external` 取并集，`resolve` / `output` / `transform` 做一层深合并。`input` 和输出位置不允许改动。完整规则见参考文档。
 
-## 开发时复制到 Minecraft
+## 复制到 Minecraft
 
-配置一次复制目标，然后在 `dev` 或 `build` 中加 `--copy`：
+配置复制目标后，为 `dev` 或 `build` 添加 `--copy`：
 
 ```ts
-export default defineConfig({
-    // 此处省略 name、version 和 packs
-    copy: {
-        defaultTarget: "minecraft",
-        targets: {
-            minecraft: {
-                type: "gameRoot",
-                path: "C:/Users/you/AppData/Local/Packages/Microsoft.MinecraftUWP_8wekyb3d8bbwe/LocalState/games/com.mojang",
-            },
+copy: {
+    defaultTarget: "minecraft",
+    targets: {
+        minecraft: {
+            type: "gameRoot",
+            path: "C:/Users/you/AppData/Local/Packages/Microsoft.MinecraftUWP_8wekyb3d8bbwe/LocalState/games/com.mojang",
         },
     },
-    dev: {
-        copy: true,
-    },
-});
+},
+dev: { copy: true },
 ```
 
 ```bash
-# 首次构建；之后每次监听到文件变化都会重建并复制
-bepack dev
-
-# 或仅复制一次已完成的构建
-bepack build --copy
+bepack dev            # 构建，之后每次文件变化都重建并复制
+bepack build --copy   # 仅复制一次已完成的构建
 bepack copy --target minecraft
 ```
 
-`gameRoot` 会将行为包复制到 `development_behavior_packs`，将资源包复制到 `development_resource_packs`。如果 BP 和 RP 需要不同的目标路径，可使用自定义目标；完整写法请见参考文档。
+`gameRoot` 会将行为包放入 `development_behavior_packs`，资源包放入 `development_resource_packs`。如需为 BP 和 RP 分别指定路径，可使用自定义目标，写法见参考文档。
 
-## 分析 Bedrock CPU profile
+## 分析 CPU profile
 
-`/script profiler stop` 生成标准 V8 `.cpuprofile`，但 Bedrock 不为空闲时间采样。tick 之间的间隔会作为较大的 `timeDeltas` 挂在下一个 tick 的第一个采样点上，因此直接把 delta 当成 CPU 时间会让 `tick` 看起来是最热函数。`bepack profile` 会把大于 `--gap`（默认 `5` ms）的 delta 视为空闲 gap，并把每个 active 采样自己的 delta 记到对应函数上，因此函数按累计真实时间排序，而不是按采样数排序。
+Bedrock 不采样空闲时间，tick 间隔会作为一条很大的 `timeDeltas` 记录在下一个采样点上。`bepack profile` 会忽略超过 `--gap`（默认 `5` ms）的 delta，并按真实累计时间对函数排序：
 
 ```bash
-# 概览；burst 按 busy 时间倒序
 bepack profile summary bedrock.cpuprofile
-
-# 按时间顺序列出峰值、间隔和主要调用栈
-bepack profile bursts bedrock.cpuprofile
-
-# 查看时间窗口内的 self 或 inclusive 函数
-bepack profile top bedrock.cpuprofile --from 2900 --to 2950 --by total
-
-# 对比两次抓取；一侧没有 burst 时回退到整体 active 统计
-bepack profile diff before.cpuprofile after.cpuprofile
+bepack profile bursts  bedrock.cpuprofile
+bepack profile top     bedrock.cpuprofile --from 2900 --to 2950 --by total
+bepack profile diff    before.cpuprofile after.cpuprofile
 ```
 
-使用 `--json` 获取机器可读输出，使用 `--root <目录>` 缩短源码路径。burst 至少需要 `--min-samples` 个 active 采样（默认 `20`）。该命令不依赖 `bepack.config`。
+`--json` 输出机器可读结果，`--root <目录>` 用于缩短路径。该命令不需要 `bepack.config`。
 
 ## 打包发布
 
-通过 `pack` 设置输出名称和目录。`{name}` 和 `{version}` 会替换为顶层配置中的值：
+在 `pack` 中设置产物名称和目录，`{name}`、`{version}` 会替换为顶层配置中的值：
 
 ```ts
-export default defineConfig({
-    // name: "my-addon", version: "1.0.0", packs: ...
-    pack: {
-        name: "{name}-{version}",
-        outDir: "releases",
-    },
-});
+pack: {
+    name: "{name}-{version}",
+    outDir: "releases",
+}
 ```
 
 ```bash
 bepack pack
 bepack pack --name my-addon-preview
-bepack pack --no-build      # 不构建，直接压缩磁盘上的包目录
+bepack pack --no-build
 ```
 
 | 已配置的包 | 输出       |
@@ -347,52 +228,43 @@ bepack pack --no-build      # 不构建，直接压缩磁盘上的包目录
 | 仅 RP      | `.mcpack`  |
 | BP 和 RP   | `.mcaddon` |
 
-选择性打包时（BP 始终如此，RP 在设置了 `packs.rp.include` 之后如此），BePack 会列出被 include 列表跳过的顶层条目，并提示把它们加到 `packs.bp.include` / `packs.rp.include`——像 `manifest.json` 旁边的 `README_中文.md` 不会再被无声丢弃。
+当 include 列表遗漏文件时，BePack 会列出被遗漏的顶层条目，并提示添加到 `packs.bp.include` / `packs.rp.include`，不会静默丢弃。
 
 ### Pack 优化（`__brarchive`）
 
-1.26.40 起官方提供 **pack optimizer**：把包里的散文件装进 `__brarchive/` 归档。BePack 可以在打包时生成同样的结构：
+从 1.26.40 起，官方支持将包内的散文件收进 `__brarchive/` 归档。BePack 打包时也可生成相同结构：
 
 ```ts
 pack: { outDir: "dist", optimize: true }
 ```
 
 ```bash
-bepack pack --optimize            # --no-optimize 可覆盖配置里的开启状态
-bepack build --pack --optimize
+bepack pack --optimize            # --no-optimize 可关闭
 ```
 
-BePack 会往产物 manifest 写入 `header.pack_optimization_version: "0.1.0"` —— **这个字段才是引擎读取归档的开关**（写游戏版本号如 `"1.26.40"` 无效）。`entities/`、`items/`、`blocks/`、`recipes/`、`models/` 这类注册表目录会完整进归档并删除散文件；而按路径引用的目录（`functions/`、`loot_tables/`、`structures/`、`texts/`、`textures/`、`sounds/`、`font/`、`materials/`）保留真实散文件，归档里只登记一条 0 字节存根 —— 与官方包的做法一致。已用内置 `@minecraft/server` 探针脚本实机验证：归档的 blocks/items/entities/recipes 全部正常注册，functions/loot_tables 从散文件正常解析。
+BePack 会写入 `header.pack_optimization_version: "0.1.0"` —— 该字段才是引擎读取归档的开关。`entities/`、`items/` 等注册表目录整体进归档，并删除散文件；`functions/`、`textures/` 等按路径引用的目录保留散文件，归档中仅登记一个同名存根。磁盘上的包目录不会被修改。
 
-磁盘上的包目录不会被修改，`bepack copy` 也只在显式开启时才优化。
-
-> **兼容性**：只有支持 `__brarchive/` 的客户端（1.26.40+）才能看到归档内容；旧客户端只能看到保留散文件的目录。`min_engine_version` 不参与这个判断，所以低于 1.26.40 时 BePack 只打印警告（`allowUnsupportedTarget: true` 可关闭）。完整选项见参考文档。
-
-复制到开发目录默认仍是散文件形态。开启 `copy.optimize`（或给 `copy` / `dev` / `build --copy` 传 `--optimize`）可以把**优化后的形态**放进开发目录，这样打包后才可能出现的问题能在实机里提前发现：
-
-```ts
-copy: { defaultTarget: "minecraft", optimize: true }
-```
+> 只有 1.26.40+ 的客户端能读取归档内容，旧客户端只能看到保留的散文件。如需让开发目录也保持相同形态，启用 `copy.optimize` 即可。
 
 ## 命令速查
 
-| 命令                      | 用途                                                          |
-| ------------------------- | ------------------------------------------------------------- |
-| `bepack init`             | 创建配置，或用 `--from-bp` / `--from-rp` 导入配置。           |
-| `bepack install`          | 解析受管理的依赖，并更新 `package.json` 和 manifest。         |
-| `bepack manifest`         | 不安装依赖，仅更新 manifest。                                 |
-| `bepack build`            | 修补 manifest，用 `tsc` 类型检查，再编译已配置的 BP 源码。    |
-| `bepack dev`              | 先构建一次，随后监听并重建（类型检查默认开启）。              |
-| `bepack copy`             | 复制已配置的包到开发目标。                                    |
-| `bepack pack`             | 先构建，再生成 `.mcpack` 或 `.mcaddon`（`--no-build` 跳过构建）。 |
-| `bepack profile summary`  | 分析 Bedrock `.cpuprofile`，定位慢 tick。 |
-| `bepack config --summary` | 查看解析后的配置摘要。                                        |
+| 命令                      | 用途                                                              |
+| ------------------------- | ----------------------------------------------------------------- |
+| `bepack init`             | 创建配置，或通过 `--from-bp` / `--from-rp` 导入。                  |
+| `bepack install`          | 解析托管依赖，更新 `package.json` 和 manifest。                    |
+| `bepack manifest`         | 仅更新 manifest，不安装依赖。                                      |
+| `bepack build`            | 修补 manifest、类型检查、编译 BP 源码。                            |
+| `bepack dev`              | 构建一次后进入监听，文件变化时重建。                               |
+| `bepack copy`             | 将配置的包复制到开发目标。                                         |
+| `bepack pack`             | 构建后生成 `.mcpack` / `.mcaddon`（`--no-build` 跳过构建）。      |
+| `bepack profile summary`  | 分析 `.cpuprofile`，定位慢 tick。                                  |
+| `bepack config --summary` | 查看解析后的配置摘要。                                             |
 
-项目命令都支持 `--cwd <项目目录>` 和 `--config <路径>`，可用于在非项目目录执行或使用不同的配置文件名。对于会写入文件的命令，可添加 `--dry-run` 预览；如需机器可读输出，可添加 `--json`。`bepack profile` 支持 `--cwd` 和 `--root`，但不加载配置。使用 `bepack <命令> --help` 查看每个命令的全部参数。
+所有项目命令均支持 `--cwd <目录>`、`--config <路径>`、`--dry-run` 和 `--json`；完整参数见 `bepack <命令> --help`。
 
-## 更多文档
+## 文档
 
-本 README 覆盖最常见的路径：创建或导入项目、配置包、构建、复制与打包。完整配置字段、自定义复制目标、包含规则、依赖解析扩展、插件、Hook 和替换标记请阅读 [参考文档](./reference.md)。
+完整配置字段、自定义复制目标、include 规则、依赖解析器、插件、Hook 和替换标记，详见[参考文档](./reference.md)。
 
 ## 许可证
 
