@@ -27,6 +27,11 @@ import { BePackError } from "../errors/BePackError.js";
 import { validateScriptOutputDir, slash } from "../utils/path.js";
 import { normalizeReplace } from "../build/replace.js";
 import { normalizeDefine } from "../build/define.js";
+import {
+    normalizeTypecheckArgs,
+    normalizeTypecheckCommand,
+    normalizeTypecheckSetting,
+} from "../build/typecheckers.js";
 import { BUILTIN_PLUGINS } from "../plugins/builtins.js";
 
 function stripUndefined<T extends Record<string, unknown>>(value: T | undefined): Partial<T> {
@@ -216,11 +221,29 @@ function normalizeCompile(
     const resolvedEntry = path.resolve(projectRootDir, compile?.entry ?? defs.entry);
     const resolvedSrcDir = path.dirname(resolvedEntry);
     const normalizedDir = validateScriptOutputDir(bpRootDir, rawDir, resolvedSrcDir);
+    // `typecheck` accepts a boolean or an object; the top-level `typecheckCommand`/
+    // `typecheckArgs` act as the fallback the object form can override.
+    const typecheckCommand =
+        normalizeTypecheckCommand(compile?.typecheckCommand, "packs.bp.compile.typecheckCommand") ??
+        defs.typecheckCommand;
+    const typecheckArgs = normalizeTypecheckArgs(
+        compile?.typecheckArgs,
+        "packs.bp.compile.typecheckArgs"
+    );
+    const typecheck = normalizeTypecheckSetting(compile?.typecheck, {
+        typecheck: defs.typecheck,
+        ...(typecheckCommand === undefined ? {} : { typecheckCommand }),
+        ...(typecheckArgs === undefined ? {} : { typecheckArgs }),
+    });
     return {
         entry: compile?.entry ?? defs.entry,
         define: normalizeDefine(compile?.define),
         tsconfig: compile?.tsconfig ?? defs.tsconfig,
-        typecheck: compile?.typecheck ?? defs.typecheck,
+        typecheck: typecheck.typecheck,
+        typecheckArgs: typecheck.typecheckArgs,
+        ...(typecheck.typecheckCommand === undefined
+            ? {}
+            : { typecheckCommand: typecheck.typecheckCommand }),
         preserveModules: compile?.preserveModules ?? defs.preserveModules,
         external: compile?.external ?? defs.external,
         useNpx: compile?.useNpx ?? defs.useNpx,

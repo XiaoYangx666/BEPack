@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { ResolvedConfig } from "../config/configTypes.js";
+import type { ResolvedConfig, TypecheckCommandSetting } from "../config/configTypes.js";
 import { runManifestPatch } from "../manifest/runManifest.js";
 import { runTypecheck } from "./runTypecheck.js";
 import { runRolldown } from "./runRolldown.js";
@@ -19,6 +19,14 @@ export type RunBuildOptions = {
     rolldownConfig?: string;
     /** Force typecheck (overrides config). Default: config.packs.bp.compile.typecheck */
     typecheck?: boolean;
+    /**
+     * CLI `--typecheck-command <command>` override. Replaces the configured command *and*
+     * its args: args are usually checker-specific, so carrying them over would silently
+     * misconfigure the command the user just asked for.
+     */
+    typecheckCommand?: TypecheckCommandSetting;
+    /** @deprecated CLI compatibility for `--use-npx`; retains default tsconfig/cache flags. */
+    useNpx?: boolean;
     /** Enable TypeScript incremental compilation cache. */
     cache?: boolean;
     dryRun?: boolean;
@@ -74,26 +82,43 @@ export async function runBuild(options: RunBuildOptions) {
     await runHook("beforeBuild", command, options.cwd, options.config, options.logger, hookOptions);
 
     let typecheckRan = false;
+    let typecheckCommandUsed: string | undefined;
     if (compile && !options.dryRun && options.typecheck !== false) {
         const compileConfig = options.config.packs.bp!.compile!;
         const tsBuildInfoFile = options.cache
             ? path.resolve(root, compileConfig.cache.file)
             : undefined;
-        await timed(
+        // CLI --typecheck-command wins; then CLI --use-npx; then configured command;
+        // then deprecated config.useNpx; otherwise runTypecheck applies the default.
+        const command =
+            options.typecheckCommand ??
+            (options.useNpx ? undefined : compileConfig.typecheckCommand);
+        const useNpx =
+            options.typecheckCommand === undefined &&
+            (Boolean(options.useNpx) || (command === undefined && compileConfig.useNpx));
+        const result = await timed(
             "typecheck",
             () =>
                 runTypecheck(root, {
                     quiet: Boolean(options.quiet),
-                    useNpx: compileConfig.useNpx,
+                    ...(command === undefined ? {} : { command }),
+                    useNpx,
+                    // A CLI command replaces the configured args along with the command.
+                    args:
+                        options.typecheckCommand !== undefined || options.useNpx
+                            ? []
+                            : compileConfig.typecheckArgs,
                     tsconfigPath: compileConfig.tsconfig,
                     incremental: Boolean(options.cache),
                     ...(tsBuildInfoFile ? { tsBuildInfoFile } : {}),
+                    warn: (message) => options.logger.warn(message),
                 }),
             options.logger,
             timing
         );
         typecheckRan = true;
-        options.logger.typescript("typecheck complete");
+        typecheckCommandUsed = result.commandLine;
+        options.logger.typescript(`typecheck complete (${result.commandLine})`);
     }
 
     if (compile && !options.dryRun) {
@@ -123,6 +148,7 @@ export async function runBuild(options: RunBuildOptions) {
         script: compile ? slash(scriptOutFile(options.cwd, options.config)!) : undefined,
         compiled: compile,
         typecheck: typecheckRan,
+        ...(typecheckCommandUsed ? { typecheckCommand: typecheckCommandUsed } : {}),
         durationMs,
     };
 }

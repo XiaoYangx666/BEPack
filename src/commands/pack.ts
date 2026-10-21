@@ -264,6 +264,7 @@ export async function commandPack(options: any) {
     let build = null;
     if (!skipBuild) {
         // Typecheck/cache overrides mirror `bepack build`; defaults come from the config.
+        // `normalizeConfig` already reduced the object form of `compile.typecheck` to a boolean.
         const typecheck = options.skipTypecheck
             ? false
             : options.typecheck
@@ -273,12 +274,14 @@ export async function commandPack(options: any) {
             options.cache !== undefined
                 ? Boolean(options.cache)
                 : (config.packs.bp?.compile?.cache.build ?? false);
+        const typecheckCommand = options.typecheckCommand;
         build = await runBuild({
             cwd,
             config,
             logger,
             command: "build",
             ...(typecheck === undefined ? {} : { typecheck }),
+            ...(typecheckCommand === undefined ? {} : { typecheckCommand }),
             ...(options.cache !== undefined ? { cache } : {}),
             dryRun: Boolean(options.dryRun),
             quiet: Boolean(options.json || options.silent),

@@ -179,7 +179,58 @@ bepack install --target 1.21.120
 bepack build --install --target 1.21.120
 ```
 
-> **类型检查默认开启。** 每次 `bepack build` / `bepack dev` 都会先用 `tsc --noEmit` 检查源码，再交给 Rolldown 打包。检查失败会以 `TYPECHECK_FAILED` 终止构建，而不是产出一个损坏的包。可用 `--skip-typecheck` 跳过，或设置 `packs.bp.compile.typecheck: false`。这与自定义 Rolldown 选项无关——加了自定义选项**不会**关闭类型检查。
+> **类型检查默认开启。** 每次 `bepack build` / `bepack dev` 都会先做类型检查（默认 `tsc --noEmit`，也可换成别的检查器），再交给 Rolldown 打包。检查失败会以 `TYPECHECK_FAILED` 终止构建，而不是产出一个损坏的包。可用 `--skip-typecheck` 跳过，或设置 `packs.bp.compile.typecheck: false`。这与自定义 Rolldown 选项无关——加了自定义选项**不会**关闭类型检查。
+
+### 自定义类型检查器
+
+市面上的 TS 检查器越来越多，所以检查器**就是一条你自己写的命令**，没有需要跟着维护的预设表：
+
+```ts
+export default defineConfig({
+    packs: {
+        bp: {
+            compile: {
+                entry: "src/main.ts",
+                // 终端里能敲的命令都行。默认是 "tsc --noEmit"。
+                typecheckCommand: "bun check",
+                // typecheckCommand: "tsc-rs --noEmit",
+                // typecheckCommand: "npx tsc --noEmit",
+                // 按引号分词；反斜杠只转义引号，所以 Windows 路径可以原样书写：
+                // typecheckCommand: 'node "C:\\tools\\my checker.mjs"',
+            },
+        },
+    },
+});
+```
+
+也可以写成对象形式，或在命令行临时指定：
+
+```ts
+compile: {
+    // 一个字段同时控制开关与命令
+    typecheck: { command: "bun check", args: ["--pretty"] },
+}
+```
+
+```bash
+bepack build --typecheck-command "bun check"
+bepack dev   --typecheck-command "tsc-rs --noEmit"
+bepack pack  --typecheck-command "npx tsc --noEmit"
+```
+
+常用选择与实际执行的命令：
+
+| 想用什么 | `typecheckCommand` |
+| --- | --- |
+| 默认 | *不配* → `tsc --noEmit --project <tsconfig>` |
+| 项目本地的 TypeScript | `"npx tsc --noEmit"` |
+| Bun 的快速检查 | `"bun check"`（用的是 Bun 自带的 TypeScript，不是项目里锁定的版本） |
+| 原生 TS 移植（Rust） | `"tsc-rs --noEmit"` |
+| Vue / Svelte | `"vue-tsc --noEmit"` / `"svelte-check"` |
+
+**只有"不配 command"的默认情况和旧 `useNpx` 兼容配置会被 BePack 附加参数**（`--project <tsconfig>`，以及 `--cache` 时的 `--incremental` / `--tsBuildInfoFile`）。你一旦写了 `command`，BePack 一个参数都不加——工具需要 tsconfig 就自己写进命令里。`typecheck.args` 追加在命令之后。
+
+优先级：CLI `--typecheck-command` > CLI `--use-npx` > `compile.typecheck.command` > `compile.typecheckCommand` > 已废弃的 `compile.useNpx` > 默认 `tsc`。用 CLI 指定命令时，配置里的 `typecheckArgs` 会被一并丢弃——这些参数通常是某条命令专属的。旧的 `useNpx` 配置仍保留原行为，会传入配置的 tsconfig 和缓存参数；而显式写 `typecheckCommand: "npx tsc --noEmit"` 属于自定义命令，不会自动追加参数。换检查器不等于关掉检查——只有 `typecheck: false` 或 `--skip-typecheck` 才会跳过。
 
 受支持的 `@minecraft/*` 依赖可使用 `stable`、`beta`、`preview` 或精确版本。BePack 会先把如 `stable` 这样的选择器解析为具体包版本，再更新 `package.json` 和 BP manifest。
 

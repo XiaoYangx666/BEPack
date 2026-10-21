@@ -51,12 +51,16 @@ export async function commandBuild(options: any) {
     }
 
     // Typecheck override: CLI --skip-typecheck / --typecheck > config
+    // `normalizeConfig` already reduced the object form of `compile.typecheck` to a boolean.
     const compile = config.packs.bp?.compile;
     const typecheck = options.skipTypecheck
         ? false
         : options.typecheck
           ? true
           : (compile?.typecheck ?? false);
+
+    // Typecheck command override: CLI --typecheck-command > CLI --use-npx > config.
+    const typecheckCommand = options.typecheckCommand;
 
     // Cache override: CLI --cache/--no-cache > config.cache.build > false
     // options.cache is true from --cache, false from --no-cache, undefined when not set
@@ -70,6 +74,8 @@ export async function commandBuild(options: any) {
         command: "build",
         ...(options.rolldownConfig ? { rolldownConfig: options.rolldownConfig } : {}),
         typecheck: Boolean(typecheck),
+        ...(typecheckCommand === undefined ? {} : { typecheckCommand }),
+        ...(options.useNpx ? { useNpx: true } : {}),
         cache: Boolean(cache),
         dryRun: Boolean(options.dryRun),
         quiet: Boolean(options.json || options.silent),

@@ -1,4 +1,3 @@
-import { relative } from "node:path";
 import { countFunctions, functionKey, largestBurst, stackRows } from "./analyze.js";
 import type {
     Burst,
@@ -137,7 +136,37 @@ function functionFrame(
 ): Omit<FunctionSummary, "count" | "share" | "ms"> {
     const frame = node.callFrame;
     let url = frame.url || "(unknown)";
-    if (url.startsWith(`${root}/`)) url = relative(root, url);
+    // Profile URLs are source identifiers, not host-native filesystem paths. Keep their
+    // display format stable across platforms even when the profile or root uses `\\`.
+    const sourceUrl = url.replace(/\\/g, "/");
+    const sourceRoot = root.replace(/\\/g, "/").replace(/\/+$/, "");
+    const compareUrl = process.platform === "win32" ? sourceUrl.toLowerCase() : sourceUrl;
+    const rootCandidates = [sourceRoot];
+    // Profiles may use POSIX-style absolute URLs even when analyzed on Windows. In that
+    // case `path.resolve()` has added a drive to --root; also compare the drive-free root.
+    if (process.platform === "win32" && /^[a-z]:/i.test(sourceRoot)) {
+        rootCandidates.push(sourceRoot.slice(2));
+    }
+    const matchedRoot = rootCandidates.find((candidate) => {
+        const compareRoot = process.platform === "win32" ? candidate.toLowerCase() : candidate;
+        return (
+            compareUrl === compareRoot ||
+            (compareRoot !== "/" && compareUrl.startsWith(`${compareRoot}/`)) ||
+            (compareRoot === "/" && compareUrl.startsWith("/"))
+        );
+    });
+    if (matchedRoot === "/") {
+        url = sourceUrl.slice(1);
+    } else if (matchedRoot) {
+        url =
+            compareUrl === (process.platform === "win32" ? matchedRoot.toLowerCase() : matchedRoot)
+                ? "."
+                : sourceUrl.slice(matchedRoot.length + 1);
+    } else if (!sourceRoot && sourceUrl.startsWith("/")) {
+        url = sourceUrl.slice(1);
+    } else {
+        url = sourceUrl;
+    }
 
     return {
         functionName: frame.functionName || "(anonymous)",

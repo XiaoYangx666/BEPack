@@ -1,6 +1,6 @@
 {
     "name": "@bepack/cli",
-    "version": "0.1.0-beta.4",
+    "version": "0.1.0-beta.5",
     "description": "A modern pack builder for Minecraft Bedrock Edition.",
     "keywords": [
         "minecraft",
@@ -15,7 +15,7 @@
     "author": "XiaoYangx666",
     "repository": {
         "type": "git",
-        "url": "https://github.com/XiaoYangx666/BEPack.git"
+        "url": "git+https://github.com/XiaoYangx666/BEPack.git"
     },
     "homepage": "https://github.com/XiaoYangx666/BEPack#readme",
     "type": "module",
