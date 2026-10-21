@@ -303,7 +303,7 @@ bepack copy --target minecraft
 
 ## 分析 Bedrock CPU profile
 
-`/script profiler stop` 生成标准 V8 `.cpuprofile`，但 Bedrock 不为空闲时间采样。tick 之间的间隔会作为较大的 `timeDeltas` 挂在下一个 tick 的第一个采样点上，因此直接把 delta 当成 CPU 时间会让 `tick` 看起来是最热函数。`bepack profile` 会把大于 `--gap`（默认 `5` ms）的 delta 视为空闲 gap，并按 active 采样统计函数。
+`/script profiler stop` 生成标准 V8 `.cpuprofile`，但 Bedrock 不为空闲时间采样。tick 之间的间隔会作为较大的 `timeDeltas` 挂在下一个 tick 的第一个采样点上，因此直接把 delta 当成 CPU 时间会让 `tick` 看起来是最热函数。`bepack profile` 会把大于 `--gap`（默认 `5` ms）的 delta 视为空闲 gap，并把每个 active 采样自己的 delta 记到对应函数上，因此函数按累计真实时间排序，而不是按采样数排序。
 
 ```bash
 # 概览；burst 按 busy 时间倒序

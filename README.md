@@ -304,7 +304,7 @@ bepack copy --target minecraft
 
 ## Inspect Bedrock CPU profiles
 
-`/script profiler stop` writes a standard V8 `.cpuprofile`, but Bedrock does not sample idle time. The gap between ticks arrives as a large `timeDeltas` value on the first sample of the next tick, so treating deltas as CPU time makes `tick` look like the hottest function. `bepack profile` treats deltas above `--gap` (default `5` ms) as idle gaps and ranks functions by active samples.
+`/script profiler stop` writes a standard V8 `.cpuprofile`, but Bedrock does not sample idle time. The gap between ticks arrives as a large `timeDeltas` value on the first sample of the next tick, so treating deltas as CPU time makes `tick` look like the hottest function. `bepack profile` treats deltas above `--gap` (default `5` ms) as idle gaps, then adds each remaining sample's own delta to the functions it hit, so rows are ranked by real accumulated time instead of sample count.
 
 ```bash
 # Overview, with bursts sorted by busy time
