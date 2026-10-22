@@ -1,7 +1,7 @@
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { access, mkdir } from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, readFileSync } from "node:fs";
 import type { TypecheckCommandSetting } from "../config/configTypes.js";
 import { BePackError } from "../errors/BePackError.js";
 import { pathExists } from "../utils/fs.js";
@@ -279,7 +279,19 @@ async function findExecutable(command: string, cwd: string): Promise<string | un
     const hasPathSeparator = command.includes("/") || command.includes("\\");
     if (path.isAbsolute(command) || hasPathSeparator) {
         const candidate = path.resolve(cwd, command);
-        return (await isExecutableFile(candidate)) ? candidate : undefined;
+        if (await isExecutableFile(candidate)) {
+            // Windows: npm's `node_modules/.bin/` ships a path-qualified command in three
+            // flavors (`tsc` as a POSIX sh script, `tsc.cmd`, `tsc.ps1`). Resolving the
+            // extensionless sh script and spawning it directly fails with ENOENT, so when
+            // the exact file is not directly launchable, prefer a launchable sibling
+            // (`.cmd`/`.bat`/`.exe`) next to it — the same completion `cmd.exe` performs.
+            if (process.platform === "win32" && !isDirectlyLaunchable(candidate)) {
+                const sibling = await findLaunchableSibling(candidate);
+                if (sibling) return sibling;
+            }
+            return candidate;
+        }
+        return undefined;
     }
 
     const pathValue = process.env.PATH ?? "";
@@ -292,7 +304,15 @@ async function findExecutable(command: string, cwd: string): Promise<string | un
         // An empty PATH element means the current working directory.
         const dir = entry ? path.resolve(cwd, entry) : cwd;
         const exactCandidate = path.join(dir, command);
-        if (await isExecutableFile(exactCandidate)) return exactCandidate;
+        // On Windows an extensionless command must not resolve to a bare file: npm's
+        // `bin` directory ships both `npx` (a POSIX sh script) and `npx.cmd`, and
+        // `access(X_OK)` accepts any readable file there. Picking the sh script and
+        // spawning it directly fails with ENOENT — the `PATHEXT` candidates below are
+        // the ones a Windows shell would actually run. A command spelled with an
+        // explicit extension is still taken literally.
+        const tryExact =
+            process.platform !== "win32" || Boolean(path.extname(command));
+        if (tryExact && (await isExecutableFile(exactCandidate))) return exactCandidate;
         for (const extension of extensions) {
             if (extension && path.extname(command)) continue;
             const candidate = path.join(dir, command + extension);
@@ -310,6 +330,46 @@ async function isExecutableFile(candidate: string): Promise<boolean> {
         return false;
     }
 }
+
+/**
+ * True when the file can be spawned by Node on this platform without a shell:
+ * executables and scripts a shebang-aware interpreter claims. A POSIX sh script
+ * (`#!/bin/sh`) is *not* one of them on Windows.
+ */
+function isDirectlyLaunchable(file: string): boolean {
+    const extension = path.extname(file).toLowerCase();
+    if (extension === ".cmd" || extension === ".bat") return false; // needs cmd.exe
+    if (extension !== "") return true; // .exe, .ps1 handled elsewhere, custom...
+    // Extensionless: could be a POSIX sh script — sniff for a shebang naming a shell.
+    return !isShellShebangFile(file);
+}
+
+/** Read the first line and check for a `#!/bin/sh`-style shebang. */
+function isShellShebangFile(file: string): boolean {
+    try {
+        const buffer = readFileSync(file);
+        const firstLine = buffer.subarray(0, buffer.indexOf(0x0a)).toString("utf8");
+        return firstLine.startsWith("#!");
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * On Windows, find a launchable shim for a command whose exact file cannot be spawned
+ * (`tsc` → `tsc.cmd` next to it), mirroring `cmd.exe`'s PATHEXT completion.
+ */
+async function findLaunchableSibling(candidate: string): Promise<string | undefined> {
+    const directory = path.dirname(candidate);
+    const base = path.basename(candidate);
+    for (const extension of LAUNCHABLE_EXTENSIONS) {
+        const sibling = path.join(directory, base + extension);
+        if (await isExecutableFile(sibling)) return sibling;
+    }
+    return undefined;
+}
+
+const LAUNCHABLE_EXTENSIONS = [".cmd", ".bat", ".exe"];
 
 function missingCommandSuggestions(typecheck: ResolvedTypecheck): string[] {
     return [

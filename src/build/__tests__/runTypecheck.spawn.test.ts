@@ -334,6 +334,62 @@ describe("runTypecheck (spawn)", () => {
     );
 
     it.runIf(process.platform === "win32")(
+        "prefers the .cmd shim over an extensionless POSIX script with the same name",
+        async () => {
+            // npm's Windows bin directory ships both `npx` (a POSIX sh script) and
+            // `npx.cmd`. Resolving the sh script and spawning it directly fails with
+            // ENOENT, so the PATHEXT candidate must win.
+            const cwd = makeProject();
+            const script = writeFakeChecker(cwd);
+            writeFakeCmdShim(cwd, script, 0, "npx");
+            writeFileSync(path.join(cwd, "npx"), "#!/bin/sh\nexec node fake \"$@\"\n");
+
+            const originalPath = process.env.PATH;
+            process.env.PATH = [cwd, originalPath].filter(Boolean).join(path.delimiter);
+            try {
+                const result = await runTypecheck(cwd, {
+                    command: "npx",
+                    args: ["tsc", "--noEmit"],
+                    quiet: true,
+                });
+                expect(result.command).toBe("npx");
+                expect(readArgv(cwd)).toEqual(["tsc", "--noEmit"]);
+            } finally {
+                if (originalPath === undefined) delete process.env.PATH;
+                else process.env.PATH = originalPath;
+            }
+        }
+    );
+
+    it.runIf(process.platform === "win32")(
+        "resolves a path-qualified extensionless command to its .cmd shim",
+        async () => {
+            // `command: "node_modules/.bin/tsc"` is a common config. npm puts a POSIX sh
+            // script at that exact path plus `tsc.cmd` beside it; spawning the sh script
+            // directly fails with ENOENT, so the shim must win.
+            const cwd = makeProject();
+            const script = writeFakeChecker(cwd);
+            const binDir = path.join(cwd, "node_modules", ".bin");
+            mkdirSync(binDir, { recursive: true });
+            writeFileSync(
+                path.join(binDir, "fake-checker.cmd"),
+                ["@echo off", `"${process.execPath}" "${script}" %*`, "exit /b 0", ""].join("\r\n")
+            );
+            writeFileSync(
+                path.join(binDir, "fake-checker"),
+                "#!/bin/sh\nexec node fake \"$@\"\n"
+            );
+
+            await runTypecheck(cwd, {
+                command: "node_modules/.bin/fake-checker",
+                args: ["--noEmit"],
+                quiet: true,
+            });
+            expect(readArgv(cwd)).toEqual(["--noEmit"]);
+        }
+    );
+
+    it.runIf(process.platform === "win32")(
         "finds a .cmd executable by its explicit extension on PATH",
         async () => {
             const cwd = makeProject();
