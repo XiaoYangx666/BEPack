@@ -51,7 +51,16 @@ async function satisfiesMinecraftRequirements(
         if (!packageName.startsWith("@minecraft/")) continue;
         const specifier = declared[packageName];
         const entry = catalog[packageName];
-        if (!specifier || !entry) {
+        if (!entry) {
+            missingPackages.add(packageName);
+            return false;
+        }
+        if (!specifier) {
+            // Package-only managed dependencies (catalog `manifest: false`, e.g.
+            // @minecraft/vanilla-data) are never written to manifest.json, so they are
+            // not required in packs.bp.dependencies. Skip their peer check unless the
+            // user explicitly declared them, in which case the version is still checked.
+            if ((entry.manifest ?? false) === false) continue;
             missingPackages.add(packageName);
             return false;
         }
