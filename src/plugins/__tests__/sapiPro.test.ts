@@ -143,6 +143,49 @@ describe("sapiPro", () => {
         });
     });
 
+    it("resolves beta sapi-pro when the package-only vanilla-data peer is undeclared", async () => {
+        // Beta releases (0.4.0, 0.4.1, 0.4.2) all peer on @minecraft/vanilla-data.
+        // Before the package-only fix this made the entire beta channel unresolvable.
+        const npm = mockNpm({
+            "sapi-pro": {
+                versions: {
+                    "0.4.1": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.9.0-beta.1.26.30-stable",
+                            "@minecraft/server-ui": "^2.2.0-beta.1.26.30-stable",
+                            "@minecraft/vanilla-data": ">=1.26.0",
+                        },
+                    },
+                    "0.4.2": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.11.0-beta.1.26.50-stable",
+                            "@minecraft/server-ui": "^2.3.0-beta.1.26.50-stable",
+                            "@minecraft/vanilla-data": ">=1.26.0",
+                        },
+                    },
+                },
+            },
+            "@minecraft/server": {
+                "dist-tags": { beta: "2.12.0-beta.1.26.60-stable" },
+                versions: { "2.12.0-beta.1.26.60-stable": {} },
+            },
+            "@minecraft/server-ui": {
+                "dist-tags": { beta: "2.4.0-beta.1.26.60-stable" },
+                versions: { "2.4.0-beta.1.26.60-stable": {} },
+            },
+        });
+        const resolved = config({
+            "sapi-pro": "beta",
+            "@minecraft/server": "beta",
+            "@minecraft/server-ui": "beta",
+        });
+
+        await expect(resolve(resolved, npm)).resolves.toEqual({
+            packageVersion: "0.4.2",
+            manifestVersion: null,
+        });
+    });
+
     it("still rejects candidates whose manifest dependencies are not declared", async () => {
         const npm = mockNpm({
             "sapi-pro": {
