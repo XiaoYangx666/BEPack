@@ -106,6 +106,146 @@ describe("sapiPro", () => {
         });
     });
 
+    it("ignores peers of package-only dependencies that are not declared", async () => {
+        // Regression: sapi-pro 0.4.3-stable peers on @minecraft/vanilla-data, which is
+        // package-only (manifest: false) and therefore not listed in packs.bp.dependencies.
+        // That must not push the resolver down to 0.4.1-stable.
+        const npm = mockNpm({
+            "sapi-pro": {
+                versions: {
+                    "0.4.1-stable": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.8.0",
+                            "@minecraft/server-ui": "^2.1.0",
+                        },
+                    },
+                    "0.4.3-stable": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.10.0",
+                            "@minecraft/server-ui": "^2.2.0",
+                            "@minecraft/vanilla-data": ">=1.26.0",
+                        },
+                    },
+                },
+            },
+            "@minecraft/server": { "dist-tags": { latest: "2.11.0" }, versions: { "2.11.0": {} } },
+            "@minecraft/server-ui": { "dist-tags": { latest: "2.3.0" }, versions: { "2.3.0": {} } },
+        });
+        const resolved = config({
+            "sapi-pro": "stable",
+            "@minecraft/server": "stable",
+            "@minecraft/server-ui": "stable",
+        });
+
+        await expect(resolve(resolved, npm)).resolves.toEqual({
+            packageVersion: "0.4.3-stable",
+            manifestVersion: null,
+        });
+    });
+
+    it("resolves beta sapi-pro when the package-only vanilla-data peer is undeclared", async () => {
+        // Beta releases (0.4.0, 0.4.1, 0.4.2) all peer on @minecraft/vanilla-data.
+        // Before the package-only fix this made the entire beta channel unresolvable.
+        const npm = mockNpm({
+            "sapi-pro": {
+                versions: {
+                    "0.4.1": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.9.0-beta.1.26.30-stable",
+                            "@minecraft/server-ui": "^2.2.0-beta.1.26.30-stable",
+                            "@minecraft/vanilla-data": ">=1.26.0",
+                        },
+                    },
+                    "0.4.2": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.11.0-beta.1.26.50-stable",
+                            "@minecraft/server-ui": "^2.3.0-beta.1.26.50-stable",
+                            "@minecraft/vanilla-data": ">=1.26.0",
+                        },
+                    },
+                },
+            },
+            "@minecraft/server": {
+                "dist-tags": { beta: "2.12.0-beta.1.26.60-stable" },
+                versions: { "2.12.0-beta.1.26.60-stable": {} },
+            },
+            "@minecraft/server-ui": {
+                "dist-tags": { beta: "2.4.0-beta.1.26.60-stable" },
+                versions: { "2.4.0-beta.1.26.60-stable": {} },
+            },
+        });
+        const resolved = config({
+            "sapi-pro": "beta",
+            "@minecraft/server": "beta",
+            "@minecraft/server-ui": "beta",
+        });
+
+        await expect(resolve(resolved, npm)).resolves.toEqual({
+            packageVersion: "0.4.2",
+            manifestVersion: null,
+        });
+    });
+
+    it("still rejects candidates whose manifest dependencies are not declared", async () => {
+        const npm = mockNpm({
+            "sapi-pro": {
+                versions: {
+                    "0.4.3-stable": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.10.0",
+                            "@minecraft/server-ui": "^2.2.0",
+                            "@minecraft/server-net": "^1.0.0",
+                        },
+                    },
+                },
+            },
+            "@minecraft/server": { "dist-tags": { latest: "2.11.0" }, versions: { "2.11.0": {} } },
+            "@minecraft/server-ui": { "dist-tags": { latest: "2.3.0" }, versions: { "2.3.0": {} } },
+        });
+        const resolved = config({
+            "sapi-pro": "stable",
+            "@minecraft/server": "stable",
+            "@minecraft/server-ui": "stable",
+        });
+
+        await expect(resolve(resolved, npm)).rejects.toThrow("@minecraft/server-net");
+    });
+
+    it("checks the version of explicitly declared package-only dependencies", async () => {
+        const npm = mockNpm({
+            "sapi-pro": {
+                versions: {
+                    "0.4.1-stable": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.8.0",
+                            "@minecraft/server-ui": "^2.1.0",
+                        },
+                    },
+                    "0.4.3-stable": {
+                        peerDependencies: {
+                            "@minecraft/server": "^2.10.0",
+                            "@minecraft/server-ui": "^2.2.0",
+                            "@minecraft/vanilla-data": ">=1.26.70",
+                        },
+                    },
+                },
+            },
+            "@minecraft/server": { "dist-tags": { latest: "2.11.0" }, versions: { "2.11.0": {} } },
+            "@minecraft/server-ui": { "dist-tags": { latest: "2.3.0" }, versions: { "2.3.0": {} } },
+        });
+        const resolved = config({
+            "sapi-pro": "stable",
+            "@minecraft/server": "stable",
+            "@minecraft/server-ui": "stable",
+            "@minecraft/vanilla-data": "1.26.60",
+        });
+
+        await expect(resolve(resolved, npm)).resolves.toEqual({
+            packageVersion: "0.4.1-stable",
+            manifestVersion: null,
+        });
+    });
+
     it("accepts a newer Minecraft target for beta peers", async () => {
         const npm = mockNpm({
             "sapi-pro": {
@@ -187,14 +327,16 @@ describe("sapiPro", () => {
     });
 
     it("does not silently fall back to legacy releases", async () => {
+        // Both the modern candidate (peer range too new for the resolved server) and the
+        // legacy candidate (exact peer versions) are incompatible: report an error instead
+        // of resolving 0.3.1 just because its metadata is less strict.
         const npm = mockNpm({
             "sapi-pro": {
                 versions: {
                     "0.4.1": {
                         peerDependencies: {
-                            "@minecraft/server": "^2.9.0-beta.1.26.30-stable",
+                            "@minecraft/server": "^2.10.0-beta.1.26.30-stable",
                             "@minecraft/server-ui": "^2.2.0-beta.1.26.30-stable",
-                            "@minecraft/vanilla-data": ">=1.26.0",
                         },
                     },
                     "0.3.1": {
@@ -217,7 +359,9 @@ describe("sapiPro", () => {
             "1.26.33"
         );
 
-        await expect(resolve(resolved, npm)).rejects.toThrow("@minecraft/vanilla-data");
+        await expect(resolve(resolved, npm)).rejects.toThrow(
+            "Cannot find a compatible sapi-pro@beta"
+        );
     });
 
     it("resolves each Minecraft dependency only once while checking candidates", async () => {
