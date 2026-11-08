@@ -33,7 +33,7 @@ export default defineConfig([
         external,
         plugins: [
             dts({
-                emitDtsOnly: true,
+                dtsOnly: true,
                 tsconfig: "./tsconfig.json",
             }),
         ],
