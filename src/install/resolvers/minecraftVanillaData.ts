@@ -10,6 +10,22 @@ import type {
 const VANILLA_DATA_STABLE = /^\d+\.\d+\.\d+$/;
 const VANILLA_DATA_PREVIEW = /^\d+\.\d+\.\d+-preview\.\d+$/;
 
+/**
+ * Newest stable version at or below `target`, or `undefined` when the registry
+ * has no such release.
+ *
+ * Minecraft ships game hotfixes (1.26.61–1.26.63) without publishing new
+ * vanilla data: the data only changes when blocks/items/entities change, so
+ * releases such as 1.26.60 remain the newest data for those targets.
+ */
+function newestStableAtOrBelow(versions: string[], target: string): string | undefined {
+    return versions
+        .filter((version) => VANILLA_DATA_STABLE.test(version))
+        .filter((version) => compareLooseSemver(version, target) <= 0)
+        .sort(compareLooseSemver)
+        .at(-1);
+}
+
 // ---------------------------------------------------------------------------
 // minecraft-vanilla-data resolver
 // ---------------------------------------------------------------------------
@@ -70,9 +86,23 @@ function resolveStable(
         return { packageVersion: ctx.target };
     }
 
+    // Hotfix targets usually have no vanilla-data release of their own. Use the
+    // newest data at or below the target instead of failing the whole install;
+    // older data still describes everything the target game version has.
+    const fallback = VANILLA_DATA_STABLE.test(ctx.target)
+        ? newestStableAtOrBelow(ctx.npm.versions(metadata), ctx.target)
+        : undefined;
+    if (fallback) {
+        ctx.logger?.warn(
+            `${ctx.packageName} has no stable release for target ${ctx.target}; using ${fallback} ` +
+                "(newest stable release at or below the target). Pin an exact version to override."
+        );
+        return { packageVersion: fallback };
+    }
+
     throw new BePackError(
         "SAPI_VERSION_NOT_FOUND",
-        `Cannot resolve ${ctx.packageName}@stable for target ${ctx.target}. The target version does not exist in the registry.`,
+        `Cannot resolve ${ctx.packageName}@stable for target ${ctx.target}. The target version does not exist in the registry and no older stable release is available.`,
         {
             details: { package: ctx.packageName, specifier: "stable", target: ctx.target },
             suggestions: ['Use target: "latest"', "Specify an exact version"],

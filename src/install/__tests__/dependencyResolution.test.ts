@@ -93,6 +93,21 @@ const MOCK_VANILLA_METADATA: NpmPackageMetadata = {
     ),
 };
 
+// Mirrors the real @minecraft/vanilla-data layout around a game hotfix:
+// 1.26.61-1.26.63 shipped in Minecraft without a data release of their own.
+const MOCK_VANILLA_HOTFIX_METADATA: NpmPackageMetadata = {
+    "dist-tags": { latest: "1.26.60" },
+    versions: Object.fromEntries(
+        [
+            "1.26.50",
+            "1.26.52",
+            "1.26.60",
+            "1.26.60-preview.30",
+            "1.26.70-preview.20",
+        ].map((v) => [v, {}])
+    ),
+};
+
 const MOCK_METADATA_NO_TAGS: NpmPackageMetadata = {
     "dist-tags": {},
     versions: Object.fromEntries(STABLE_VERSIONS.map((v) => [v, {}])),
@@ -115,6 +130,20 @@ function mockNpm(metadata: NpmPackageMetadata): NpmRegistryClient {
 function mockLogger() {
     const noop = () => {};
     return { info: noop, warn: noop, error: noop, verbose: noop, clear: noop, install: noop };
+}
+
+/** Logger that records `warn` calls, for asserting user-visible fallbacks. */
+function warnLogger() {
+    const warnings: string[] = [];
+    return {
+        warnings,
+        logger: {
+            ...mockLogger(),
+            warn: (message: string) => {
+                warnings.push(message);
+            },
+        },
+    };
 }
 
 const SCRIPT_API_ENTRY: DependencyCatalogEntry = {
@@ -625,13 +654,74 @@ describe("minecraftVanillaDataResolver", () => {
             expect(result.packageVersion).toBe("1.12.0");
         });
 
-        it("throws when target version does not exist", async () => {
-            const npm = mockNpm(MOCK_VANILLA_METADATA);
+        it("falls back to the newest stable release at or below a hotfix target", async () => {
+            // Real registry: 1.26.63 exists in Minecraft, 1.26.60 is the newest data.
+            const npm = mockNpm(MOCK_VANILLA_HOTFIX_METADATA);
+            const { logger, warnings } = warnLogger();
+            const result = await minecraftVanillaDataResolver.resolve(
+                vanillaCtx({ specifier: "stable", target: "1.26.63", npm, logger })
+            );
+            expect(result.packageVersion).toBe("1.26.60");
+            expect(warnings).toHaveLength(1);
+            expect(warnings[0]).toContain("1.26.63");
+            expect(warnings[0]).toContain("1.26.60");
+        });
+
+        it("fallback picks the closest older release, not the latest stable", async () => {
+            const npm = mockNpm(MOCK_VANILLA_HOTFIX_METADATA);
+            const { logger } = warnLogger();
+            const result = await minecraftVanillaDataResolver.resolve(
+                vanillaCtx({ specifier: "stable", target: "1.26.55", npm, logger })
+            );
+            expect(result.packageVersion).toBe("1.26.52");
+        });
+
+        it("fallback never selects a preview version", async () => {
+            // 1.26.70 only has a preview build; the stable fallback must use 1.26.60.
+            const npm = mockNpm(MOCK_VANILLA_HOTFIX_METADATA);
+            const { logger } = warnLogger();
+            const result = await minecraftVanillaDataResolver.resolve(
+                vanillaCtx({ specifier: "stable", target: "1.26.70", npm, logger })
+            );
+            expect(result.packageVersion).toBe("1.26.60");
+        });
+
+        it("exact target does not warn about a fallback", async () => {
+            const npm = mockNpm(MOCK_VANILLA_HOTFIX_METADATA);
+            const { logger, warnings } = warnLogger();
+            const result = await minecraftVanillaDataResolver.resolve(
+                vanillaCtx({ specifier: "stable", target: "1.26.52", npm, logger })
+            );
+            expect(result.packageVersion).toBe("1.26.52");
+            expect(warnings).toHaveLength(0);
+        });
+
+        it("throws when the target is older than every stable release", async () => {
+            const npm = mockNpm(MOCK_VANILLA_HOTFIX_METADATA);
             await expect(
                 minecraftVanillaDataResolver.resolve(
-                    vanillaCtx({ specifier: "stable", target: "9.99.99", npm })
+                    vanillaCtx({ specifier: "stable", target: "1.26.0", npm })
+                )
+            ).rejects.toThrow("no older stable release is available");
+        });
+
+        it("does not fall back for a target that is not a version", async () => {
+            const npm = mockNpm(MOCK_VANILLA_HOTFIX_METADATA);
+            await expect(
+                minecraftVanillaDataResolver.resolve(
+                    vanillaCtx({ specifier: "stable", target: "next", npm })
                 )
             ).rejects.toThrow("Cannot resolve");
+        });
+
+        it("falls back to the newest release for a target newer than every release", async () => {
+            const npm = mockNpm(MOCK_VANILLA_METADATA);
+            const { logger, warnings } = warnLogger();
+            const result = await minecraftVanillaDataResolver.resolve(
+                vanillaCtx({ specifier: "stable", target: "9.99.99", npm, logger })
+            );
+            expect(result.packageVersion).toBe("1.14.0");
+            expect(warnings).toHaveLength(1);
         });
     });
 

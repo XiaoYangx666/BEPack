@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { NpmRegistryClient } from "../../utils/npmRegistry.js";
+import { compareLooseSemver } from "../../utils/semver.js";
 
 // Network tests hit the real npm registry; allow up to 15 s per request.
 const NET_TIMEOUT = 15000;
@@ -157,6 +158,20 @@ describe("integration: real npm registry", () => {
                 );
                 console.log(`  vanilla-data stable + latest -> package=${result.packageVersion}`);
                 expect(result.packageVersion).toMatch(/^\d+\.\d+\.\d+$/);
+            },
+            NET_TIMEOUT
+        );
+
+        it(
+            "concrete hotfix target 1.26.63 falls back to an older stable release",
+            async () => {
+                const registry = DependencyResolverRegistry.fromConfig([]);
+                const result = await registry.resolve(
+                    vanillaCtx({ specifier: "stable", target: "1.26.63", npm })
+                );
+                console.log(`  vanilla-data stable + 1.26.63 -> package=${result.packageVersion}`);
+                expect(result.packageVersion).toMatch(/^\d+\.\d+\.\d+$/);
+                expect(compareLooseSemver(result.packageVersion, "1.26.63")).toBeLessThanOrEqual(0);
             },
             NET_TIMEOUT
         );
