@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createProject } from '../src/createProject.js';
 import { parseCliOptions } from '../src/parseCliOptions.js';
@@ -133,6 +134,17 @@ describe('createProject', () => {
     } else {
       expect(config).not.toContain('copy:');
       expect(pkg.scripts.dev).not.toContain('--copy');
+    }
+  });
+
+  it('pins the scaffolded @bepack/cli range to this release', async () => {
+    const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const { version } = JSON.parse(await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8'));
+    // Releases publish @bepack/cli and create-mcbe at the same version, so a stale
+    // template range would scaffold projects pinned to an older CLI.
+    for (const template of ['bepack-addon', 'bepack-behavior', 'begame', 'sapi-pro']) {
+      const pkg = JSON.parse(await fs.readFile(path.join(packageRoot, 'templates', template, 'package.json'), 'utf8'));
+      expect(pkg.devDependencies['@bepack/cli'], template).toBe(`^${version}`);
     }
   });
 
