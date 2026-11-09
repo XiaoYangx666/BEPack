@@ -94,6 +94,54 @@ describe("commandInit --dry-run", () => {
     });
 });
 
+describe("commandInit scaffolding", () => {
+    const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+    function scaffoldedUuids(config: string): string[] {
+        return [
+            ...config.matchAll(
+                /"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/gi
+            ),
+        ].map((match) => match[1]!);
+    }
+
+    it("writes distinct v4 UUIDs for the pack and its module", async () => {
+        const temp = mkdtempSync(path.join(os.tmpdir(), "bepack-init-"));
+        try {
+            await commandInit({ cwd: temp, format: "mjs" });
+            const config = readFileSync(path.join(temp, "bepack.config.mjs"), "utf8");
+
+            const uuids = scaffoldedUuids(config);
+            expect(uuids).toHaveLength(2);
+            for (const uuid of uuids) expect(uuid).toMatch(UUID_V4);
+            expect(new Set(uuids).size).toBe(2);
+        } finally {
+            rmSync(temp, { recursive: true, force: true });
+        }
+    });
+
+    it("generates fresh UUIDs for every scaffold", async () => {
+        const first = mkdtempSync(path.join(os.tmpdir(), "bepack-init-"));
+        const second = mkdtempSync(path.join(os.tmpdir(), "bepack-init-"));
+        try {
+            await commandInit({ cwd: first, format: "mjs" });
+            await commandInit({ cwd: second, format: "mjs" });
+
+            const uuids = [
+                ...scaffoldedUuids(readFileSync(path.join(first, "bepack.config.mjs"), "utf8")),
+                ...scaffoldedUuids(readFileSync(path.join(second, "bepack.config.mjs"), "utf8")),
+            ];
+
+            expect(uuids).toHaveLength(4);
+            for (const uuid of uuids) expect(uuid).toMatch(UUID_V4);
+            expect(new Set(uuids).size).toBe(4);
+        } finally {
+            rmSync(first, { recursive: true, force: true });
+            rmSync(second, { recursive: true, force: true });
+        }
+    });
+});
+
 describe("commandInit --from-bp compile detection", () => {
     async function generatedConfig(temp: string): Promise<string> {
         await commandInit({ cwd: temp, fromBp: "bp/manifest.json", format: "mjs" });

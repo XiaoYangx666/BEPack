@@ -57,6 +57,7 @@
         "test:watch": "vitest",
         "build:addon": "npm run build --workspace=@bepack/addon",
         "check:addon": "npm run typecheck --workspace=@bepack/addon",
+        "check:bundle": "node scripts/checkBundle.mjs",
         "test:addon": "npm test --workspace=@bepack/addon",
         "build:create-mcbe": "npm run build --workspace=create-mcbe",
         "check:create-mcbe": "npm run typecheck --workspace=create-mcbe",

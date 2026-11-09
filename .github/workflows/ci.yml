@@ -24,6 +24,7 @@ jobs:
             - run: npm run check
             - run: npm test
             - run: npm run build
+            - run: npm run check:bundle
             - run: npm run typecheck --workspace=create-mcbe
             - run: npm test --workspace=create-mcbe
             - run: npm run build --workspace=create-mcbe
