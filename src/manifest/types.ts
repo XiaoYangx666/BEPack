@@ -1,12 +1,37 @@
-/** manifest.json 版本号格式：
- * - format_version 2: [主版本, 次版本, 修订号] 数组
- * - format_version 3: "主版本.次版本.修订号" 字符串（SemVer，不允许数组）
- * format 3 不兼容 format 2 的数组格式，所有版本字段必须为字符串。
- */
-export type ManifestVersion = [number, number, number] | string;
+import type {
+    ManifestDependency,
+    ManifestHeader,
+    ManifestResourcesModule as AddonResourcesModule,
+    ManifestScriptModule as AddonScriptModule,
+    ManifestUnknownModule,
+    ManifestVersion,
+} from "@bepack/addon/core";
 
-/** 宽松但有约束的 manifest.json 对象类型。未知字段通过 [key: string] 保留。 */
-export type Manifest = {
+export type { ManifestDependency, ManifestHeader, ManifestUnknownModule, ManifestVersion };
+
+/** BePack-managed BP script module. */
+export type ManifestScriptModule = AddonScriptModule & {
+    language: "javascript";
+    version: ManifestVersion;
+    entry: string;
+};
+
+/** BePack-managed RP resources module. */
+export type ManifestResourcesModule = AddonResourcesModule & {
+    version: ManifestVersion;
+};
+
+/** User-written or third-party modules keep their original shape. */
+export type ManifestModule = ManifestScriptModule | ManifestResourcesModule | ManifestUnknownModule;
+
+/**
+ * CLI manifest shape.
+ *
+ * Header/dependency/version types and the validator live in
+ * `@bepack/addon/core`; the CLI only narrows the managed modules to require the
+ * fields BePack writes.
+ */
+export interface Manifest {
     format_version?: number;
     header?: ManifestHeader;
     modules?: ManifestModule[];
@@ -14,59 +39,4 @@ export type Manifest = {
     capabilities?: string[];
     metadata?: Record<string, unknown>;
     [key: string]: unknown;
-};
-
-export type ManifestHeader = {
-    name?: string;
-    description?: string;
-    uuid?: string;
-    version?: ManifestVersion;
-    min_engine_version?: ManifestVersion;
-    /** 资源包可应用范围：`world` | `global` | `any`。仅资源包有效。 */
-    pack_scope?: string;
-    [key: string]: unknown;
-};
-
-export type ManifestModule = ManifestScriptModule | ManifestResourcesModule | ManifestUnknownModule;
-
-/** BePack 管理的 BP Script 模块 */
-export type ManifestScriptModule = {
-    type: "script";
-    language: "javascript";
-    uuid: string;
-    version: ManifestVersion;
-    entry: string;
-    [key: string]: unknown;
-};
-
-/** BePack 管理的 RP Resources 模块 */
-export type ManifestResourcesModule = {
-    type: "resources";
-    uuid: string;
-    version: ManifestVersion;
-    [key: string]: unknown;
-};
-
-/** 用户手写或其他工具生成的未知模块，保留原样 */
-export type ManifestUnknownModule = {
-    type?: string;
-    uuid?: string;
-    version?: unknown;
-    [key: string]: unknown;
-};
-
-export type ManifestDependency =
-    /** module_name 依赖（Script API 包，如 @minecraft/server） */
-    | {
-          module_name: string;
-          version: string;
-      }
-    /** uuid 依赖（包间引用，如 BP → RP） */
-    | {
-          uuid: string;
-          version: ManifestVersion;
-      }
-    /** 用户手写的未知依赖格式 */
-    | {
-          [key: string]: unknown;
-      };
+}

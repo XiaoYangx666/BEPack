@@ -43,8 +43,9 @@ jobs:
                   version="${RELEASE_VERSION#v}"
                   cli_version="$(node -p "require('./package.json').version")"
                   scaffolder_version="$(node -p "require('./packages/create-mcbe/package.json').version")"
-                  if [[ "$version" != "$cli_version" || "$version" != "$scaffolder_version" ]]; then
-                    echo "Tag version $version must match @bepack/cli ($cli_version) and create-mcbe ($scaffolder_version)." >&2
+                  addon_version="$(node -p "require('./packages/addon/package.json').version")"
+                  if [[ "$version" != "$cli_version" || "$version" != "$scaffolder_version" || "$version" != "$addon_version" ]]; then
+                    echo "Tag version $version must match @bepack/cli ($cli_version), create-mcbe ($scaffolder_version), and @bepack/addon ($addon_version)." >&2
                     exit 1
                   fi
             # Validate and build before requesting short-lived npm OIDC credentials.
@@ -76,6 +77,17 @@ jobs:
                   else
                     npm publish --workspace=packages/create-mcbe --ignore-scripts --tag beta
                   fi
+            - name: Publish @bepack/addon
+              env:
+                  RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+              shell: bash
+              run: |
+                  version="${RELEASE_VERSION#v}"
+                  if npm view "@bepack/addon@$version" version >/dev/null 2>&1; then
+                    echo "@bepack/addon@$version is already published; skipping."
+                  else
+                    npm publish --workspace=packages/addon --ignore-scripts --tag beta --access public
+                  fi
             - name: Promote npm dist-tags
               if: github.event_name == 'workflow_dispatch'
               env:
@@ -86,7 +98,9 @@ jobs:
                   version="${RELEASE_VERSION#v}"
                   npm dist-tag add "@bepack/cli@$version" beta
                   npm dist-tag add "create-mcbe@$version" beta
+                  npm dist-tag add "@bepack/addon@$version" beta
                   if [[ "$PROMOTE_LATEST" == "true" ]]; then
                     npm dist-tag add "@bepack/cli@$version" latest
                     npm dist-tag add "create-mcbe@$version" latest
+                    npm dist-tag add "@bepack/addon@$version" latest
                   fi

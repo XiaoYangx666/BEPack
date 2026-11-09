@@ -6,10 +6,14 @@ BePack contributor guide — the single source of truth for AI coding-agent guid
 
 ```bash
 npm run build          # bundle JavaScript and declarations into dist/
-npm run check          # tsc --noEmit
+npm run check          # tsc --noEmit + workspace package typecheck
 npm run test           # vitest run
 npm run test:watch     # Vitest watch mode
-npm run format         # format src/ with Prettier
+npm run format         # format src/ and packages/addon with Prettier
+
+npm run build:addon    # build @bepack/addon
+npm run check:addon    # typecheck @bepack/addon
+npm run test:addon     # test @bepack/addon
 
 # Development CLI (`src/cli.ts` only exports `runCLI`; `src/bin.ts` is the entry)
 npx tsx src/bin.ts <command>
@@ -47,6 +51,19 @@ Hooks are wired by step, not by command: every manifest write goes through `src/
 `DependencyService` uses `DependencyResolverRegistry`, then built-in resolvers, to convert configured specifiers into concrete npm versions. Catalog entries decide whether a package is written into `manifest.json` and externalized during build.
 
 The built-in Minecraft packages are declared explicitly under `packs.bp.dependencies`. Do not introduce implicit manifest dependencies.
+
+### Addon template runtime
+
+`packages/addon` publishes `@bepack/addon`, a browser-safe, isomorphic library for web generators that read a built addon template, edit its manifest identity, replace generated files, and write it back. It depends only on `fflate`; it must never import Node built-ins or `@bepack/cli`.
+
+- Root entry: `AddonTemplate`, `readAddon`, `writeAddon`, `addon.identity()` / `updateIdentity()`, `addon.replace()`, `addon.manifest()` (`ManifestEditor`), streaming writes.
+- `./core` entry: manifest types, format 2/3 version conversion, UUID validation/generation, path safety, pack discovery, identity application, `validateManifest`, and the pure manifest-edit helpers (`patchManifest`, `addDependency`, `addModule`, `setCapability`, `setMetadata`, `setFormatVersion`). The CLI depends on this entry and maps `AddonError` to `BePackError`; it must not depend on the high-level template editor.
+- `./node` entry: `readAddonFile`, `readAddonArchiveFile`, `writeAddonFile`, `writeAddonArchiveFile`. It is Node-only (atomic writes, `node:fs`), targets repository scripts and backends, and must never be re-exported from the root or `./core` entries so browser bundles stay free of Node built-ins.
+- Keep `addon.manifest()` and the core edit helpers policy-free: they take exact manifest entries and never resolve npm versions or decide `@minecraft/*` dependencies.
+- The package edits archives and manifests only. Domain generation (audio/MIDI, sound definitions, timbres, project formats, UI) and `__brarchive` optimization stay in the host project/CLI.
+- Keep manifest edits format-aware: format 2 writes `[major, minor, patch]`, format 3 writes `"major.minor.patch"`, and cross-pack dependency versions follow the dependent manifest's format.
+- `@bepack/addon` is bundled into the CLI build, so it is a `devDependency` of the CLI. `prepack` builds it before packing; the root `prebuild`/`precheck`/`pretest` hooks rebuild it when needed. Do not reintroduce a second manifest validator in `src/manifest/validate.ts`; that file must stay a thin error-mapping wrapper.
+- The CLI only consumes `@bepack/addon/core` (types, validation, UUIDs). It keeps its own synchronous `zipSync` pack path in `src/pack/zip.ts`: that path is a `FileMap` already in memory, not a lazy browser template. Do not route CLI packaging through the high-level `AddonTemplate`, `ManifestEditor`, or streaming archive writer.
 
 ### Plugins
 

@@ -48,15 +48,21 @@
     },
     "scripts": {
         "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
+        "prebuild": "npm run build:addon",
         "build": "npm run clean && rolldown -c && node scripts/chmod.mjs",
-        "check": "tsc --noEmit",
+        "precheck": "npm run build:addon",
+        "check": "tsc --noEmit && npm run check:addon",
+        "pretest": "npm run build:addon",
         "test": "vitest run",
         "test:watch": "vitest",
+        "build:addon": "npm run build --workspace=@bepack/addon",
+        "check:addon": "npm run typecheck --workspace=@bepack/addon",
+        "test:addon": "npm test --workspace=@bepack/addon",
         "build:create-mcbe": "npm run build --workspace=create-mcbe",
         "check:create-mcbe": "npm run typecheck --workspace=create-mcbe",
         "test:create-mcbe": "npm test --workspace=create-mcbe",
-        "format": "prettier ./src --write",
-        "format:check": "prettier ./src --check",
+        "format": "prettier ./src ./packages/addon/src ./packages/addon/tests --write",
+        "format:check": "prettier ./src ./packages/addon/src ./packages/addon/tests --check",
         "prepublishOnly": "npm run check && npm run test && npm run build"
     },
     "dependencies": {
@@ -67,6 +73,7 @@
         "rolldown": "^1.3.0"
     },
     "devDependencies": {
+        "@bepack/addon": "0.1.0-beta.8",
         "@types/node": "^26.1.0",
         "prettier": "^3.6.2",
         "rolldown-plugin-dts": "^0.30.0",

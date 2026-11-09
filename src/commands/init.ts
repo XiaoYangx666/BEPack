@@ -1,6 +1,6 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { generateUuid } from "@bepack/addon/core";
 import { ensureDir, pathExists } from "../utils/fs.js";
 import { BePackError } from "../errors/BePackError.js";
 import { Logger } from "../logger/logger.js";
@@ -476,8 +476,8 @@ function scaffoldConfig(): string {
         packs: {
             bp: {
                 root: "bp",
-                uuid: randomUUID(),
-                moduleUuid: randomUUID(),
+                uuid: generateUuid(),
+                moduleUuid: generateUuid(),
                 compile: { entry: "src/main.ts" },
                 dependencies: { "@minecraft/server": "stable" },
             },
